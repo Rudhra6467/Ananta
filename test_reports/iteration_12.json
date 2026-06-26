@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 12 — full e2e verification of the 10-gate Graduation Readiness scorecard (CryptoAtlas, PAPER, clean $300 baseline). Backend: pytest tests/test_graduation.py → 10/10 pass (empty/not-ready, min_trades, profit_factor+expectancy, regime_diversification fail & pass, account_survival breach, risk_consistency outlier, stability 30d, metrics surface exit+chase data, full-pass READY scenario). Regression pytest test_analytics.py + test_analytics_phase_a.py + test_judge_and_pdf.py → 39/39 pass. Curl GET /api/analytics/graduation returns the exact required shape: passed_count=3, total_gates=10, all_passed=false, verdict='NOT READY', headline='3/10 PASSED — NOT READY', criteria array of 10 (each with id/label/target/actual/passed), and metrics object with every documented field (closed_trades=0, expectancy_usd=0.0, profit_factor=null, max_drawdown_pct=0.0, stop_loss_frequency_pct=0.0, trail_exit_count=0, trail_exit_win_pct=0.0, total_friction_usd=0, friction_pct_of_gross=null, avg_entry_extension_pct=null, max_entry_extension_pct=null, entry_extension_sample=0, weekly_windows[3], regime_net_pnl={}, observation_days=0.0, net_pnl_usd=0). Vacuous passes on max_drawdown, no_sideways_overtrading, account_survival → 3 PASSED, correct. Frontend (1920×1080): Settings tab renders [data-testid='graduation-scorecard'] at y=777 ABOVE [data-testid='analytics-panel'] at y=1830. [data-testid='graduation-verdict'] reads '3/10 PASSED — NOT READY' rendered with red/negative styling (not-ready branch). All 10 gate rows [data-testid='gate-{id}'] are present: gate-min_trades FAIL, gate-positive_expectancy FAIL, gate-profit_factor FAIL, gate-max_drawdown PASS, gate-regime_diversification FAIL, gate-friction_accounted FAIL, gate-no_sideways_overtrading PASS, gate-stability FAIL, gate-account_survival PASS, gate-risk_consistency FAIL — UI passed_count=3 matches API. [data-testid='graduation-metrics'] grid renders all 9 documented labels (CLOSED TRADES, EXPECTANCY/TRADE, PROFIT FACTOR, MAX DRAWDOWN, STOP-LOSS FREQUENCY, TRAIL-EXIT QUALITY, FRICTION, AVG ENTRY EXTENSION, OBSERVATION WINDOW). Regression: analytics-panel still present below scorecard, Risk Monitor + tooltips + save-settings button still render, Dashboard + AI Reasoning tabs load without errors, header-pdf-button still present, env-toggle-paper + env-toggle-live present, trading mode stayed PAPER. 0 console errors captured across all three tabs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_graduation.py",
+    "/app/test_reports/pytest/pytest_iter12.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GraduationScorecard.jsx polls api.analyticsGraduation() every 20s with no abort on unmount-during-flight — the cleanup clears the interval but in-flight fetch can still setState after unmount. Wrap with an AbortController or an isMounted guard to avoid React's 'state update on unmounted component' warning under fast tab-switching.",
+    "GraduationScorecard.jsx silently swallows fetch errors via .catch(() => {}). If the endpoint ever 500s the UI just stays on 'Loading scorecard…' forever with no diagnostic. Consider rendering an error state (matches the rest of the dashboard's API-error pattern).",
+    "Verdict badge uses 'border-atlas-negative/40 bg-atlas-negative/5' for NOT READY — the 5% bg tint is very subtle on dark theme; the red border + red text carry it, but if accessibility audit ever runs WCAG contrast on the bg+text alone it may flag. Cosmetic only.",
+    "analytics.graduation_readiness() returns profit_factor=null when there are no losses (correct), but UI shows 'n/a' on the metric tile and 'n/a' under target column — keep these strings in sync if either side changes."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (10/10 graduation tests + 39/39 analytics+pdf regression pass; /api/analytics/graduation returns the exact contract)", "frontend": "100% (scorecard renders above analytics panel on Settings tab; verdict + all 10 gates + 9 metrics + ordering verified; 0 console errors; dashboard/reasoning/PDF/PAPER regressions intact)"},
+  "test_credentials": "none (no auth in app)",
+  "seed_data_creation": "None — DB intentionally kept on clean $300 baseline with 0 trades per main agent instruction. Scorecard correctly shows 3/10 NOT READY with mostly-zero metrics — EXPECTED, not a bug.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Trading mode preserved as PAPER. Clean $300 baseline preserved (0 trades). The 3 vacuously-passing gates on a clean DB are: max_drawdown (0% < 15%), no_sideways_overtrading (0 chop trades, expectancy ≥ 0), account_survival (0% peak DD < 20%). To unit-test the full-pass READY case in the UI, seed an idealized 80-trade diversified track record (see test_graduation.py::test_full_pass_scenario_is_ready for the pattern) — but per main agent instruction, baseline must stay clean, so any such seeding should be reverted after verification. GraduationScorecard polls every 20s — long playwright tests may see refetch race; use waitForResponse('**/api/analytics/graduation') if asserting on a specific payload state.",
+  "rca of the issue": "No bugs found. Feature works as specified — backend contract matches the review_request exactly, frontend renders the scorecard above the analytics panel on Settings tab with correct verdict/gates/metrics, and regression coverage on dashboard/reasoning/PDF/env-toggles/save-settings all intact."
+}

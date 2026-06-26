@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 9 — verified the NEW Analytics 'Synthetic vs Live' source toggle and ran regression on the LIVE/PAPER env toggle + analytics rendering. Backend GET /api/analytics/performance behaves exactly per spec (exclude_synthetic=false -> rolling_24h.closed_trades=15, synthetic_count=15, regime_insight.ready=true, best_regime=HIGH_PANIC; exclude_synthetic=true -> closed_trades=0, ready=false, synthetic_count still 15). E2E on the deployed frontend confirms: ALL DATA default shows the regime-insight-card (HIGH_PANIC $1.25/trade) + 15-closed metrics tiles + 3 regime rows; clicking LIVE ONLY re-fetches and renders analytics-empty + regime-insight-placeholder (0/5 round-trips) + analytics-synthetic-hidden-note 'Showing ORGANIC trades only — 15 synthetic demo trades hidden.'; clicking back to ALL DATA restores the full insight card and 15-closed metrics. Environment header toggle works: data-testid='env-toggle-paper' is instant, data-testid='env-toggle-live' opens data-testid='env-live-confirm-dialog' with cancel/confirm buttons; cancel closes dialog and stays on PAPER, confirm flips to LIVE with the gate CLOSED (no real orders); reverted to PAPER at the end. Window toggle still works and regime-breakdown table renders LOW_COMPRESSION/NORMAL/HIGH_PANIC rows. 0 console errors. Note: had to run /app/backend/seed_demo_trades.py to repopulate the 15 DEMO_SEED docs before testing — the DB was empty when this iteration started (left clean by iter 8); after testing the seed data is INTENTIONALLY LEFT IN PLACE so the operator/UI continues to display populated analytics.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard top-right", "issues": ["Sonner toast (e.g. 'PAPER MODE') anchors bottom-right and on a 1080p viewport overlaps the bottom row of the VOLATILITY REGIME PERFORMANCE table (HIGH_PANIC row Net P&L cell) until it auto-dismisses. Minor visual collision; functionality unaffected."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_analytics_phase_a.py",
+    "/app/test_reports/pytest/pytest_iter8.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Move sonner toast position to top-right (or add bottom padding to Dashboard) so the success/warning toast doesn't overlay the regime-breakdown table on standard 1920x1080 screens.",
+    "OPTIONAL: AnalyticsPanel re-fetch after switching source toggle takes >2s in the deployed environment (network round-trip via REACT_APP_BACKEND_URL). Consider a transient skeleton/loader so users don't briefly see stale metrics. Not a blocker — final state always converges to correct data."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 351 filters all-time SELL trades for the regime_insight with {side:'SELL', status:'FILLED'} — the rest of the analytics windows query by timestamp window only without a side filter. Result is consistent because compute_performance internally separates closed round-trips, but the asymmetric filtering between insight (SELL/FILLED) and window stats is worth a unifying helper.",
+    "AnalyticsPanel.jsx line 83 reads synthetic_count via `analytics.synthetic_count || 0` — fine, but the hidden-note (line 157) renders only when `syntheticCount > 0`. If a future deployment runs without seed data the LIVE ONLY toggle silently hides the note. Consider always showing a 'No synthetic trades present' message in LIVE ONLY for clarity.",
+    "AnalyticsPanel.jsx is a single ~280-line component combining tiles + insight card + regime table + source toggle. Approaching the 700-line per-file threshold isn't a concern yet, but the inner RegimeInsightCard could be a separate file for reuse.",
+    "EnvironmentToggle.jsx polls /api/state every 10s via setInterval — fine, but no cleanup on component unmount of any in-flight fetch. Minor leak risk on rapid route changes. Not seen in practice."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (analytics performance: 2/2 query variants correct, synthetic_count=15, ready flag flips correctly)", "frontend": "100% on the 5 acceptance criteria (analytics-source toggle default + LIVE ONLY empty/placeholder/hidden-note + ALL DATA restore, env-toggle confirm-dialog with cancel/confirm, window toggle + regime breakdown, dashboard clean load with 0 console errors)"},
+  "test_credentials": "none (open app, no auth)",
+  "seed_data_creation": "Ran `python3 /app/backend/seed_demo_trades.py` which idempotently clears+inserts 15 DEMO_SEED PAPER round-trips across LOW_COMPRESSION/NORMAL/HIGH_PANIC regimes (best expectancy HIGH_PANIC +$1.25/trade). LEFT IN PLACE after testing — the UI requires them to render the populated analytics view. To remove: `python3 /app/backend/seed_demo_trades.py --clear`.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "DB now contains 15 DEMO_SEED trades (note='DEMO_SEED', side='SELL', status='FILLED'). The Analytics panel ALL DATA path is fully populated and the LIVE ONLY path correctly returns empty. Trading mode was momentarily flipped to LIVE during env-toggle verification but the gate stayed CLOSED (no real orders fired) and was reverted to PAPER before exit — please confirm with GET /api/state or via the header toggle before doing your own work. If you need a clean baseline for other tests, run `python3 /app/backend/seed_demo_trades.py --clear`.",
+  "rca of the issue": "N/A — no defects found. One initial flaky assertion ('BACK TO ALL' immediately after click reported empty=true) was a timing race: the re-fetch via REACT_APP_BACKEND_URL took >2s; a second targeted run with a 4s wait confirmed insight_card=true, empty=false, win-rate tile shows '15 closed'. Not a product bug."
+}

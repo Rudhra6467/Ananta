@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 11 — full e2e verification of the header PDF button + dialog refactor and Analytics-moved-to-Settings refactor (CryptoAtlas, PAPER). All 6 acceptance criteria pass on both desktop (1920) and mobile (390). Backend: pytest backend/tests/test_analytics.py + test_judge_and_pdf.py → 32 passed. GET /api/report/trades.pdf returns 200 application/pdf %PDF-1.4 for both no-params (2610 B) and ?start=2026-05-20&end=2026-05-29 (2741 B) — sizes match main agent's curl. Extracted PDF text via pypdf confirms a 'PERFORMANCE SUMMARY' block with rows CLOSED TRADES / WIN RATE / LOSS RATE / EXPECTANCY / TRADE / NET REALIZED P&L (zeros on the clean $300 baseline, which is correct). Range header line reads 'Range: All executed trades.' for no-params and 'Range: 2026-05-20 → 2026-05-29.' for the dated call. Frontend e2e: (a) header-pdf-button is present and visible at 1920 AND at 390 (bounding box {x:366, y:23, w:40, h:28} — top-right, next to PAPER/LIVE pill, not clipped). (b) Old data-testid='download-pdf-header' = 0 and dashboard 'export-trade-history' = 0 and dashboard analytics-panel = 0 — all three confirmed removed. (c) Clicking header-pdf-button opens trade-pdf-dialog containing pdf-preset-7, pdf-preset-30, pdf-preset-all, pdf-start-date, pdf-end-date, pdf-export-confirm. pdf-preset-7 populated start=2026-05-23 end=2026-05-30 (today−7 / today). pdf-preset-all cleared both inputs. pdf-export-confirm with preset-7 dates opened https://hunter-squeeze-labs.preview.emergentagent.com/api/report/trades.pdf?start=2026-05-23&end=2026-05-30 (window.open intercept); with preset-all opened …/api/report/trades.pdf with no params; dialog closes after export in both cases; mobile shows a 'PDF DOWNLOAD STARTED · All executed trades' toast. (d) Settings tab renders settings-analytics → analytics-panel inside; H2 is 'Performance Analytics'; explainer paragraph starts 'How your closed trades are performing — win rate, average win/loss, and your profit edge per trade. Populates as round-trips complete.' analytics-source-all / analytics-source-organic / analytics-window-rolling_24h / analytics-window-calendar_day all clickable. (e) Nav order = ['nav-tab-dashboard','nav-tab-settings','nav-tab-reasoning'] — correct. env-toggle-paper + env-toggle-live present; clicking env-toggle-live opens env-live-confirm-dialog; trading mode stayed PAPER throughout. (f) PortfolioCard now shows '$300.00 EQUITY · VS $300 STARTING · CASH $300.00 · 0/8 SLOTS' — the previously-flagged stale '$100 STARTING' copy from iter 10 is FIXED. 0 console errors on dashboard, settings, and reasoning tabs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/pytest_iter11.xml",
+    "/app/backend/tests/test_analytics.py",
+    "/app/backend/tests/test_judge_and_pdf.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AnalyticsPanel.jsx renders both a label-tag 'PERFORMANCE ANALYTICS' AND an h2 'Performance Analytics' immediately below it — visually duplicates the same text. Minor: consider dropping the label-tag since the h2 already conveys the section title.",
+    "TradeHistoryPdfDialog opens the PDF via window.open(url) — works, but on iOS Safari standalone PWA contexts window.open can be blocked outside a synchronous click handler. Current implementation calls it inside the click handler so OK, but if the dialog ever introduces an async step (await fetch) before window.open, popup will be blocked. Worth a code comment.",
+    "Settings.jsx fetches analyticsPerformance independently of the dashboard fetch — fine, but the two fetches may double-hit /api/analytics/performance on tab switch. Consider hoisting to a shared SWR/react-query key if rate-limiting becomes a concern.",
+    "pdf-export-confirm uses window.open with the full backend URL inline; if REACT_APP_BACKEND_URL is undefined at build time the URL silently becomes '/api/report/trades.pdf' (relative) which works in preview but would break in a different deploy. Add a defensive check or build-time assert."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (32/32 pytest pass; trades.pdf 200 application/pdf %PDF with PERFORMANCE SUMMARY block on both no-params and date-range)", "frontend": "100% (header pdf button + dialog + presets + window.open verified at both 1920 and 390; analytics moved to settings; dashboard cleaned; nav + env regression intact)"},
+  "test_credentials": "none (no auth)",
+  "seed_data_creation": "None — DB intentionally clean per main agent ($300 baseline, 0 trades). PERFORMANCE SUMMARY shows zeros, which is correct.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Trading mode preserved as PAPER (env-toggle-live confirm dialog was cancelled). DB still has clean $300 baseline with 0 trades. The MOBILE 390px header-pdf-button bounding box is {x:366, y:23, w:40, h:28} — confirmed not clipped, tap target ~40×28 which is on the small side for iOS HIG (44pt min) but functional. If main agent wants stricter mobile tap-target compliance, bump button height to 44px. window.open(...) interception is the reliable way to assert the popup target URL in this app — expect_popup() races and tends to return about:blank. The env-live-confirm-dialog's cancel button is labeled 'Stay on PAPER' (not 'CANCEL') — note for future regression scripts.",
+  "rca of the issue": "No new issues found this iteration. All review_request acceptance criteria pass on both desktop and mobile viewports."
+}

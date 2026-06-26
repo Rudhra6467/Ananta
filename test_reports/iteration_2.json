@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 2 backend testing - 3 new endpoints (Judge View + PDF Download) + regression sanity on iteration-1 endpoints. 16/16 pytest cases passing in ~34s against REACT_APP_BACKEND_URL/api. Verified /api/public/snapshot returns the correct sanitized shape, strips all 4 API key fields (coinbase/kraken key+secret) AND that the literal dummy secret values do not appear anywhere in the response body. Verified /api/report/full.pdf and /api/report/reasoning.pdf return valid PDF bytes (%PDF- magic), Content-Type=application/pdf, Content-Disposition=attachment with .pdf filename, and that ?limit=N (0, 10, 999) is accepted without errors. Existing endpoints (root, portfolio, settings, risk, reasoning, trades, market/snapshots, PUT /settings, POST /portfolio/reset) all still functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/public/snapshot", "issue": "Public settings object still exposes internal `id` and `updated_at` mongo-doc fields. Not sensitive, but unnecessary for a judge view and inconsistent with the 'sanitization' intent. Consider whitelisting fields instead of blacklisting."},
+      {"endpoint": "GET /api/report/full.pdf", "issue": "PDF size is currently ~6.3KB and reasoning.pdf is identical (~6.3KB) because reasoning/trades collections are empty after fresh portfolio_reset during regression. Size threshold (>5KB) is met but consider documenting that an empty-data PDF still has measurable size from the template/header pages."},
+      {"endpoint": "GET /api/report/*.pdf", "issue": "Endpoints do `from pdf_report import build_report` on every call. Module is cached after first import so cost is one-time, but the import lives in /api/public/snapshot too where it is unused (dead import). Cosmetic."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_judge_and_pdf.py",
+    "/app/test_reports/pytest/pytest_iter2.xml"
+  ],
+  "action_items": [
+    "(Cosmetic) Remove the dead `from pdf_report import build_report` line inside /api/public/snapshot handler in server.py - it's unused there.",
+    "(Minor) Whitelist allowed fields in /api/public/snapshot.settings instead of pop-blacklisting; `id` and `updated_at` are currently leaked.",
+    "(Carry-over from iteration 1, not retested) Lower max_spread_pct clamp floor; encrypt-at-rest for stored API secrets; daily P&L UTC rollover; consider asyncio.gather in evaluate_all."
+  ],
+  "critical_code_review_comments": [
+    "server.py:273 - dead import inside /api/public/snapshot (`from pdf_report import build_report` never used in that function).",
+    "server.py:283-285 - sanitization uses blacklist (.pop on 4 known sensitive keys). If a future field with secrets is added to RiskSettings it will silently leak. Prefer whitelist or use Pydantic exclude.",
+    "pdf_report.py + server.py - PDF generation runs reportlab synchronously inside an async handler; for large reasoning/trade collections (>200 items) this will block the event loop. Wrap build_report in `asyncio.to_thread(...)` to avoid blocking the trading loop during downloads.",
+    "Both PDF endpoints reuse `await get_portfolio()` and `await risk_status()` by calling the route functions directly - this works but couples handlers. Extract pure data assemblers to a service module."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_judge_and_pdf.py (new - 16 tests for iter-2 endpoints + regression)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "n/a - no auth",
+  "seed_data_creation": "Test PUTs dummy API keys (TEST_KRAKEN_KEY_DEF789 etc.) then restores them to empty strings in a try/finally. Regression test calls POST /api/portfolio/reset which wipes trades + reasoning (consistent with iter-1 behaviour). State at end: $100 cash, 0 trades, 0 reasoning, API key fields all empty.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 2 added 3 endpoints. Full coverage in /app/backend/tests/test_judge_and_pdf.py - runs in ~35s. PDF cold-start is ~2s on first call due to reportlab; subsequent calls are fast. /api/public/snapshot sanitization is verified by setting dummy keys and grep-checking r.text. No regressions on iter-1 endpoints. Note PDFs are ~6KB when reasoning/trades are empty; size will grow with content. Frontend /judge route was NOT tested per the review_request scope.",
+  "rca of the issue": "n/a - no bugs found. All iter-2 acceptance criteria from the review request are satisfied."
+}

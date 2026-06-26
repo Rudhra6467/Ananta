@@ -1,0 +1,42 @@
+{
+  "summary": "Full backend regression suite for CryptoAtlas AI Trading Dashboard executed against REACT_APP_BACKEND_URL/api. 20/20 pytest cases passing - covering health, live market data (CCXT/Kraken+Coinbase), portfolio, settings (clamping + masked secrets + invalid mode), risk/status, trades, reasoning (incl. symbol filter), Gemini 3 Pro LLM integration via /api/cycle/run (full + single-symbol), all 3 kill-switches (spread/confidence/manual), simulated BUY execution, and portfolio reset. End-to-end LLM cycle for 5 symbols completes in ~30s. Mock news_source (10 deterministic summaries) and CCXT live data confirmed working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/settings", "issue": "max_spread_pct lower clamp is 0.01% which is HIGHER than the typical live BTC spread (~0.0001%). This makes it impossible for an operator to set a tighter spread guard on BTC than the live market itself; tests had to switch to a less-liquid symbol (XRP/ADA) to exercise spread_breach. Consider lowering the clamp floor to e.g. 0.0001 or 0.001."},
+      {"endpoint": "GET /api/settings", "issue": "Plain-text API secrets are accepted via PUT and only MASKED in the response. They are still stored unencrypted in MongoDB (acknowledged in models.py comment as 'plain for demo'). For LIVE mode this is a hard blocker - flag for production hardening."},
+      {"endpoint": "GET /api/portfolio", "issue": "day_start_equity / day_start_date never roll over - there is no logic to reset the daily P&L baseline on UTC day change, so daily_pnl_pct will drift forever. Affects the daily_loss kill-switch accuracy after >24h uptime."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Lower the max_spread_pct clamp floor in PUT /api/settings from 0.01 to ~0.001 so spread guards can actually be tighter than live BTC spread.",
+    "(Important pre-LIVE) Encrypt-at-rest for coinbase_api_secret / kraken_api_secret in MongoDB; currently stored as plaintext (only the response is masked).",
+    "(Important) Add UTC day rollover for portfolio.day_start_equity / day_start_date so daily_loss_breach remains meaningful after multi-day uptime.",
+    "(Nice-to-have) /api/cycle/run is synchronous and takes 25-35s for 5 symbols (5x serial LLM calls). Consider asyncio.gather across symbols, or expose an async-job pattern to avoid frontend timeouts on slower networks."
+  ],
+  "critical_code_review_comments": [
+    "trading_engine.evaluate_all almost certainly loops symbols serially - parallelising the per-symbol LLM call with asyncio.gather would cut /api/cycle/run from ~30s to ~6s.",
+    "models.RiskSettings stores raw secrets - documented as 'plain for demo'; must be addressed before enabling LIVE.",
+    "server.py uses deprecated @app.on_event('startup'/'shutdown') - should migrate to lifespan context manager (FastAPI deprecation).",
+    "fuse_signals SELL path requires has_position AND macro BEARISH AND imbalance < -0.15 - a hard daily_loss or spread breach will BLOCK rather than SELL, which means risk-off exits cannot be auto-executed when a kill-switch trips. Confirm this is intentional (currently the system can be stuck holding a losing position once a kill-switch is on).",
+    "server.py imports happen *after* load_dotenv but before logging is fully configured - works but is fragile if any imported module reads env at import-time. Acceptable.",
+    "Background TradingLoop (90s) keeps generating reasoning entries indefinitely without TTL/rotation - DB will grow unbounded. Add TTL index on reasoning.timestamp."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (new)",
+    "/app/backend/tests/backend_test.py (new - full pytest suite)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "n/a - no auth in this app",
+  "seed_data_creation": "Test suite uses /api/cycle/run to populate reasoning + trades, then /api/portfolio/reset at the end to leave the system clean ($100 / 0 trades / 0 reasoning). Settings restored to defaults (min_confidence=0.6, max_spread_pct=0.5, manual_kill_switch=false, enabled_symbols=[BTC,ETH,SOL,XRP,ADA]/USD).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is fully functional. All 20 tests in /app/backend/tests/backend_test.py pass in ~2 min. Notes for re-running: (1) /api/cycle/run is slow (~30s) because LLM calls are serial; bump request timeout >=120s. (2) The TimeoutSession fixture sets default 60s; cycle tests already use longer timeouts. (3) TestZZZPortfolioReset is intentionally alphabetised last because it wipes trades+reasoning. (4) Settings are restored at the end of each kill-switch test; if a run is interrupted mid-test, the operator may need to manually PUT /api/settings to restore defaults. (5) Frontend testing was explicitly skipped per the review_request.",
+  "rca of the issue": "n/a - no production bugs identified. One test initially failed (spread_breach against BTC) because clamp floor (0.01%) exceeds live BTC spread (~0.0001%); fixed by switching the test to a less-liquid symbol and also reported as a minor product issue."
+}

@@ -1,0 +1,203 @@
+@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg-default: #090A0C;
+    --bg-panel: #121418;
+    --bg-panel-hover: #1A1D24;
+    --text-primary: #E2E4E9;
+    --text-secondary: #878E99;
+    --text-tertiary: #5C6370;
+    --border-default: #2A2D35;
+    --border-subtle: rgba(255, 255, 255, 0.04);
+    --accent-cyan: #C0C5CE;
+    --positive: #10B981;
+    --negative: #F43F5E;
+    --warning: #D9B36B;
+}
+
+body {
+    margin: 0;
+    background: var(--bg-default);
+    color: var(--text-primary);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+    background: var(--accent-cyan);
+    color: var(--bg-default);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-default);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #353a44;
+}
+
+@layer base {
+    :root {
+        --background: 220 13% 4%;
+        --foreground: 220 10% 90%;
+        --card: 220 13% 8%;
+        --card-foreground: 220 10% 90%;
+        --popover: 220 13% 8%;
+        --popover-foreground: 220 10% 90%;
+        --primary: 220 9% 78%;
+        --primary-foreground: 220 13% 5%;
+        --secondary: 220 11% 14%;
+        --secondary-foreground: 220 10% 90%;
+        --muted: 220 11% 14%;
+        --muted-foreground: 215 7% 58%;
+        --accent: 220 9% 78%;
+        --accent-foreground: 220 13% 5%;
+        --destructive: 350 89% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 220 11% 19%;
+        --input: 220 11% 14%;
+        --ring: 220 9% 78%;
+        --radius: 6px;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+        font-feature-settings: "ss01", "ss02", "cv01";
+    }
+}
+
+/* Utility classes */
+.font-heading {
+    font-family: 'Chivo', sans-serif;
+}
+
+.font-body {
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+
+.font-mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.label-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+}
+
+.panel-hover:hover {
+    background: var(--bg-panel-hover);
+}
+
+/* Matte theme: no neon grid. Kept as a no-op so existing className stays valid. */
+.grid-bg {
+    background-image: none;
+}
+
+.scanline {
+    background: none;
+    pointer-events: none;
+}
+
+/* blinking cursor effect for AI loading */
+@keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+.blink-cursor::after {
+    content: "▊";
+    margin-left: 4px;
+    color: var(--accent-cyan);
+    animation: blink 1s steps(1) infinite;
+}
+
+/* glow — matte theme keeps these subtle, no neon halos */
+.glow-green {
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+}
+.glow-red {
+    box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.4);
+}
+.glow-cyan {
+    box-shadow: 0 0 0 1px rgba(192, 197, 206, 0.3);
+}
+
+/* price tick flash */
+@keyframes flashUp {
+    0% { background-color: rgba(16, 185, 129, 0.2); }
+    100% { background-color: transparent; }
+}
+@keyframes flashDown {
+    0% { background-color: rgba(244, 63, 94, 0.2); }
+    100% { background-color: transparent; }
+}
+.flash-up {
+    animation: flashUp 0.8s ease-out;
+}
+.flash-down {
+    animation: flashDown 0.8s ease-out;
+}
+
+/* tab style override */
+.atlas-tabs [data-state="active"] {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--accent-cyan) !important;
+    box-shadow: none !important;
+}
+
+/* shadcn input override hooks */
+.atlas-input {
+    background: var(--bg-default) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: 0 !important;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary) !important;
+}
+.atlas-input:focus,
+.atlas-input:focus-visible {
+    border-color: var(--accent-cyan) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 1px var(--accent-cyan) !important;
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+}

@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 4 backend testing - LIVE order execution with env-var defense-in-depth interlock. 18/18 external integration tests pass against REACT_APP_BACKEND_URL/api in ~40s, plus 28/28 internal pytest unit tests in /app/backend/tests/test_live_execution.py pass in ~4s (when run from /app/backend cwd). CRITICAL defense-in-depth test PASSED: with settings.trading_mode flipped to LIVE via PUT /api/settings, a subsequent POST /api/cycle/run/BTC still executes in PAPER mode because LIVE_TRADING_ENABLED env var is 'false' (verified by inspecting trade.mode in /api/trades after cycle - all recorded trades have mode=='PAPER', none have mode=='LIVE'). GET /api/live/status returns the exact spec'd JSON shape with all safety flags off (live_gate_open=false, exchange=null, api_key_configured=false, api_secret_configured=false, ready_to_trade=false) and contains no plaintext credential material (configured-flags are booleans, not strings; no value in the response is longer than 40 chars). All previous-iteration regression endpoints (/api/, /api/portfolio, /api/settings, /api/risk/status, /api/market/snapshots, /api/reasoning, /api/trades, /api/news/current, /api/backtest/run, /api/backtest/sweep, /api/report/full.pdf, /api/public/snapshot) still return 200 with the same shape. Settings restored to trading_mode=PAPER at end-of-test as requested.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/app/backend/tests/test_live_execution.py",
+        "issue": "The 28 internal unit tests use `import live_execution` (no `backend.` prefix), so they only collect/run when cwd is /app/backend. Running `pytest /app/backend/tests/test_live_execution.py` from /app fails with ModuleNotFoundError. Either add a tests-level conftest.py with `sys.path.insert(0, '/app/backend')` or document the cwd requirement. Not a functional bug, but CI ergonomics."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_live_status_iter4.py",
+    "/app/test_reports/pytest/pytest_iter4.xml"
+  ],
+  "action_items": [
+    "(Cosmetic) Add /app/backend/tests/conftest.py with sys.path insertion so the 28 internal live_execution unit tests run regardless of pytest cwd. Currently they only collect when invoked from /app/backend.",
+    "(Carry-over still open from iter 2/3) Whitelist /api/public/snapshot.settings fields more strictly; wrap reportlab PDF build in asyncio.to_thread; cryptocurrency.cv tier-1 returns off-topic non-crypto headlines."
+  ],
+  "critical_code_review_comments": [
+    "live_execution.py:268-270 trading_engine.py correctly AND-gates live_route on BOTH settings.trading_mode=='LIVE' AND LiveExecutor.is_live_gate_open(). Defense-in-depth wiring is correct: if the env gate is closed, live_route is False and the PAPER branch hardcodes mode='PAPER'. Verified by live integration test.",
+    "live_execution.py:139-143 `is_live_gate_open` uses strict `_env_bool` (exactly the lowercase string 'true'). Good - 'True', '1', 'yes' all evaluate to False, which is the safest default.",
+    "live_execution.py:455-469 `live_status()` correctly omits raw key material from its return payload; only returns booleans for api_key_configured/api_secret_configured. Verified by integration test.",
+    "live_execution.py:409-445 singleton pattern uses module-level mutable state (`_executor_singleton`, `_executor_init_error`). Fine for single-worker uvicorn, but a multi-worker deployment would re-initialise per worker, which is actually desirable for connection isolation. Document the assumption that each worker holds its own CCXT auth client.",
+    "live_execution.py:384,390 `asyncio.ensure_future(self._safe_cancel(...))` schedules a fire-and-forget cancel on partial fills/timeouts. Risk: if the parent loop tears down before the task runs, the cancel is dropped silently. Consider awaiting it for deterministic behaviour, or at minimum logging the task creation so operators can audit.",
+    "live_execution.py:122-130 LiveExecutor.__init__ calls self.exchange.load_markets() synchronously in the constructor (blocking IO at import-time of the singleton). For a process-level lazy init this is OK, but the first /api request that triggers it will block the event loop briefly. Consider hoisting into an async background task at startup, or wrapping in asyncio.to_thread on first use.",
+    "live_execution.py:294, 341 The limit price is computed against `live_ask`/`live_bid` from recheck_spread, NOT the stale snapshot price - good. But max_slippage_pct is divided by 100 (line 294: `* (1.0 + self.max_slippage_pct/100.0)`); ensure operators understand 0.10 means 0.10% NOT 10%. .env default is 0.10 which is correct (10bps); a docstring example would help.",
+    "server.py:48 import path uses unqualified `from live_execution import ...` which means /app/backend MUST be on PYTHONPATH (supervisor handles this). Internal unit test file uses the same convention but causes collection failure from non-/app/backend cwds.",
+    "server.py:274-279 /api/live/status correctly delegates to live_execution.live_status() and exposes no extra fields. Good separation of concerns."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_live_status_iter4.py (new - 18 tests for /api/live/status, defense-in-depth, regressions)"
+  ],
+  "success_rate": {"backend": "100% (18/18 external + 28/28 internal)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "n/a - no auth required",
+  "seed_data_creation": "TestCycleRunBTCRegression and TestDefenseInDepth each run POST /api/cycle/run/BTC which may insert reasoning + (possibly) trade rows. Trading_mode is restored to PAPER and original min_confidence at end-of-test class. Portfolio is NOT reset (preserves prior state for next iteration).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 4 wires LIVE execution via /app/backend/live_execution.py with a 3-layer interlock (settings.trading_mode=LIVE AND env LIVE_TRADING_ENABLED=true AND non-empty EXCHANGE_API_KEY/SECRET). The defense-in-depth assertion in TestDefenseInDepth is the load-bearing test: verifies that flipping trading_mode=LIVE via the settings PUT does NOT result in any trade row with mode=='LIVE' while the env gate is closed. Internal pytest module test_live_execution.py needs cwd=/app/backend to import correctly (mocked CCXT exchange covers full BUY/SELL/partial-fill/timeout/InsufficientFunds/InvalidOrder/unexpected-exception flow). No real orders are ever placed during testing because LIVE_TRADING_ENABLED=false. Cycle endpoint takes 6-10s due to Gemini; backtest ~5s for 3-day window. All 18 external + 28 internal tests pass.",
+  "rca of the issue": "No backend bug found. Defense-in-depth interlock is correctly implemented at trading_engine.py:267-276: `live_route = (settings.trading_mode == 'LIVE' AND LiveExecutor.is_live_gate_open())`, where `is_live_gate_open()` returns True only if the LIVE_TRADING_ENABLED env var is exactly the string 'true'. With env=false, live_route is False and the PAPER branch at trading_engine.py:294-310 hardcodes mode='PAPER' in the TradeLog. Verified end-to-end: with settings.trading_mode='LIVE' and env LIVE_TRADING_ENABLED=false, /api/trades shows no rows with mode=='LIVE'. Safe to deploy with real capital provided the operator only flips LIVE_TRADING_ENABLED=true on the production host (and never on shared/preview environments)."
+}

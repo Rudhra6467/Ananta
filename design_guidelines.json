@@ -1,0 +1,97 @@
+{
+  "project": {
+    "name": "Ananta",
+    "description": "Minimalist, high-performance execution cockpit",
+    "design_philosophy": "High breathing room, clean typography, low cognitive load, absolute structural simplicity. Anti-clutter."
+  },
+  "theme_and_archetype": {
+    "theme": "DARK",
+    "archetype": "Archetype 4 (Swiss & High-Contrast) + Luxury Matte",
+    "reasoning": "Trading execution cockpits require authority, precision, and focus. A matte silver dark theme provides a premium, zero-distraction environment that emphasizes the data rather than the UI."
+  },
+  "color_system": {
+    "backgrounds": {
+      "base": "#090A0C",
+      "panel": "#121418",
+      "panel_hover": "#1A1D24",
+      "header_glass": "rgba(18, 20, 24, 0.75)"
+    },
+    "borders": {
+      "default": "#2A2D35",
+      "focus": "#C0C5CE"
+    },
+    "typography": {
+      "primary": "#E2E4E9",
+      "secondary": "#878E99",
+      "tertiary": "#5C6370"
+    },
+    "accents": {
+      "brand_matte_silver": "#C0C5CE",
+      "success_green": "#10B981",
+      "danger_rose": "#F43F5E"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "headings": "Chivo, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "data_mono": "JetBrains Mono, monospace"
+    },
+    "scales": {
+      "h1": "text-4xl tracking-tight font-light",
+      "h2": "text-2xl tracking-tight font-medium",
+      "h3": "text-xl tracking-tight",
+      "body": "text-base leading-relaxed",
+      "data_large": "text-3xl font-medium tracking-tight",
+      "data_small": "text-sm tracking-wide uppercase"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "Mode B: 'Control Room' grid but generously spaced (gap-6 to gap-8). Focus on 1px solid borders and flat surfaces.",
+    "padding": "Generous. Panels require min p-6 (24px) or p-8 (32px) to guarantee breathing room.",
+    "border_radius": "Subtle. max 8px (rounded-md to rounded-lg). No pill shapes.",
+    "borders": "1px solid brushed silver (#2A2D35). Critical: NO glowing grid lines, background patterns, or neon clutter."
+  },
+  "pages_and_components": {
+    "dashboard_cockpit": {
+      "executive_header": {
+        "row_a": "Portfolio Stats. Large white/silver Account Value, Deployed Positions with bracket count (e.g. $150.00 (2)).",
+        "row_b": "Bot Brain status strip (Scanned 10 | Setups 8 | Rejected 7 | Qualified 1 | Regime: Bullish). Matte silver text on darker panel. Monospace numbers."
+      },
+      "watchlist_ribbon": "Horizontal scrollable cards (BTC, ETH, SOL...). Flat design. Clicking changes workspace. data-testid='watchlist-[asset]'",
+      "workspace": "100% Wide Chart Space. (Since 'Why No Trade' moved to Reports to declutter, the main cockpit is purely focused on the single wide 4H candlestick of the selected asset).",
+      "analytics_carousel": "Swipeable anti-clutter carousel below chart. Slide 1: Counterfactual ring chart (Correct Rejections vs Missed Opportunities). Slide 2: Confidence Distribution histogram (0.50-0.59, 0.60-0.69...). Only 1 visible at a time.",
+      "footer": {
+        "trade_stepper": "Trade Lifecycle horizontal stepper (Detected -> Qualified -> Entered -> Trailing Armed -> Exited). Muted silver for inactive, Matte Silver for active, Green for completed.",
+        "executions_table": "Today's Executions flat table. Empty state: centered muted 'No executions today. Tracking zones...'."
+      }
+    },
+    "datalog_reports_tab": {
+      "name": "DataLogs/Reports",
+      "description": "Moved complex diagnostics here to keep home decluttered.",
+      "components": [
+        "AI Reasoning Log",
+        "'Why No Trade?' diagnostic widget (bulleted checklist: [✓] Support Zone | [✓] RSI Reset | [✗] Volume Exhaustion | Result: NO TRADE)",
+        "Strategy Attribution borderless table",
+        "Rejection Leaderboard"
+      ]
+    },
+    "settings_tab": {
+      "name": "Settings",
+      "description": "Standard configuration pane following the matte silver UI spec."
+    }
+  },
+  "media_and_assets": {
+    "logo_url": "https://customer-assets.emergentagent.com/job_aa6068c4-d984-4b06-89f2-1385fe2047f3/artifacts/tcnz9q5v_7BD28A7D-2F92-4158-AD29-E7C4E3010014.png",
+    "logo_instructions": "Implement the brand logo using the provided URL. FADE THE DAMARUKA: Since this is a static image, use a CSS overlay (e.g., a linear gradient from transparent to the background color at the bottom of the logo) or CSS `mask-image` to visually 'fade' or 'ghost' the damaruka (the lower base element) into the background."
+  },
+  "interactions_and_motion": {
+    "hover_states": "Subtle background lightening (e.g., bg-[#1A1D24]). Explicitly set hover text colors to #E2E4E9.",
+    "transitions": "Fast, precise. transition: transform 0.2s ease, opacity 0.2s ease.",
+    "animations": "Minimal. No bouncy effects. Strictly functional.",
+    "focus_states": "High contrast ring focus (ring-2 ring-[#C0C5CE])."
+  },
+  "testing_guidelines": {
+    "data_testid": "ALL interactive and key informational elements MUST include a data-testid attribute in kebab-case. Examples: `data-testid='portfolio-value'`, `data-testid='watchlist-btc-card'`, `data-testid='nav-reports'`."
+  }
+}

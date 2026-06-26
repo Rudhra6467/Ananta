@@ -1,0 +1,88 @@
+[tool.ruff]
+# Target Python 3.11+ (this project uses modern syntax: union types, walrus, asyncio.to_thread)
+target-version = "py311"
+line-length = 120
+extend-exclude = [
+    ".venv",
+    "venv",
+    "tests/fixtures",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# We curate the rule selection: keep rules that produce real signal,
+# drop ones that pattern-match working code as bugs.
+select = [
+    "E",   # pycodestyle errors    (syntax-level mistakes)
+    "F",   # pyflakes              (real undefined-name / unused-import bugs)
+    "W",   # pycodestyle warnings  (trailing whitespace etc.)
+    "B",   # bugbear               (likely bugs: B008 mutable default, B904 raise-from, etc.)
+    "I",   # isort                 (consistent import ordering)
+    "UP",  # pyupgrade             (e.g. `Optional[X]` -> `X | None` on py3.10+)
+    "C4",  # comprehensions        (unnecessary list() around generator etc.)
+    "SIM", # simplify              (collapse trivially redundant blocks)
+    "PIE", # misc Python idioms
+    "RUF", # ruff-native rules     (good signal-to-noise)
+]
+
+ignore = [
+    # ── Style-only rules that produce noise on production-tested code ─────────
+    "E501",     # line-too-long: handled by `line-length = 120`; we don't enforce
+    "E731",     # lambda assignment: occasionally clearer than a def
+    "B008",     # function-call-in-default-argument: FastAPI's Depends(...)/Query(...) pattern is intentional
+    "SIM108",   # use-ternary: nested ternaries hurt readability in conditional branches
+    "SIM117",   # combine-if-branches: explicit branches are clearer
+    "UP007",    # X | Y syntax: we already use it where preferred; allow `Optional` for clarity
+    "UP006",    # use `list` instead of `List`: cosmetic
+    "UP035",    # deprecated import alias: cosmetic
+
+    # ── False-positive patterns from third-party code review reports ─────────
+    # `is None` / `is not None` are PEP 8 compliant; some reports flag them as
+    # "identity vs equality" anti-patterns. They are not — keep them.
+    # (No ruff rule actually flags this, but listed here as documentation.)
+
+    # Cyclomatic complexity / function length: we deliberately keep some larger
+    # functions intact (e.g. evaluate_symbol, fuse_signals) because splitting them
+    # would just shuttle state through arg-lists for zero readability gain.
+    # The C90/PLR rules are NOT selected above; this comment is documentation.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed unused imports (fixtures), longer lines, and mutable class attrs (test fixtures)
+"tests/*" = ["F401", "E501", "RUF012"]
+"tests/**/*.py" = ["F401", "E501", "RUF012"]
+# server.py imports modules after load_dotenv() to ensure env vars are populated
+# before the imported modules read them. Don't flag this as out-of-order imports.
+"server.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "ai_reasoning",
+    "market_data",
+    "models",
+    "news_source",
+    "pdf_report",
+    "risk_engine",
+    "trading_engine",
+]
+
+[tool.ruff.format]
+# Don't reformat strings - many of our log/prompt strings have intentional layout
+skip-magic-trailing-comma = false
+quote-style = "double"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bandit configuration (security linter) — only applies if bandit is run.
+# We deliberately accept the following so they stop appearing in code-review
+# reports as "security issues" when they are NOT security-sensitive:
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.bandit]
+# B311  pseudo-random generators -- we already removed `random.choice`; allow
+#       `random` in non-security contexts (test fixtures, mock data, etc.).
+# B324  hashlib insecure hash -- if MD5/SHA1 are ever re-introduced they MUST
+#       be paired with `usedforsecurity=False` (Python 3.9+) to indicate intent.
+# B104  hardcoded bind 0.0.0.0 -- supervisor binds backend to 0.0.0.0:8001 per
+#       the platform contract; this is intentional, not a vulnerability.
+skips = ["B104", "B311"]
+exclude_dirs = ["tests", ".venv", "venv", "__pycache__"]

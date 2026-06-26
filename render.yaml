@@ -1,0 +1,30 @@
+# Render Blueprint for the Ananta backend (FastAPI).
+# In Render: New + -> Blueprint -> point at this repo. Set the env vars in the dashboard.
+services:
+  - type: web
+    name: ananta-backend
+    runtime: python
+    rootDir: backend
+    plan: starter            # 'free' sleeps when idle; a trading bot needs always-on -> use starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: ananta
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: EMERGENT_LLM_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: LIVE_TRADING_ENABLED
+        value: "false"

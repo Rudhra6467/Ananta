@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 3 backend testing - 3-tier cascading live news feed. 14/14 pytest cases passing in ~37s against REACT_APP_BACKEND_URL/api. Verified GET /api/news/current returns {summary, ts, cache} with valid source label (cryptocurrency.cv | rss-aggregate (...) | mock-fallback), cache info contains primary_endpoint + rss_feeds with CoinDesk and CoinTelegraph, 5-min TTL caching is honoured (back-to-back calls return identical summary), and POST /api/cycle/run/BTC end-to-end propagates the same live news summary into the reasoning entry's news_summary field (verified via direct response and via GET /api/reasoning). Regression sanity passed on /api/, /api/portfolio, /api/settings (secrets masked), /api/market/snapshots, /api/risk/status, /api/public/snapshot (no API key fields), /api/report/reasoning.pdf (valid PDF magic + correct content-type).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/news/current",
+        "issue": "Tier-1 (cryptocurrency.cv) currently returns non-crypto content (e.g. UK FCA claims-management consumer news) instead of the expected empty array. Because the response is non-empty, the cascade does NOT fall through to RSS, so Gemini receives off-topic macro context. The E1 design assumed free-tier returns empty arrays; this assumption is wrong in practice. Consider (a) keyword-filtering tier-1 results for crypto relevance, or (b) skipping tier-1 entirely until paid x402 access is wired up, or (c) preferring RSS when tier-1 articles have no crypto keywords."
+      },
+      {
+        "endpoint": "GET /api/news/current",
+        "issue": "cache.age_seconds is rounded to 0.1 but can be null on uninitialized cache (first cold start before any call). Not a bug per se but worth documenting in the public API."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_news_cascade.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "action_items": [
+    "(Content quality) Add a crypto-keyword relevance filter to _extract_cv_articles or have the cascade explicitly fall through to RSS when tier-1 articles look off-topic. Observed: tier-1 returned UK FCA consumer-affairs headlines that Gemini then reasoned about. Acceptance criterion ('contains real text >50 chars') still passes but the macro context is not what the trading engine needs.",
+    "(Carry-over from iter 2, still open) Whitelist /api/public/snapshot.settings fields; wrap reportlab PDF build in asyncio.to_thread; remove dead `from pdf_report import build_report` import inside /api/public/snapshot handler."
+  ],
+  "critical_code_review_comments": [
+    "news_source.py:165 - `_fetch_cv_sync` treats `articles or None` as the fall-through signal, but does NOT verify that returned articles are actually crypto-relevant. As observed live, the upstream returns generic news (UK FCA), passing this check and short-circuiting the entire RSS tier. Recommend adding a domain filter (keywords: BTC|ETH|crypto|bitcoin|ethereum|defi|stablecoin|...) before accepting tier-1 output.",
+    "news_source.py:246 - module-level mutable `_cache` dict is fine for a single-process FastAPI server, but will diverge under multiple uvicorn workers. Document the single-worker assumption, or move cache into Redis/Mongo for multi-worker correctness.",
+    "news_source.py:206 `_fetch_rss_aggregate` swallows per-feed exceptions via return_exceptions=True (good), but logs nothing when an individual feed dies - silent partial degradation. Add a logger.warning when len(merged) < len(RSS_FEEDS) so operators notice when one feed goes down.",
+    "news_source.py:73 `_strip_html` uses regex tag-stripping; for malformed RSS containing `<a title=\">\">` this can over-consume. Low risk for the two RSS feeds in scope but consider html.parser or lxml long-term.",
+    "news_source.py:91 `_parse_pubdate` returns None silently on unparseable dates; rows with None pub_date will sort to 'now_utc' (the default in the sort key), which can push genuinely old articles to the top. Consider sorting unknown-date articles last instead."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_news_cascade.py (new - 14 tests covering news cascade + propagation + regression sanity)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "n/a - no auth required",
+  "seed_data_creation": "Test posts to /api/cycle/run/BTC which writes one new reasoning entry. No portfolio reset performed; portfolio state at end matches state at start (paper mode, may have produced HOLD or a small trade depending on Gemini output).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 3 changes are isolated to news_source.py + the /api/news/current response shape in server.py. Full coverage in /app/backend/tests/test_news_cascade.py (~37s). NB: tier-1 cryptocurrency.cv currently returns off-topic non-crypto news (live-observed: UK FCA consumer-affairs headlines). API contract still met, but if a future iteration adds a relevance/keyword filter, expect cache.source to flip from 'cryptocurrency.cv' to 'rss-aggregate (CoinDesk+CoinTelegraph)'. Live RSS fetch is ~1-3s parallel; first /api/news/current call after a 5-min TTL expiry is the slow one. Cycle endpoint takes 6-10s due to Gemini.",
+  "rca of the issue": "No backend bug. The only concern surfaced is a content-quality issue at tier-1 (cryptocurrency.cv free endpoint serves non-crypto headlines, defeating the design intent that tier-1 either returns crypto news or empty so RSS picks up). RCA: free-tier provider isn't gating by category despite the /api/news path suggesting crypto-only; the cascade logic trusts whatever non-empty payload it receives. Mitigation: add a keyword relevance filter to _extract_cv_articles, or disable tier-1 until paid x402 access yields curated crypto content."
+}

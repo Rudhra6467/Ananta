@@ -1,0 +1,4 @@
+/* App.css - intentionally minimal, all theming lives in index.css and tailwind utilities. */
+.App {
+    min-height: 100vh;
+}

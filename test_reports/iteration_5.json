@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 5 backend testing - ADAPTIVE LOT SIZING feature. Verified end-to-end via 9 HTTP integration tests (new file /app/backend/tests/test_adaptive_sizing_http.py) all passing in ~35s against REACT_APP_BACKEND_URL/api, plus the full /app/backend/tests suite (147 passed, 1 skipped in ~113s). The 16-case unit suite in test_adaptive_sizing.py (indicator math + classifier + USD-lot sizing + concurrent cap) all passes. /api/settings exposes all 7 new adaptive fields with correct defaults (adaptive_sizing_enabled=true, normal_lot_usd=5.0, strong_lot_usd=10.0, strong_min_confidence=0.75, strong_min_atr_percentile=60.0, strong_min_adx=20.0, max_concurrent_positions=5). PUT clamping verified: normal_lot_usd 99999->1000, strong_min_confidence 2.0->1.0, max_concurrent_positions 99->20. PUT in-range persists (7.5/15/0.8/3) and survives a re-GET. /api/portfolio adds slots_used (=count of positions with quantity>0) and max_concurrent_positions. /api/public/snapshot exposes the 7 adaptive fields under settings and continues to omit kraken_api_secret / coinbase_api_secret. POST /api/cycle/run/BTC followed by GET /api/reasoning shows evidence.setup_strength in {STRONG,NORMAL,NONE} with full setup_evidence dict containing last_close, ema50, ema200, atr_percentile, adx_value and trend/volatility/confidence sub-flags - confirmed live (BTC currently NORMAL with full indicator set). No regressions: /api/risk/status, /api/trades, /api/reasoning, /api/cycle/run all still respond with their existing shapes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/cycle/run/{symbol}",
+        "issue": "Single Gemini-LLM call inside the request handler can exceed Cloudflare's ~100s ingress timeout, surfacing as an HTTP 502 to clients even though the reasoning row is persisted server-side. Worked around in test by retrying once and then asserting on the persisted reasoning. Consider moving the cycle to a background task with a job-id + GET-status pattern, or shortening the LLM timeout to <90s."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_adaptive_sizing.py",
+    "/app/backend/tests/test_adaptive_sizing_http.py",
+    "/app/test_reports/pytest/pytest_iter5.xml"
+  ],
+  "action_items": [
+    "(Minor) /api/cycle/run/{symbol} occasionally returns 502 from Cloudflare when Gemini is slow. Reasoning is still persisted but the HTTP caller sees an error. Recommend moving the cycle to an async background job with a poll-status endpoint, or lowering the LLM client timeout to keep responses under the ~100s ingress cap.",
+    "(Carry-over from iter 2/3/4 - still valid) Wrap reportlab PDF build in asyncio.to_thread to avoid blocking the event loop; cryptocurrency.cv tier-1 news source occasionally returns off-topic headlines."
+  ],
+  "critical_code_review_comments": [
+    "setup_classifier.py:118-203 classify_setup correctly degrades to NORMAL on insufficient history (<200 bars) and to NONE when macro bias != BULLISH. The atr_lookback_bars default of 720 = 30*24 matches the spec. Evidence dict always carries min_strong_confidence/min_atr_percentile/min_adx so an operator can audit the thresholds in-effect at decision time. Good.",
+    "trading_engine.py:234-294 the concurrent-cap check runs BEFORE position sizing and writes a reasoning row with blocked_reasons=['MAX_POSITIONS_REACHED X/Y'] then returns trade=None - exactly the 'queue & retry next cycle' behaviour the user asked for. The evidence dict on that blocked row still includes setup_strength + setup_evidence so the operator can see what the sizer *would have done*.",
+    "trading_engine.py:328-329 usd_lot = strong_lot_usd if STRONG else normal_lot_usd (when adaptive_sizing_enabled and strength != NONE). When strength is NONE the legacy %-of-equity path is used, which is the correct fallback for the macro-not-bullish branch.",
+    "risk_engine.py:133+ position_size_quantity USD-lot branch is correctly clamped to available cash * 0.95 - validated by test_position_size_usd_lot_capped_by_cash (cash=$5, lot=$10 -> qty=0.475 at price=$10).",
+    "server.py:241-250 the SettingsUpdate clamp ranges (normal_lot_usd 1-1000, strong_lot_usd 1-1000, strong_min_confidence 0-1, strong_min_atr_percentile 0-100, strong_min_adx 0-100, max_concurrent_positions 1-20) are sane and validated via HTTP. Note that max_concurrent_positions accepts 1 as the minimum which is correct (one open position is a valid policy).",
+    "server.py:411-417 /api/public/snapshot whitelists only the 7 adaptive fields plus the existing safe settings; no kraken/coinbase api_secret leakage. Verified by integration test.",
+    "server.py:147 slots_used = sum(1 for p in portfolio.positions if p.quantity > 0) - this matches the spec exactly. Verified via /api/portfolio HTTP call (slots_used == count of qty>0 positions)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_adaptive_sizing_http.py (new - 9 external HTTP integration tests for adaptive sizing feature)"
+  ],
+  "success_rate": {"backend": "100% (9/9 external HTTP + 147/147 internal pytest + 1 skipped)", "frontend": "not tested (out of scope per request)"},
+  "test_credentials": "n/a - no auth required, PAPER mode",
+  "seed_data_creation": "Test class snapshots settings at module start and restores adaptive_sizing_enabled/normal_lot_usd/strong_lot_usd/strong_min_confidence/strong_min_atr_percentile/strong_min_adx/max_concurrent_positions on teardown. test_cycle_run_records_setup_strength_and_evidence runs one POST /api/cycle/run/BTC which inserts one reasoning row (and may insert one PAPER trade if the BUY signal fires). Portfolio is NOT reset.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 5 wraps up the Adaptive Lot Sizing feature. Two test files cover it: (a) /app/backend/tests/test_adaptive_sizing.py - 16 internal pytest cases (indicator math, classifier branches, USD-lot path, concurrent cap with mocked CCXT+Gemini); (b) /app/backend/tests/test_adaptive_sizing_http.py - 9 external HTTP integration tests against REACT_APP_BACKEND_URL/api. Both pass. Full /app/backend/tests suite is 147 passed + 1 skipped. The only operational caveat is that POST /api/cycle/run can 502 at the Cloudflare ingress when the Gemini call is slow (>~100s); the integration test handles this by retrying once and then asserting on the persisted reasoning row instead of the HTTP response. setup_strength has been observed live as NORMAL on BTC (downgrade_reason: low volatility despite uptrend), confirming the classifier writes the full evidence dict.",
+  "rca of the issue": "No backend bug found. Implementation matches the spec end-to-end: setup_classifier.classify_setup correctly returns NONE/NORMAL/STRONG with the right evidence; trading_engine.evaluate_symbol gates on max_concurrent_positions before sizing and writes a HOLD/MAX_POSITIONS_REACHED reasoning row; risk_engine.position_size_quantity routes via the USD-lot branch when usd_lot is supplied; server.py exposes the new fields through GET/PUT /api/settings (with clamping), GET /api/portfolio (slots_used + cap), and GET /api/public/snapshot (whitelisted, no secrets). The only minor caveat is the Cloudflare 502 on slow Gemini cycles, which is an ingress timeout issue independent of the adaptive-sizing feature."
+}

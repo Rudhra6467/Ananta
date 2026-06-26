@@ -1,0 +1,31 @@
+{
+  "summary": "Phase B 'Execution Friction Mitigation Layer' — backend + frontend both PASS. New /api/pending_orders endpoint returns correct {items:[], count:0} shape; settings expose maker_fee_pct (0.25) + breakout_paper_slippage_pct (0.10) with 0..5 clamping that persists across GETs. POST /api/cycle/run/BTC returns decision + reasoning_id and the persisted reasoning doc carries evidence.spread_pct_bid_based. /api/analytics/performance still 200 and now includes total_slippage_usd + total_friction_usd in both windows. Regression on /api/trades, /api/live/status, /api/risk/status all 200. Frontend Dashboard renders cleanly with 0 hydration/nesting warnings, 0 console errors; PendingOrders correctly returns null when items=0 (no empty table); seeded ONE TESTAGENT_pending_2 doc to verify rendering — section + table appear between AnalyticsPanel and Watchlist with all 4 columns (Symbol/Qty/Resting Bid/Flat Ticks) and exact data match; seed deleted afterward (DB clean: pending_orders count=0).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b_http.py",
+    "/app/test_reports/pytest/pytest_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Review request specified /api/state but that endpoint does not exist in server.py; closest equivalents are /api/live/status and /api/risk/status (both 200). Tested /api/live/status as the regression proxy. Main agent may want to either alias /api/state -> /api/live/status or update the spec.",
+    "server.py is now 708 lines (was 695 last iteration) — past the 700-line split threshold flagged in iter 7. Consider extracting analytics + settings routers in the next refactor pass.",
+    "trading_engine.py:213 uses snap.bid > our_bid * (1.0 + 1e-4) (~1bp) as the MISSED_FILL_PRICE_RUN trigger. This is very tight relative to typical BTC bid jitter and contributed to my first seed (BTC/USDC @ 73250 vs live bid ~73281) being deleted within one watcher tick. Behaviour is per-spec but worth flagging: any UI-side debug doc with a stale BTC limit will vanish near-instantly. (Worked around by seeding under symbol TESTAGENT/USD where fetch_snapshot returns None and the watcher skips.)",
+    "PendingOrders.jsx renders quantity with toFixed(6) and price with toFixed(4) — fine for BTC/ETH range but very small-priced alts (e.g. SHIB-like at $0.00001) will show '0.0000' for resting bid. Minor; consider scientific notation when limit_price < 0.01.",
+    "Existing Recharts warning 'The width(-1) and height(-1) of chart should be greater than 0' fires twice on initial paint — present in iter 7 too, unrelated to Phase B but still pollutes the console on every load."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_b_http.py"
+  ],
+  "success_rate": {"backend": "100% (8/8 new + 8 phase_b unit + 7 phase_a all green; total 23/23)", "frontend": "100% (pending-orders-section + pending-orders-table + pending-order-TESTAGENT-USD render with correct columns and values; null when empty; 0 hydration warnings; AnalyticsPanel + HighBetaWarning behaviour preserved)"},
+  "test_credentials": "none required (no auth)",
+  "seed_data_creation": "Inserted ONE pending_orders doc {id:TESTAGENT_pending_2, symbol:TESTAGENT/USD, qty:0.001234, limit_price:73250.1234, ticks_flat:1, note:'TESTAGENT_phase_b'} to verify the Resting Maker Orders panel renders end-to-end. Used TESTAGENT/USD (no live snapshot) so position_watcher's process_pending_orders skips it instead of cancelling within 15s. After UI verification, deleted via db.pending_orders.delete_many({note:'TESTAGENT_phase_b'}) -> 1 deleted, and cleaned 1 residual MISSED_FILL_PRICE_RUN reasoning doc from an earlier BTC/USDC test attempt. Final state: pending_orders=0, API confirms {items:[], count:0}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase B execution friction layer is now live and stable. Settings exposes maker_fee_pct + breakout_paper_slippage_pct (both clamped 0..5). The pending_orders collection is processed every 15s by position_watcher.process_pending_orders — any doc whose symbol has a live snapshot will resolve to FILL / MISSED_FILL_PRICE_RUN / tick-bump within one watcher cycle. Use a symbol like TESTAGENT/USD if you need a doc to persist for UI debugging. trading_mode remained PAPER throughout (NOT flipped to LIVE/DRY_RUN). All 227 pre-existing pytest tests in backend/tests/ still green alongside the new 8 HTTP regressions.",
+  "rca of the issue": "N/A — no defects found."
+}

@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 10 — full e2e verification of the coordinated UI + engine upgrade (CryptoAtlas, PAPER). All 8 acceptance criteria pass. Backend curl: GET /api/portfolio={starting_balance:300, cash:300, max_concurrent_positions:8}, GET /api/settings has stop_loss_pct=10, trail_arm_pct=5, trail_distance_pct=3, normal_lot=20, strong_lot=30, breakout_lot=50, max_concurrent_positions=8, dynamic_trail_enabled=true, dynamic_trail_min_pct=2, dynamic_trail_max_pct=6, min_confidence=0.8 (enabled_symbols field present, see context note). GET /api/report/trades.pdf returns 200 application/pdf with %PDF-1.4 header for both (a) no params (2213 bytes) and (b) ?start=2026-05-01&end=2026-05-29 (2345 bytes). Frontend e2e on deployed REACT_APP_BACKEND_URL: NAV order is exactly DASHBOARD → SETTINGS → AI REASONING LOG (data-testid match). No share-judge-view-button anywhere. download-pdf-header opens /api/report/full.pdf. Export Trade History section renders with export-start-date, export-end-date, export-trade-history-btn; clicking with no dates opens /api/report/trades.pdf; with dates opens /api/report/trades.pdf?start=2026-05-01&end=2026-05-29 (verified via window.open interception). AI Reasoning tab fires GET /api/reasoning?limit=15&executed_only=true on mount, reasoning-scroll-container has overflow-y:scroll + max-height 756px (= 70vh of 1080), 'Showing the latest 15 evaluations' hint visible. Settings tab shows tooltip-label-input-spread / -daily-loss / -min-confidence; hovering Spread label renders a role=tooltip popover with plain-English text 'Hard kill: trades blocked if bid/ask spread widens past this.' New Adaptive Trail section present (dynamic-trail-switch, slider-dynamic-trail-min, slider-dynamic-trail-max). PortfolioCard renders $300.00 equity / $300.00 cash / 0/8 slots. Env toggle: env-toggle-paper / env-toggle-live present; clicking LIVE opens env-live-confirm-dialog; cancelled, stayed PAPER. 0 console errors. Dashboard loads cleanly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PortfolioCard", "issue": "Stale '$100' copy throughout PortfolioCard.jsx after baseline change to $300. Visible label 'VS $100 STARTING' (line 75), the reset confirm dialog 'Reset portfolio to $100? This clears all trades and AI reasoning logs.' (line 8), and the success toast 'Balance returned to $100. Logs cleared.' (line 10) all still reference $100. Functionality unaffected (portfolio actually starts at $300 from backend), but the on-screen sub-label under the big $300.00 figure currently reads 'VS $100 STARTING' which is misleading.", "selector": "/app/frontend/src/components/PortfolioCard.jsx:8,10,75", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iter10_dashboard.png (visual screenshot)"],
+  "action_items": [
+    "Fix PortfolioCard.jsx — replace three remaining '$100' literals with '$300' (line 8 confirm text, line 10 toast description, line 75 'VS $100 STARTING' label). Trivial copy update."
+  ],
+  "critical_code_review_comments": [
+    "PortfolioCard.jsx still hard-codes the starting balance string ($100 / $300) in three places — would be more robust to source it from portfolio.starting_balance (already returned by GET /api/portfolio) so future baseline changes don't require code edits.",
+    "ExportTradeHistory.jsx uses string comparison `start > end` to guard against inverted ranges. Works because of ISO yyyy-mm-dd lexicographic ordering, but a comment or Date object compare would be clearer to future readers.",
+    "AppShell.jsx StatusPill is rendered twice with the same data-testid='engine-status-pill' (once as inline wrapper around the function call and once inside StatusPill div). Both have the same testid which will trip strict selector libraries. Use a single wrapper.",
+    "AIReasoning.jsx network fetch URL includes &executed_only=true alongside limit=15. Spec only mandates limit=15 — extra filter is functionally fine but should be documented as intentional (avoids showing AI evaluations that did not lead to trades)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (portfolio/settings/reasoning/trades.pdf all verified)", "frontend": "100% on the 8 acceptance criteria; 1 cosmetic copy bug ('$100' label) found"},
+  "test_credentials": "none (no auth)",
+  "seed_data_creation": "None — DB intentionally clean per main agent reset_baseline.py. Reasoning collection had a handful of rows from live engine ticks during the test run; that's fine.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PAPER mode preserved (env toggle to LIVE was cancelled mid-test). DB still has clean $300 baseline with 0 trades; reasoning has a few rows from natural engine ticks (NEUTRAL low-confidence). GET /api/settings response is truncated at 800 chars in my curl — confirmed presence of stop_loss_pct=10, trail_arm_pct=5, trail_distance_pct=3, normal/strong/breakout lots=20/30/50, max_concurrent_positions=8, dynamic_trail_enabled=true, dynamic_trail_min_pct=2, dynamic_trail_max_pct=6, min_confidence=0.8. enabled_symbols list was past the 800-byte cutoff — but main agent already curl-verified separately. Window.open interception is the reliable way to assert popup target URLs in Playwright on this app (expect_popup() races and returns about:blank).",
+  "rca of the issue": "Stale $100 strings in PortfolioCard.jsx weren't updated when the engine baseline moved from $100 to $300. Root cause: hard-coded copy in three sibling locations (confirm/toast/label) rather than a single starting-balance constant or backend-driven value. Mitigation: read portfolio.starting_balance from the API response and template it into the strings."
+}

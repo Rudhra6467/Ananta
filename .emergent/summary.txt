@@ -1,0 +1,152 @@
+<analysis>**original_problem_statement**: Build Ananta.AI, a full-stack algorithmic trading dashboard. It is a scale-independent, multi-asset algorithmic swing-trading framework optimized for 24/7 capital preservation. The system enforces strict validation-first architecture. Recent goal: Restructure the platform including UI improvements (Cockpit/Portfolio), Engine logic refactoring (Hunter v2, Volatility Squeeze), Data schema expansions (Reason Chain), and Infrastructure stabilization.
+
+**PRODUCT REQUIREMENTS**:
+- **Backend**: Python, FastAPI, CCXT, MongoDB, Pytest.
+- **Frontend**: React, Tailwind CSS, shadcn UI.
+- **Core Architecture**: Decoupled lifecycle architecture. Strategies do not generate orders directly; they act as competing hypotheses.
+- **Active Layer**: Hunter v2 & Volatility Squeeze (fixed 5 lot).
+- **Shadow Layer**: Relative Strength, Bear Breakdown, Neutral Crab, Hunter-VCP.
+- **Integrations**: Gemini 3 Pro (via Emergent LLM Key) for macro reasoning, DefiLlama (TVL), FRED (Macro Data), CCXT (Kraken).
+
+**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+
+**what currently exists?** 
+A heavily validated algorithmic trading platform running in PAPER mode. The preview backend is stable with fixed memory usage (bounded/projected queries) and event-loop freezing issues eliminated by offloading heavy synchronous tasks (PDF gen, indicator math) to threads. The frontend features a redesigned Cockpit with integrated Watchlist sync controls, an ACTIVE/OPEN/CLOSED restructured Portfolio tab, and a Strategy Research Laboratory to track detection-to-qualification pipelines. The codebase is now prepped with configurations (Vercel, Render, Railway, ) for the user to self-host via GitHub export. 
+
+**Last working item**: 
+    - **Last item agent was working**: Preparing the codebase for GitHub export and self-hosting. Added deployment configurations (, , , ), created a comprehensive , and fixed  to securely exclude environment variables. Offered to create a  file as well.
+    - **Status**: USER VERIFICATION PENDING
+    - **Agent Testing Done**: Y
+    - **Which testing method agent to use?**: Frontend testing agent/ curl for backend.
+    - **User Testing Done**: N
+
+**All Pending/In progress Issue list**:  
+  Issue 1: Production 520 Crash (Livetrading247.com down) (P0)
+     - Attempted fixes: Replaced  with instant  for the reset endpoint to fix Mongo timeouts. Applied projections/caps to all heavy queries to prevent OOM. Offloaded compute to threads to prevent backend freezes. 
+     - Next debug checklist: Issue lies in production infrastructure/tier. Awaiting user to either redeploy on Emergent with proper env vars or export the project to self-host on Vercel/Railway.
+     - Why fix this issue and what will be achieved with the fix?: Production site currently unreachable for the user.
+     - Status: BLOCKED
+     - Is recurring issue?: Y
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on other issue: User action required to redeploy or export.
+
+**In progress Task List**: 
+  None. (UI and Stability phases from recent prompts are completed).
+
+**Upcoming and Future Tasks**
+  - Task 1: Engine Logic - Strategy State Realignment (P0) - Phase 2.1: Route 'Hunter v2' and 'Volatility Squeeze' to the Active Paper-Live Mode (fixed 5 allocation). Keep Relative Strength, Bear Breakdown, Neutral Crab, and Hunter-VCP in Shadow Mode.
+  - Task 2: Engine Logic - Hunter v2 Core Implementation (P0) - Phase 2.2: Refactor to dynamic Support Zone (Price ± ATR Buffer). Post-trigger (RSI/Volume), evaluate 1 to 3 candles inside the zone. Execute on first LTF bullish confirmation breaking initial candle's high. Set structural stop-loss relative to local noise floor.
+  - Task 3: Engine Logic - Volatility Squeeze Implementation (P0) - Phase 2.3: Squeeze trigger (Bollinger completely inside Keltner). Execute on first candle closing outside upper boundary with volume spike. Hard stop-loss at 20-MA, dynamic trail via ATR.
+  - Task 4: Data Log Schema - Reason Chain Fields (P1) - Phase 2.4: For every simulated/executed entry, log  (OHLCV matrix), , , , and . Update PDF layout to output the strict matrix format for sandbox strategies.
+  - Task 5: Docker Compose Setup (P2) - Generate a  for self-hosting (suggested to user, awaiting confirmation).
+  - Task 6: Settings UI Alignments (P2) - Add an ACTIVE/SHADOW toggle per strategy to easily promote shadow strategies to active execution.
+
+**Completed work in this session**
+- OOM Crash loops fixed by applying data projections and hard limits to  endpoints (DONE)
+- Strategy Research Lab + Signal Attrition Funnel UI (Detected -> Qualified -> Breaker Pass -> Resolved -> Outcome) (DONE)
+- Owner Fresh Start (reset balance to 200, 5 trade limit) utilizing  for instant clear (DONE)
+- Backend event-loop freezes fixed by offloading , , and background cache loop to  (DONE)
+- Cockpit UI updated: Migrated Watchlist Sync controls to main Dashboard (DONE)
+- Portfolio UI restructured: Split into strictly ACTIVE, OPEN, and CLOSED tabs with time window toggles (DONE)
+- Populated entry price, entry date, return %, and duration fields into closed  (DONE)
+- Prepared repository for GitHub self-hosting (, , , , protected  in ) (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+  None.
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: OOM Backend Crash
+  - Recurrence count: 1
+  - Status: RESOLVED
+
+**Code Architecture**
+/app
+├── backend/
+│   ├── auth.py               
+│   ├── models.py             # Schema definitions (Updated with new TradeLog fields)
+│   ├── levels.py             # Horizontal Support/Resistance (Offloaded to thread)
+│   ├── primary_layer.py       
+│   ├── circuit_breaker.py    
+│   ├── strategies.py         # Regime logic
+│   ├── research.py           # Strategy Lab pipeline, counterfactuals, aggregations
+│   ├── position_watcher.py   # Trails and simulated exits
+│   ├── trading_engine.py     # Orchestrator
+│   ├── server.py             # Router, startup routines, background cache
+│   ├── pdf_report.py         # (Offloaded to thread)
+│   ├── Procfile / render.yaml / runtime.txt  # Deployment configs
+│   └── tests/                
+└── frontend/
+    ├── src/
+    │   ├── lib/api.js                   
+    │   ├── AppShell.jsx                 
+    │   ├── components/WatchlistControl.jsx  # New shared component
+    │   ├── pages/Dashboard.jsx          # Watchlist controls moved here
+    │   ├── pages/Portfolio.jsx          # ACTIVE / OPEN / CLOSED tabs
+    │   └── pages/Reports.jsx            # Strategy Research Lab
+    └── vercel.json                      # Vercel config
+
+**Key Technical Concepts**
+- **Thread Offloading**: Heavy synchronous routines (, PDF generation, indicator computations) MUST use  to avoid freezing the FastAPI event loop.
+- **Decoupled Lifecycle**: Strategies qualify setups separately from the primary orchestrator. Active vs Shadow mode dictates whether trades consume virtual capital.
+- **Self-Hosting Artifacts**: Codebase is heavily prepped for exporting to GitHub and running on free/cheap tiers (Vercel + Railway/Render + MongoDB Atlas). 
+
+**key DB schema**
+  - : 
+  - : 
+  - :  
+
+**changes in tech stack**
+  - Added Railway/Render backend specifications and Vercel frontend specifications for non-Emergent deployment.
+
+**All files of reference** 
+  -  (Heavily modified for Strategy Lab metrics and memory boundaries)
+  -  (Endpoints bound, reset uses drop, async threads utilized)
+  -  (Redesigned 3-tab layout)
+  -  (Self-hosting directions)
+  -  (Fixed to protect  secrets)
+  -  (TradeLog population fixes)
+
+**Areas that need refactoring**: 
+  -  and  need heavy refactoring to accommodate the Phase 2 Engine Logic Upgrade (Hunter v2 and Volatility Squeeze promotions).
+
+**key api endpoints**
+  -  
+  -  (Performs full data drop)
+
+**Critical Info for New Agent** 
+- **Event Loop Freezes:** Do not place large array iterations, PDF generation, or indicator math directly in the  routing. Offload them via  or the entire platform will stall under load.
+- ** Protection:** Ensure  is never removed from . The user is preparing to push to GitHub; secret protection is paramount.
+- **Production Status:** The user's production site is down (520 error) due to infra limits. They are migrating to self-hosting. Proceed with Phase 2 Engine Logic upgrades without worrying about Emergent deploy limits.
+- **Strategy Pipeline Change**: You will be rewriting the active execution logic (Hunter v2, Volatility Squeeze). Strictly follow the user's Category 2 mandate: Dynamic ATR buffers, Bollinger-in-Keltner logic, and Reason Chain Data schemas.
+
+**documents and test reports created in this job** 
+  - 
+  - 
+  - 
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ - *User*: Requested the codebase be prepared for GitHub self-hosting. Asked for clear next steps, and if they need to push older forks as well.
+ - *Agent*: Created Vercel/Railway config files, updated  with step-by-step Atlas/Vercel/Railway instructions, fixed  secret leak, and verified everything compiles. Offered to make a . (No pending human inputs to block progress, though user has yet to answer regarding the docker-compose).
+
+**Project Health Check:**
+- Broken: None in preview.
+- Mocked: Event Detection in Circuit Breaker is still mocked.
+
+**3rd Party Integrations** 
+ - Gemini 3 Pro (Emergent LLM Key) -> Macro Reasoning
+ - Kraken (User API Key) -> Execution
+ - DefiLlama (Keyless) -> Live Crypto TVL Metrics
+ - FRED (User API Key) -> Live Macro Data
+
+**Testing status**
+  - Testing agent used after significant changes: YES
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created:  (created by testing agent)
+  - Known regressions: None currently active.
+
+**Credentials to test flow:**
+  - Email: 
+  - Password: Found in 
+
+**What agent forgot to execute**
+- The agent properly completed the previous set of instructions. Ensure the Category 2 (Engine Logic Upgrade) prompt from the user is prioritized next.</analysis>
