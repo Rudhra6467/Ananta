@@ -29,26 +29,30 @@ EVENT_TITLES = {
 }
 
 
-async def register_push_token(db, push_token: str, platform: str = "unknown") -> None:
+async def register_push_token(db, push_token: str, platform: str = "unknown", prefs: dict | None = None) -> None:
     if not push_token:
         return
-    await db.push_tokens.update_one(
-        {"_id": push_token},
-        {"$set": {"platform": platform, "updated_at": datetime.now(UTC).isoformat()}},
-        upsert=True,
-    )
+    update = {"platform": platform, "updated_at": datetime.now(UTC).isoformat()}
+    if prefs is not None:
+        update["prefs"] = prefs
+    await db.push_tokens.update_one({"_id": push_token}, {"$set": update}, upsert=True)
 
 
-async def _registered_tokens(db) -> list[str]:
-    cursor = db.push_tokens.find({}, {"_id": 1})
-    return [doc["_id"] async for doc in cursor]
+async def _tokens_for_event(db, event_type: str) -> list[str]:
+    """Return tokens whose per-event preference allows this event (default on)."""
+    out: list[str] = []
+    async for doc in db.push_tokens.find({}, {"_id": 1, "prefs": 1}):
+        prefs = doc.get("prefs") or {}
+        if prefs.get(event_type, True):
+            out.append(doc["_id"])
+    return out
 
 
 async def send_push_event(db, event_type: str, message: str) -> dict:
-    """Broadcast an event alert to all registered devices. Best-effort."""
+    """Broadcast an event alert to devices that opted into this event. Best-effort."""
     title = EVENT_TITLES.get(event_type, "Ananta Alert")
     try:
-        tokens = await _registered_tokens(db)
+        tokens = await _tokens_for_event(db, event_type)
     except Exception as e:  # pragma: no cover — DB hiccup must not crash callers
         logger.warning("push: token lookup failed: %s", e)
         return {"sent": 0, "error": "token_lookup_failed"}

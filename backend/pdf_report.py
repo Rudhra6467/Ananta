@@ -438,14 +438,14 @@ def _research_block(s, research: dict) -> Iterable:
 
     wp = research.get("winner_profile") or {}
     if wp.get("sample"):
-        w, l = wp.get("winners", {}), wp.get("losers", {})
+        w, lo = wp.get("winners", {}), wp.get("losers", {})
         rows = [
-            ["RSI at entry", _fmt(w.get("avg_rsi")), _fmt(l.get("avg_rsi"))],
-            ["Dist from 50% (%)", _fmt(w.get("avg_distance_from_midpoint_pct")), _fmt(l.get("avg_distance_from_midpoint_pct"))],
-            ["Rel strength vs BTC", _fmt(w.get("avg_relative_strength")), _fmt(l.get("avg_relative_strength"))],
-            ["Support zone score", _fmt(w.get("avg_support_zone_score")), _fmt(l.get("avg_support_zone_score"))],
-            ["MFE (%)", _fmt(w.get("avg_mfe_pct")), _fmt(l.get("avg_mfe_pct"))],
-            ["MAE (%)", _fmt(w.get("avg_mae_pct")), _fmt(l.get("avg_mae_pct"))],
+            ["RSI at entry", _fmt(w.get("avg_rsi")), _fmt(lo.get("avg_rsi"))],
+            ["Dist from 50% (%)", _fmt(w.get("avg_distance_from_midpoint_pct")), _fmt(lo.get("avg_distance_from_midpoint_pct"))],
+            ["Rel strength vs BTC", _fmt(w.get("avg_relative_strength")), _fmt(lo.get("avg_relative_strength"))],
+            ["Support zone score", _fmt(w.get("avg_support_zone_score")), _fmt(lo.get("avg_support_zone_score"))],
+            ["MFE (%)", _fmt(w.get("avg_mfe_pct")), _fmt(lo.get("avg_mfe_pct"))],
+            ["MAE (%)", _fmt(w.get("avg_mae_pct")), _fmt(lo.get("avg_mae_pct"))],
         ]
         flow += [Paragraph(f"Winning Trade Profile (win rate {wp.get('win_rate_pct')}%, N={wp.get('sample')})", s["h3"]),
                  _kv_table(s, ["Feature", "Winners", "Losers"], rows, [2.6 * inch, 1.6 * inch, 1.6 * inch]),
@@ -495,6 +495,86 @@ def _research_block(s, research: dict) -> Iterable:
     return flow
 
 
+def _reason_chain_block(s, trades: list[dict], limit: int = 6) -> Iterable:
+    """Phase E strict Reason-Chain matrix for graded entries: regime + routing,
+    indicator matrix, competing hypotheses, and the OHLCV market-state snapshot."""
+    graded = []
+    for t in trades:
+        attr = t.get("entry_attribution") or {}
+        rc = attr.get("reason_chain")
+        if rc and (attr.get("entry_quality") or {}).get("grade"):
+            graded.append((t, attr, rc))
+    flow = [Paragraph("REASON CHAIN · DECISION MATRIX (PHASE E)", s["h2"]),
+            Paragraph("Per-entry audit trail: which independent model fired, in what regime, on what "
+                      "evidence, against which competing hypotheses. Newest first.", s["subtitle"]), Spacer(1, 6)]
+    if not graded:
+        flow.append(Paragraph("No graded entries recorded yet — populates as Hunter/Squeeze take trades.", s["italic"]))
+        return flow
+
+    for t, attr, rc in graded[:limit]:
+        eq = attr.get("entry_quality") or {}
+        iv = rc.get("indicator_values") or {}
+        routing = rc.get("routing") or {}
+        # header
+        hdr = [[
+            Paragraph(f"<b>{t.get('symbol','')}</b>", s["body"]),
+            Paragraph(f"<font color='{CYAN.hexval()}'><b>{(attr.get('strategy') or '—').upper()}</b></font>", s["body"]),
+            Paragraph(f"{attr.get('entry_profile','—')}", s["mono"]),
+            Paragraph(f"GRADE <b>{eq.get('grade','—')}</b> ({eq.get('pct','—')})", s["body"]),
+            Paragraph(f"{rc.get('regime','—')}", s["body"]),
+        ]]
+        hdr_tbl = Table(hdr, colWidths=[0.9 * inch, 1.0 * inch, 1.9 * inch, 1.6 * inch, 1.8 * inch])
+        hdr_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), PANEL), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.4, RULE),
+        ]))
+
+        rule = f"Route: {routing.get('rationale','—')}"
+        ind = (f"RSI={_fmt(iv.get('rsi_4h'))} ADX={_fmt(iv.get('adx'))} ATR%={_fmt(iv.get('atr_percentile'))} "
+               f"BBW%={_fmt(iv.get('bbwidth_percentile'))} EMA={_fmt(iv.get('ema_stack'))} "
+               f"RS-BTC={_fmt(iv.get('relative_strength_btc'))} BTCregime={_fmt(iv.get('btc_macro_regime'))}")
+        comp = rc.get("competing_hypotheses") or []
+        comp_line = "  ".join(
+            f"{c.get('strategy')}[{'D' if c.get('detected') else '-'}{'Q' if c.get('qualified') else '-'}]"
+            for c in comp) or "—"
+
+        meta = Table([
+            [Paragraph("ROUTING", s["label"])], [Paragraph(rule, s["mono"])],
+            [Paragraph("INDICATOR MATRIX", s["label"])], [Paragraph(ind, s["mono_small"])],
+            [Paragraph("COMPETING HYPOTHESES (Detected/Qualified)", s["label"])], [Paragraph(comp_line, s["mono_small"])],
+        ], colWidths=[7.2 * inch])
+        meta.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ]))
+
+        # OHLCV matrix
+        snap = rc.get("market_state_snapshot") or []
+        mtx = [[Paragraph(h, s["label"]) for h in ["#", "OPEN", "HIGH", "LOW", "CLOSE", "VOL"]]]
+        for i, b in enumerate(snap):
+            mtx.append([
+                Paragraph(str(i + 1), s["mono_small"]),
+                Paragraph(f"{b.get('o', 0):,.4f}", s["mono_small"]),
+                Paragraph(f"{b.get('h', 0):,.4f}", s["mono_small"]),
+                Paragraph(f"{b.get('l', 0):,.4f}", s["mono_small"]),
+                Paragraph(f"{b.get('c', 0):,.4f}", s["mono_small"]),
+                Paragraph(f"{b.get('v', 0):,.2f}", s["mono_small"]),
+            ])
+        mtx_tbl = Table(mtx, colWidths=[0.5 * inch, 1.34 * inch, 1.34 * inch, 1.34 * inch, 1.34 * inch, 1.34 * inch], repeatRows=1)
+        mtx_tbl.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.5, RULE), ("INNERGRID", (0, 0), (-1, -1), 0.3, RULE),
+            ("BACKGROUND", (0, 0), (-1, 0), PANEL),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+
+        flow.append(KeepTogether([hdr_tbl, Spacer(1, 2), meta, Spacer(1, 3),
+                                  Paragraph("MARKET-STATE SNAPSHOT (4H OHLCV)", s["label"]), mtx_tbl, Spacer(1, 12)]))
+    return flow
+
+
 def build_report(
     portfolio: dict,
     risk: dict,
@@ -531,6 +611,8 @@ def build_report(
     if research:
         flow.append(PageBreak())
         flow.extend(_research_block(s, research))
+    flow.append(PageBreak())
+    flow.extend(_reason_chain_block(s, list(reversed(trades))))
     flow.append(PageBreak())
     # reasoning (chronological oldest-first reads more naturally in a report)
     flow.extend(_reasoning_block(s, list(reversed(reasoning_items))))

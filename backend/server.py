@@ -835,13 +835,14 @@ async def auth_me(_owner: dict = Depends(require_owner)):
 class PushTokenBody(BaseModel):
     push_token: str
     platform: str = "unknown"
+    prefs: dict | None = None
 
 
 @api_router.post("/notifications/register", dependencies=[Depends(require_owner)])
 async def register_push(body: PushTokenBody):
-    """Store an Expo push token for the owner's device(s)."""
+    """Store an Expo push token (+ per-event preferences) for the owner's device(s)."""
     from push_service import register_push_token
-    await register_push_token(db, body.push_token, body.platform)
+    await register_push_token(db, body.push_token, body.platform, body.prefs)
     return {"ok": True}
 
 

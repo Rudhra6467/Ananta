@@ -78,8 +78,8 @@ export const api = {
   watchlistValidate: () => get<any>("/watchlist/validate"),
 
   // push
-  registerPushToken: (push_token: string, platform: string) =>
-    post<any>("/notifications/register", { push_token, platform }),
+  registerPushToken: (push_token: string, platform: string, prefs?: Record<string, boolean>) =>
+    post<any>("/notifications/register", { push_token, platform, prefs }),
 };
 
 export default api;

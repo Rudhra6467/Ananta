@@ -76,6 +76,11 @@ export default function Settings() {
     const next = { ...notif, [key]: v };
     setNotif(next);
     await setItem(NOTIF_KEY, JSON.stringify(next));
+    // Sync per-event preference to the backend if a push token is registered.
+    try {
+      const token = await getItem("ananta_push_token");
+      if (token) await api.registerPushToken(token, Platform.OS, next);
+    } catch {}
   };
 
   const toggleBiometric = async (v: boolean) => {

@@ -5,6 +5,10 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import api from "./api";
+import { getItem, setItem } from "./storage";
+
+export const PUSH_TOKEN_KEY = "ananta_push_token";
+const NOTIF_PREFS_KEY = "ananta_notif_prefs";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -45,7 +49,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     );
     const pushToken = tokenResp.data;
     if (pushToken) {
-      await api.registerPushToken(pushToken, Platform.OS).catch(() => {});
+      await setItem(PUSH_TOKEN_KEY, pushToken);
+      let prefs: Record<string, boolean> | undefined;
+      try {
+        const raw = await getItem(NOTIF_PREFS_KEY);
+        if (raw) prefs = JSON.parse(raw);
+      } catch {}
+      await api.registerPushToken(pushToken, Platform.OS, prefs).catch(() => {});
     }
     return pushToken;
   } catch {

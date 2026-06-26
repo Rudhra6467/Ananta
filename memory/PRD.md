@@ -526,3 +526,12 @@ Regime-first, multi-model engine upgrade (all pure-compute, ZERO LLM credits; cr
 - Squeeze promoted to EXECUTE (shows ACTIVE in Reports); Hunter & Squeeze fully independent
 - Tested: 11/11 pytest (tests/test_phase_e.py), lint clean, backend boots clean, live cycles no errors
 Details + E2 backlog in /app/memory/ENGINE_PHASE_E.md
+
+## Engine Phase E3 — SHIPPED (2026-06-26)
+- PDF Reason-Chain decision matrix for graded entries (`pdf_report._reason_chain_block`): regime+routing,
+  indicator matrix, competing hypotheses, 4H OHLCV market-state snapshot. Wired into /api/report/full.pdf.
+- Mobile: polling pauses on app background, refreshes + resumes on foreground (`useFetch` AppState) — battery.
+- Server-side per-event notification opt-out: push tokens store `prefs`; `send_push_event` only targets
+  devices opted into that event. Mobile syncs toggles to backend on change + on register. Verified.
+Verified: PDF builds (200, valid), opt-out filter unit-checked, mobile cockpit renders, engine opened a
+live AAVE paper position (engine path healthy). Pending only: user provides google-services.json + Publish.
