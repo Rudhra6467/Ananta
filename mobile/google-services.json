@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "647454509091",
+    "project_id": "ananta-trading-flatform",
+    "storage_bucket": "ananta-trading-flatform.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:647454509091:android:1d7c1b8a97c890e7c44996",
+        "android_client_info": {
+          "package_name": "com.ananta.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFA3-rmytIueiILNmyJYaXKH0q4584UtY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

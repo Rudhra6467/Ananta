@@ -11,13 +11,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.ananta.mobile",
+      "bundleIdentifier": "com.ananta.app",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to unlock your Ananta cockpit."
       }
     },
     "android": {
-      "package": "ai.ananta.mobile",
+      "package": "com.ananta.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0A0E17"
