@@ -514,3 +514,15 @@ auth (token in `expo-secure-store` on native, `localStorage` on web). Dark-only 
 Regime-first multi-model router; Hunter (3 regime-aware entry profiles) & Squeeze fully
 independent active traders; ATR-structural stops; Squeeze retest timing; Entry Quality Scoring;
 Reason Chain schema. User approved sequencing: mobile first (DONE), engine next.
+
+## Engine Phase E1 — SHIPPED (2026-06-26)
+Regime-first, multi-model engine upgrade (all pure-compute, ZERO LLM credits; credit guard preserved):
+- `regime.py` market regime classifier (TREND_UP/DOWN, RANGE, COMPRESSION, REVERSAL, NEUTRAL)
+- `entry_quality.py` A+/A/B/C entry-quality scoring (research-only) on every Hunter & Squeeze entry
+- `squeeze.py` Volatility Squeeze as an INDEPENDENT active paper trader (Bollinger-in-Keltner coil →
+  retest/continuation entry, never chases first candle; $75 lot; 20-MA hard stop; ATR trail)
+- Hunter now regime-aware: 3 entry profiles (Aggressive Pullback / Stabilized Reversal / Deep Discount)
+- ATR-structural stop (structure low − 0.4×ATR) replaces fixed % buffer
+- Squeeze promoted to EXECUTE (shows ACTIVE in Reports); Hunter & Squeeze fully independent
+- Tested: 11/11 pytest (tests/test_phase_e.py), lint clean, backend boots clean, live cycles no errors
+Details + E2 backlog in /app/memory/ENGINE_PHASE_E.md

@@ -141,6 +141,11 @@ class TradeLog(BaseModel):
     return_pct: float | None = None  # (exit-entry)/entry * 100
     hold_seconds: float | None = None  # exit_ts - entry_ts in seconds (trade duration)
     entry_attribution: dict = Field(default_factory=dict)  # rsi/volume/zone/midpoint/rel-strength/regime/breaker at entry
+    # --- Phase E reason-chain (which independent model fired, how, how good) ---
+    strategy: str | None = None  # hunter | squeeze | ...
+    entry_profile: str | None = None  # AGGRESSIVE_PULLBACK / STABILIZED_REVERSAL / DEEP_DISCOUNT / RETEST / CONTINUATION
+    entry_quality_grade: str | None = None  # A+ / A / B / C
+    regime_at_entry: str | None = None  # TREND_UP / COMPRESSION / REVERSAL / ...
 
 
 # ---------- Portfolio State ----------
@@ -165,6 +170,12 @@ class Position(BaseModel):
     mfe_pct: float = 0.0  # max favorable excursion % from avg_cost
     mae_pct: float = 0.0  # max adverse excursion % from avg_cost (negative)
     entry_attribution: dict = Field(default_factory=dict)  # entry-feature snapshot for winner/loser analytics
+    # --- Phase E reason-chain (independent-model identity + entry quality) ---
+    strategy: str = "hunter"  # which independent alpha model owns this position
+    entry_profile: str | None = None  # entry rule that triggered
+    entry_quality_grade: str | None = None  # A+ / A / B / C
+    entry_quality_score: float | None = None  # 0..100
+    regime_at_entry: str | None = None  # market regime at entry
 
     @property
     def cost_basis(self) -> float:

@@ -37,6 +37,8 @@ from setup_classifier import classify_setup
 from strategies import scan_strategies, STRATEGY_DEFS, ema
 from levels import get_levels, nearest_resistance, nearest_support
 from primary_layer import evaluate_primary, fifty_pct_metric
+from regime import classify_regime
+from squeeze import evaluate_squeeze
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
@@ -639,10 +641,11 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     rr_estimate: float | None = None
     level_evidence: dict = {}
     primary = None
+    asset_regime = classify_regime(bars_4h) if bars_4h else None
     if getattr(settings, "level_entry_enabled", True):
         try:
             zones = zones_cache if zones_cache is not None else await get_levels(symbol, settings)
-            primary = evaluate_primary(symbol, snapshot.price, bars_4h, zones, settings)
+            primary = evaluate_primary(symbol, snapshot.price, bars_4h, zones, settings, regime=asset_regime)
             support_zone = primary.support_zone
             at_support = support_zone is not None
             structural_stop = primary.structural_stop
@@ -696,6 +699,10 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         "market_regime": market_regime,
         "breaker_state": breaker_state,
         "rr_estimate": rr_estimate,
+        # --- Phase E reason-chain (Hunter) ---
+        "asset_regime": getattr(asset_regime, "regime", None),
+        "entry_profile": (primary.entry_profile if primary is not None else None),
+        "entry_quality": (primary.evidence.get("entry_quality") if primary is not None else None),
     }
 
     # --- Phase B Strategy Sandbox: 5 regime classifiers (pure compute; SHADOW except Hunter) ---
@@ -1106,6 +1113,85 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                     trade_doc = trade.model_dump()
                     await save_portfolio(db, portfolio)
                     await log_friction_tally(db, settings)
+
+    # --- INDEPENDENT TRADER: Volatility Squeeze (Phase E) ---
+    # Runs SEPARATELY from the Hunter (different personality: "buy expansion").
+    # Fires only when the Hunter did NOT take this symbol, the book has room, and a
+    # CONFIRMED retest/continuation breakout exists (never chases the first candle).
+    # PAPER/DRY_RUN only. Hard stop = 20-MA; ATR-flexed trail handled by the watcher.
+    with contextlib.suppress(Exception):
+        squeeze_eligible = (
+            decision != "BUY"
+            and not has_position
+            and trade_doc is None
+            and not _hard_killed
+            and breaker_state != "VETO"
+            and settings.trading_mode in ("PAPER", "DRY_RUN")
+        )
+        if squeeze_eligible:
+            sq = evaluate_squeeze(bars_4h)
+            if sq.triggered and sq.stop_20ma and snapshot.price > sq.stop_20ma:
+                open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
+                pending_count = await db.pending_orders.count_documents({})
+                cooldown = await get_symbol_cooldown(db, symbol)
+                spread_ok = bid_spread_pct <= settings.max_spread_pct
+                if open_count + pending_count < settings.max_concurrent_positions and not cooldown and spread_ok:
+                    from entry_quality import score_squeeze
+                    sqev = sq.evidence or {}
+                    _re = getattr(asset_regime, "evidence", {}) or {}
+                    eq = score_squeeze(
+                        bbwidth_percentile=_re.get("bbwidth_percentile"),
+                        atr_percentile=_re.get("atr_percentile"),
+                        volume_spike_ratio=sqev.get("volume_spike_ratio"),
+                        breakout_strength_pct=sqev.get("breakout_strength_pct"),
+                        entry_profile=sq.entry_profile or "",
+                    )
+                    qty_sq = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=settings.normal_lot_usd)
+                    if qty_sq > 0:
+                        slip_pct = settings.breakout_paper_slippage_pct / 100.0
+                        fill_price = snapshot.ask * (1.0 + slip_pct)
+                        sq_slip = (fill_price - snapshot.ask) * qty_sq
+                        notional, fee = _execute_buy(portfolio, symbol, qty_sq, fill_price, settings.taker_fee_pct)
+                        if notional > 0:
+                            sq_attr = {
+                                **entry_attribution,
+                                "strategy": "squeeze",
+                                "entry_profile": sq.entry_profile,
+                                "entry_quality": eq,
+                                "squeeze_evidence": sqev,
+                                "asset_regime": getattr(asset_regime, "regime", None),
+                            }
+                            new_pos = next((p for p in portfolio.positions if p.symbol == symbol), None)
+                            if new_pos is not None:
+                                new_pos.strategy = "squeeze"
+                                new_pos.entry_profile = sq.entry_profile
+                                new_pos.entry_quality_grade = eq.get("grade")
+                                new_pos.entry_quality_score = eq.get("pct")
+                                new_pos.regime_at_entry = getattr(asset_regime, "regime", None)
+                                new_pos.structural_stop = sq.stop_20ma  # hard stop at 20-MA
+                                new_pos.breakout_mode = True  # wider, ATR-flexed trail for expansion rides
+                                new_pos.sector = entry_sector
+                                new_pos.atr_at_entry = entry_atr
+                                new_pos.atr_percentile_at_entry = entry_atr_pct
+                                new_pos.volatility_regime = entry_regime
+                                new_pos.entry_attribution = sq_attr
+                            sq_trade = TradeLog(
+                                symbol=symbol, side="BUY", quantity=qty_sq, price=fill_price,
+                                notional=notional, mode="PAPER", confidence=0.0,
+                                reasoning_id=reasoning.id, fee_usd=fee, slippage_usd=sq_slip,
+                                note=f"[SQUEEZE {sq.entry_profile} | grade {eq.get('grade')} | stop20MA {sq.stop_20ma}]",
+                                sector=entry_sector, atr_at_entry=entry_atr,
+                                atr_percentile_at_entry=entry_atr_pct, volatility_regime=entry_regime,
+                                entry_attribution=sq_attr,
+                            )
+                            await db.trades.insert_one(sq_trade.model_dump())
+                            trade_doc = sq_trade.model_dump()
+                            await save_portfolio(db, portfolio)
+                            await log_friction_tally(db, settings)
+                            logger.info(
+                                "SQUEEZE entry %s qty=%.8f @ %.6f stop20MA=%.6f profile=%s grade=%s",
+                                symbol, qty_sq, fill_price, sq.stop_20ma, sq.entry_profile, eq.get("grade"),
+                            )
 
     return {
         "symbol": symbol,

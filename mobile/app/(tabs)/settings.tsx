@@ -137,7 +137,7 @@ export default function Settings() {
       {/* Strategies */}
       <Section title="Strategies">
         <StrategyRow id="hunter" name="Hunter — buys fear" mode="EXECUTE" />
-        <StrategyRow id="vcp" name="Volatility Squeeze — buys expansion" mode={s.__squeeze_active ? "EXECUTE" : "SHADOW"} />
+        <StrategyRow id="vcp" name="Volatility Squeeze — buys expansion" mode="EXECUTE" />
         <StrategyRow id="trend_rider" name="Relative Strength" mode="SHADOW" />
         <StrategyRow id="bear_breakdown" name="Bear Breakdown" mode="SHADOW" />
         <StrategyRow id="neutral_crab" name="Neutral Crab" mode="SHADOW" last />

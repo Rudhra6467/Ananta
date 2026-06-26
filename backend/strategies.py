@@ -18,7 +18,7 @@ logger = logging.getLogger("ananta.strategies")
 # id -> display metadata.  mode: EXECUTE (live paper trader) | SHADOW (research only)
 STRATEGY_DEFS = [
     {"id": "hunter", "name": "Hunter / Aggressive Reversal", "scenario": "Reversal", "mode": "EXECUTE"},
-    {"id": "vcp", "name": "Volatility Squeeze / VCP", "scenario": "Uncertain", "mode": "SHADOW"},
+    {"id": "vcp", "name": "Volatility Squeeze / VCP", "scenario": "Uncertain", "mode": "EXECUTE"},
     {"id": "trend_rider", "name": "Relative Strength / Bullish Trend Rider", "scenario": "Bullish", "mode": "SHADOW"},
     {"id": "bear_breakdown", "name": "Bear Breakdown", "scenario": "Bearish", "mode": "SHADOW"},
     {"id": "neutral_crab", "name": "Neutral Crab", "scenario": "Neutral", "mode": "SHADOW"},

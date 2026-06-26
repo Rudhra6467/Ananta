@@ -1,7 +1,9 @@
 # Ananta.AI — Engine Phase E: Regime-First Multi-Model Architecture
 
-> Status: PLANNED (to start after Mobile Phase 1 ships). Captured from user briefs
-> (2026-06). This is the backend trading-engine redesign. Mobile app is being built first.
+> Status: **E1 SHIPPED (2026-06-26)** — regime classifier, entry-quality scoring,
+> regime-aware Hunter entry profiles, ATR-structural stops, and Squeeze as an
+> INDEPENDENT active paper trader. Pure-compute, pytest-covered (tests/test_phase_e.py, 11 pass).
+> E2 remaining (see bottom). Mobile Phase 1 shipped before this.
 
 ## North Star
 Move from a **Hunter-first** engine (Hunter is the sole entry driver; other strategies
@@ -81,3 +83,39 @@ Update PDF layout to emit the strict matrix format for sandbox strategies.
 - `backend/models.py` (entry_quality_score, entry_profile, regime, reason_chain fields)
 - `backend/pdf_report.py` (matrix layout for sandbox strategies)
 - `backend/tests/` (regime classifier + entry-profile + scoring unit tests)
+
+---
+
+## E1 — SHIPPED 2026-06-26 (what's live now)
+New modules (pure compute, zero LLM credits):
+- `regime.py` — `classify_regime(bars_4h)` → TREND_UP/TREND_DOWN/RANGE/COMPRESSION/REVERSAL/NEUTRAL
+  + flags `strong_uptrend`, `panic`, `compression`, structure (HH/HL, LH/LL), EMA stack.
+- `entry_quality.py` — `score_hunter()` / `score_squeeze()` → 0-100 score + A+/A/B/C grade + component breakdown (research-only, never gates).
+- `squeeze.py` — `evaluate_squeeze(bars_4h)` independent model: Bollinger-inside-Keltner coil →
+  CONTINUATION (breakout → inside candle → break) or RETEST (breakout → pullback to 20-MA → reclaim).
+  Never chases the first breakout candle. Hard stop = 20-MA.
+
+Integration (`trading_engine.py`):
+- Asset regime classified each cycle, passed to Hunter; logged in entry_attribution.
+- Hunter (`primary_layer.evaluate_primary`) now regime-aware with 3 profiles:
+  AGGRESSIVE_PULLBACK (strong uptrend, first touch), STABILIZED_REVERSAL (default 4-gate),
+  DEEP_DISCOUNT (panic, requires acceptance inside demand zone).
+- ATR-structural stop: structure low − 0.4×ATR (replaces fixed % buffer).
+- **Squeeze promoted to EXECUTE** — independent paper trader, $75 lot, runs only when Hunter
+  did NOT take the symbol; 20-MA hard stop via Position.structural_stop; ATR trail via watcher.
+  PAPER/DRY_RUN only (LIVE intentionally excluded for safety).
+- Entry-quality grade + entry_profile + regime persisted on Position & flow to closed TradeLog via entry_attribution.
+
+`models.py`: Position/TradeLog gained `strategy`, `entry_profile`, `entry_quality_grade/score`, `regime_at_entry`.
+
+Verified: 11/11 pytest, lint clean, backend boots clean, live manual cycles (BTC/SOL/ETH) run with no errors.
+NOTE: Squeeze live-execution branch reuses the proven breakout PAPER executor; it had not yet fired in
+preview (no confirmed coil-breakout present at build time) — will trigger on real setups.
+
+## E2 — REMAINING
+- Regime-first ROUTER restructure (formal Market Scan → Regime → Router stage; currently Hunter-first
+  with an independent Squeeze branch appended).
+- Squeeze: richer retest depth tuning; Reason-Chain `competing_hypothesis_log`.
+- Reason Chain full schema (`market_state_snapshot` OHLCV matrix, `indicator_values`) + PDF matrix layout.
+- Wire remaining push events (trade_opened / stop_loss / trailing_stop) at engine + watcher exit points.
+- Mobile Reports: surface entry-quality grade distribution + regime breakdown per strategy.
