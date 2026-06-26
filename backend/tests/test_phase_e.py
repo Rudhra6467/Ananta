@@ -126,5 +126,18 @@ def test_hunter_default_profile_when_no_regime():
     assert sig.entry_profile == "STABILIZED_REVERSAL"
 
 
+# ---------------- router ----------------
+def test_router_eligibility():
+    from router import route, hunter_allowed, squeeze_allowed
+    assert "hunter" in route("TREND_UP")["eligible_models"]
+    assert "squeeze" in route("COMPRESSION")["eligible_models"]
+    assert route("TREND_DOWN")["eligible_models"] == []
+    assert squeeze_allowed("COMPRESSION") is True
+    assert squeeze_allowed("TREND_DOWN") is False
+    assert hunter_allowed("REVERSAL") is True
+    # unknown regime falls back to both
+    assert set(route(None)["eligible_models"]) >= {"hunter", "squeeze"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

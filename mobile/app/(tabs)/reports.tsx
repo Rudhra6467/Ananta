@@ -8,6 +8,7 @@ import { useFetch } from "../../src/useFetch";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { FunnelBar } from "../../src/components/FunnelBar";
+import { EdgeDiscovery } from "../../src/components/EdgeDiscovery";
 import { LoadingView, ErrorView, EmptyView } from "../../src/components/StateView";
 import { colors, spacing, type, pnlColor } from "../../src/theme";
 import { pct } from "../../src/format";
@@ -15,7 +16,10 @@ import { pct } from "../../src/format";
 export default function Reports() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { data, loading, error, refreshing, refresh } = useFetch(api.researchStrategyLab, [], 0);
+  const { data, loading, error, refreshing, refresh } = useFetch(async () => {
+    const [lab, edge] = await Promise.all([api.researchStrategyLab(), api.researchEntryQuality()]);
+    return { ...lab, edge };
+  }, [], 0);
 
   const strategies: any[] = data?.strategies || [];
 
@@ -36,9 +40,12 @@ export default function Reports() {
         {strategies.length === 0 ? (
           <EmptyView icon="flask-outline" title="No strategy data yet" />
         ) : (
-          strategies.map((s) => (
-            <StrategyCard key={s.id} s={s} onPress={() => router.push(`/strategy/${s.id}`)} />
-          ))
+          <>
+            <EdgeDiscovery data={data?.edge} />
+            {strategies.map((s) => (
+              <StrategyCard key={s.id} s={s} onPress={() => router.push(`/strategy/${s.id}`)} />
+            ))}
+          </>
         )}
       </ScrollView>
     </View>

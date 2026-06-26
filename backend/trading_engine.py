@@ -38,6 +38,7 @@ from strategies import scan_strategies, STRATEGY_DEFS, ema
 from levels import get_levels, nearest_resistance, nearest_support
 from primary_layer import evaluate_primary, fifty_pct_metric
 from regime import classify_regime
+from router import route, squeeze_allowed
 from squeeze import evaluate_squeeze
 from circuit_breaker import evaluate_breaker
 
@@ -306,6 +307,15 @@ async def process_pending_orders(db: AsyncIOMotorDatabase) -> list[dict]:
                 new_pos.structural_stop = po.structural_stop
                 if not new_pos.entry_attribution:
                     new_pos.entry_attribution = getattr(po, "entry_attribution", None) or {}
+            # Phase E: stamp the independent-model identity onto the Hunter position.
+            if new_pos is not None:
+                _attr = new_pos.entry_attribution or {}
+                _eq = _attr.get("entry_quality") or {}
+                new_pos.strategy = "hunter"
+                new_pos.entry_profile = _attr.get("entry_profile")
+                new_pos.entry_quality_grade = _eq.get("grade")
+                new_pos.entry_quality_score = _eq.get("pct")
+                new_pos.regime_at_entry = _attr.get("asset_regime")
             trade = TradeLog(
                 symbol=po.symbol, side="BUY", quantity=po.quantity, price=our_bid,
                 notional=notional, mode="PAPER", confidence=0.0,
@@ -320,6 +330,15 @@ async def process_pending_orders(db: AsyncIOMotorDatabase) -> list[dict]:
             dirty = True
             logger.info("PAPER POST-ONLY maker FILLED %s qty=%.8f @ %.6f (%s, maker fee $%.4f)",
                         po.symbol, po.quantity, our_bid, fill_reason, fee)
+            try:
+                from push_service import send_push_event
+                _g = (getattr(new_pos, "entry_quality_grade", None) if new_pos else None)
+                await send_push_event(
+                    db, "trade_opened",
+                    f"Hunter opened {po.symbol}" + (f" (grade {_g})" if _g else ""),
+                )
+            except Exception:
+                pass
             results.append({"symbol": po.symbol, "outcome": "FILLED", "reason": fill_reason, "trade": trade.model_dump()})
 
     if dirty:
@@ -711,6 +730,34 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         bool(primary.triggered) if primary is not None else False, support_zone,
     )
     entry_attribution["support_low"] = (support_zone or {}).get("low")
+
+    # --- Phase E2: full Reason Chain (additive log carried onto any resulting trade) ---
+    routing = route(getattr(asset_regime, "regime", None))
+    entry_attribution["reason_chain"] = {
+        "schema": "v1",
+        "regime": getattr(asset_regime, "regime", None),
+        "regime_evidence": getattr(asset_regime, "evidence", {}),
+        "routing": routing,
+        "market_state_snapshot": [
+            {"t": b[0], "o": b[1], "h": b[2], "l": b[3], "c": b[4], "v": b[5]}
+            for b in (bars_4h[-12:] if bars_4h else [])
+        ],
+        "indicator_values": {
+            "rsi_4h": rsi_4h,
+            "adx": (asset_regime.evidence.get("adx") if asset_regime else None),
+            "atr_percentile": (asset_regime.evidence.get("atr_percentile") if asset_regime else None),
+            "bbwidth_percentile": (asset_regime.evidence.get("bbwidth_percentile") if asset_regime else None),
+            "ema_stack": (asset_regime.evidence.get("ema_stack") if asset_regime else None),
+            "relative_strength_btc": relative_strength_btc,
+            "btc_macro_regime": market_regime,
+            "volume_slope": level_evidence.get("volume_slope"),
+        },
+        "competing_hypotheses": [
+            {"strategy": sid, "detected": v.get("detected"), "qualified": v.get("qualified")}
+            for sid, v in (strategy_signals or {}).items()
+        ],
+        "breaker_state": breaker_state,
+    }
 
     decision, blocked, fusion_summary = fuse_signals(
         snapshot=snapshot,
@@ -1127,6 +1174,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and not _hard_killed
             and breaker_state != "VETO"
             and settings.trading_mode in ("PAPER", "DRY_RUN")
+            and squeeze_allowed(getattr(asset_regime, "regime", None))
         )
         if squeeze_eligible:
             sq = evaluate_squeeze(bars_4h)
@@ -1192,6 +1240,14 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                                 "SQUEEZE entry %s qty=%.8f @ %.6f stop20MA=%.6f profile=%s grade=%s",
                                 symbol, qty_sq, fill_price, sq.stop_20ma, sq.entry_profile, eq.get("grade"),
                             )
+                            try:
+                                from push_service import send_push_event
+                                await send_push_event(
+                                    db, "trade_opened",
+                                    f"Squeeze opened {symbol} ({sq.entry_profile}, grade {eq.get('grade')})",
+                                )
+                            except Exception:
+                                pass
 
     return {
         "symbol": symbol,

@@ -730,6 +730,62 @@ async def research_staged_exit():
     return (await get_research_cache())["staged_exit"]
 
 
+@api_router.get("/research/entry_quality")
+async def research_entry_quality():
+    """Phase E Edge Discovery — does entry-quality grade / regime / profile predict
+    outcomes? Aggregates graded closed trades (Hunter + Squeeze). Bounded query."""
+    cursor = db.trades.find(
+        {"side": "SELL", "trade_result": {"$in": ["WIN", "LOSS", "BREAKEVEN"]}},
+        {"trade_result": 1, "return_pct": 1, "pnl": 1, "entry_attribution": 1, "_id": 0},
+    ).sort("timestamp", -1).limit(1000)
+    rows = await cursor.to_list(length=1000)
+
+    def _bucket():
+        return {"count": 0, "wins": 0, "sum_return": 0.0, "sum_pnl": 0.0}
+
+    grades, regimes, profiles = {}, {}, {}
+    total = 0
+    for t in rows:
+        attr = t.get("entry_attribution") or {}
+        eq = attr.get("entry_quality") or {}
+        grade = eq.get("grade")
+        if not grade:
+            continue  # only Phase-E graded trades
+        total += 1
+        regime = attr.get("asset_regime") or attr.get("regime_at_entry") or "UNKNOWN"
+        profile = attr.get("entry_profile") or "UNKNOWN"
+        ret = t.get("return_pct") or 0.0
+        pnl = t.get("pnl") or 0.0
+        win = t.get("trade_result") == "WIN"
+        for d, key in ((grades, grade), (regimes, regime), (profiles, profile)):
+            b = d.setdefault(key, _bucket())
+            b["count"] += 1
+            b["wins"] += 1 if win else 0
+            b["sum_return"] += ret
+            b["sum_pnl"] += pnl
+
+    def _finalize(d):
+        out = {}
+        for k, b in d.items():
+            c = b["count"] or 1
+            out[k] = {
+                "count": b["count"],
+                "win_rate_pct": round(b["wins"] / c * 100, 1),
+                "avg_return_pct": round(b["sum_return"] / c, 2),
+                "net_pnl": round(b["sum_pnl"], 2),
+            }
+        return out
+
+    grade_order = ["A+", "A", "B", "C"]
+    gd = _finalize(grades)
+    return {
+        "total_graded": total,
+        "grade_distribution": {g: gd[g] for g in grade_order if g in gd},
+        "regime_distribution": _finalize(regimes),
+        "profile_distribution": _finalize(profiles),
+    }
+
+
 @api_router.get("/levels/{base}")
 async def get_levels_endpoint(base: str):
     """Historical horizontal support/resistance zones for a symbol (Phase 1.5a).

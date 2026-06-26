@@ -65,6 +65,7 @@ export const api = {
   analyticsPerformance: (excludeSynthetic = false) =>
     get<any>(`/analytics/performance?exclude_synthetic=${excludeSynthetic ? "true" : "false"}`),
   researchStrategyLab: () => get<any>("/research/strategy_lab"),
+  researchEntryQuality: () => get<any>("/research/entry_quality"),
   researchFunnel: (sinceHours?: number) =>
     get<any>(`/research/funnel${sinceHours ? `?since_hours=${sinceHours}` : ""}`),
 

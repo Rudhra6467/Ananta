@@ -112,10 +112,24 @@ Verified: 11/11 pytest, lint clean, backend boots clean, live manual cycles (BTC
 NOTE: Squeeze live-execution branch reuses the proven breakout PAPER executor; it had not yet fired in
 preview (no confirmed coil-breakout present at build time) — will trigger on real setups.
 
-## E2 — REMAINING
-- Regime-first ROUTER restructure (formal Market Scan → Regime → Router stage; currently Hunter-first
-  with an independent Squeeze branch appended).
-- Squeeze: richer retest depth tuning; Reason-Chain `competing_hypothesis_log`.
-- Reason Chain full schema (`market_state_snapshot` OHLCV matrix, `indicator_values`) + PDF matrix layout.
-- Wire remaining push events (trade_opened / stop_loss / trailing_stop) at engine + watcher exit points.
-- Mobile Reports: surface entry-quality grade distribution + regime breakdown per strategy.
+## E2 — SHIPPED 2026-06-26
+- **Regime router** (`router.py`): formal regime → eligible-models map + rationale; Squeeze gated off in
+  TREND_DOWN; routing decision logged in the Reason Chain. (Hunter keeps its own gates.)
+- **Full Reason Chain** on every cycle/entry (`entry_attribution.reason_chain`, schema v1):
+  regime + evidence, routing, 12-bar OHLCV `market_state_snapshot`, `indicator_values`
+  (rsi/adx/atr%/bbw%/ema-stack/rel-strength/btc-macro/volume-slope), `competing_hypotheses`
+  (per-strategy detected/qualified), breaker_state. Flows onto Position → closed TradeLog.
+- **Push event hooks** wired: `trade_opened` (Hunter maker fill + Squeeze fill), `stop_loss` (watcher SL_HIT),
+  `trailing_stop` (watcher TRAIL_HIT) — best-effort, both PAPER & live exit paths. (Delivery still needs a build + google-services.json.)
+- **Edge Discovery**: backend `GET /api/research/entry_quality` aggregates graded closed trades →
+  grade / regime / profile distributions (count, win-rate, avg-return, net-pnl). Mobile Reports shows the
+  grade win-rate breakdown with an accumulating empty-state.
+- Hunter positions now stamped with strategy/entry_profile/grade/regime on maker fill.
+
+Verified: 12/12 pytest, lint clean, backend boots clean, live manual cycles run with no errors,
+endpoint returns, mobile Reports renders Edge Discovery + Squeeze ACTIVE.
+
+## E3 — REMAINING (future)
+- PDF matrix layout for sandbox strategies (strict OHLCV/indicator matrix output).
+- Squeeze retest-depth tuning + competing_hypothesis_log richness once trades accumulate.
+- Replace Hunter-first ordering with a true single-pass router loop (cosmetic; behavior already routed).

@@ -250,6 +250,14 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
             )
             if trade_doc:
                 exits.append(trade_doc)
+                try:
+                    from push_service import send_push_event
+                    _evt = "stop_loss" if reason == EXIT_SL else "trailing_stop" if reason == EXIT_TRAIL else "trade_closed"
+                    _pnl = trade_doc.get("pnl")
+                    _m = f"{pos.symbol} exited ({reason})" + (f" · P&L ${_pnl:.2f}" if isinstance(_pnl, (int, float)) else "")
+                    await send_push_event(db, _evt, _m)
+                except Exception:
+                    pass
             dirty = True  # _record_live_sell already saves portfolio, but be safe
         else:
             qty, notional, realized, fee = _execute_sell(portfolio, pos.symbol, snap.bid, settings.taker_fee_pct)
@@ -287,6 +295,15 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
                 await db.trades.insert_one(trade.model_dump())
                 exits.append(trade.model_dump())
                 dirty = True
+                try:
+                    from push_service import send_push_event
+                    _evt = "stop_loss" if reason == EXIT_SL else "trailing_stop" if reason == EXIT_TRAIL else "trade_closed"
+                    await send_push_event(
+                        db, _evt,
+                        f"{pos.symbol} exited ({reason}) · P&L ${realized:.2f} ({_ret_pct:+.2f}%)",
+                    )
+                except Exception:
+                    pass
 
                 # Phase B: structure-based staged-exit shadow sim (Actual vs 33/33/34).
                 with contextlib.suppress(Exception):
