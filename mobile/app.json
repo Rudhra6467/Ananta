@@ -1,20 +1,26 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Ananta",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0E17",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.ananta.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to unlock your Ananta cockpit."
+      }
     },
     "android": {
+      "package": "ai.ananta.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#0A0E17"
       },
       "edgeToEdgeEnabled": true
     },
@@ -31,10 +37,22 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#0A0E17"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to unlock your Ananta cockpit."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#14E0C9"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

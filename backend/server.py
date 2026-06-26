@@ -267,6 +267,16 @@ async def manual_close_position(base: str):
 
     # Cooldown so the bot doesn't immediately re-enter the symbol we just bailed on.
     await set_symbol_cooldown(db, symbol, settings.sl_cooldown_seconds, "MANUAL_EXIT")
+
+    # Push alert (best-effort, mobile).
+    try:
+        from push_service import send_push_event
+        _pnl = trade_doc.get("pnl") if isinstance(trade_doc, dict) else None
+        _msg = f"{symbol} closed (manual exit)" + (f" · P&L ${_pnl:.2f}" if isinstance(_pnl, (int, float)) else "")
+        await send_push_event(db, "trade_closed", _msg)
+    except Exception:
+        pass
+
     return {"ok": True, "symbol": symbol, "exit_reason": "MANUAL_EXIT", "trade": trade_doc}
 
 
@@ -765,6 +775,28 @@ async def auth_me(_owner: dict = Depends(require_owner)):
     return {"email": _owner.get("sub"), "role": _owner.get("role")}
 
 
+# ---------- mobile push notifications ----------
+class PushTokenBody(BaseModel):
+    push_token: str
+    platform: str = "unknown"
+
+
+@api_router.post("/notifications/register", dependencies=[Depends(require_owner)])
+async def register_push(body: PushTokenBody):
+    """Store an Expo push token for the owner's device(s)."""
+    from push_service import register_push_token
+    await register_push_token(db, body.push_token, body.platform)
+    return {"ok": True}
+
+
+@api_router.post("/notifications/test", dependencies=[Depends(require_owner)])
+async def test_push():
+    """Owner-triggered test broadcast (validates device delivery on a real build)."""
+    from push_service import send_push_event
+    res = await send_push_event(db, "system_offline", "Test alert from Ananta — push is wired up.")
+    return {"ok": True, **res}
+
+
 @api_router.get("/settings")
 async def get_settings(request: Request):
     s = await load_settings(db)
@@ -830,9 +862,19 @@ async def update_settings(update: SettingsUpdate):
         if k in data and data[k] and set(str(data[k])) <= {"•"}:
             data.pop(k)
 
+    _kill_was_on = bool(getattr(s, "manual_kill_switch", False))
     for k, v in data.items():
         setattr(s, k, v)
     saved = await save_settings(db, s)
+
+    # Push alert when the kill switch is newly engaged (best-effort, mobile).
+    if data.get("manual_kill_switch") is True and not _kill_was_on:
+        try:
+            from push_service import send_push_event
+            await send_push_event(db, "kill_switch", "Manual kill switch engaged — all new entries halted.")
+        except Exception:
+            pass
+
     d = saved.model_dump()
     for k in ("coinbase_api_secret", "kraken_api_secret"):
         if d.get(k):
