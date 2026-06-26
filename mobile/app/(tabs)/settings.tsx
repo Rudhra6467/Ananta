@@ -187,7 +187,7 @@ export default function Settings() {
 
       {/* Developer */}
       <Section title="Developer">
-        <ReadRow label="Exchange" value={(s.trading_mode ? "kraken" : "—").toUpperCase()} />
+        <ReadRow label="Exchange" value="KRAKEN" />
         <ReadRow label="App version" value="1.0.0" />
         <ReadRow label="Platform" value={Platform.OS} last />
       </Section>

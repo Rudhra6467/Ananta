@@ -47,8 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await api.me();
           setOwner(me);
-        } catch {
-          await deleteItem(TOKEN_KEY);
+        } catch (e: any) {
+          // Only drop the session on a real auth rejection. On transient network
+          // / 5xx errors keep the token so a relaunch can recover.
+          if (e?.status === 401 || e?.status === 403) {
+            await deleteItem(TOKEN_KEY);
+          }
           setOwner(null);
         }
       }

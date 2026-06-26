@@ -481,3 +481,36 @@ predicting more good trades. Prove a *repeatable edge that survives fees, slippa
 - Settings UI has a new "Adaptive Lot Sizing · Layer 5b" panel (toggle, USD lots, classifier thresholds, concurrent cap).
 - `/api/public/snapshot` whitelists the new adaptive fields (still no secret leakage).
 - Tests: 16 new unit tests in `tests/test_adaptive_sizing.py` + 9 external HTTP integration tests; full suite 147 passed.
+
+---
+
+## Mobile App — Phase 1 (Added 2026-06-26)
+
+Cross-platform expansion: native **Expo / React Native** operator cockpit (`/app/mobile`),
+sharing the existing FastAPI backend via `EXPO_PUBLIC_BACKEND_URL + /api`. Owner JWT bearer
+auth (token in `expo-secure-store` on native, `localStorage` on web). Dark-only Ananta identity
+(#0A0E17 bg, #121824 cards, electric teal #14E0C9, gold branding, red losses).
+
+**Shipped (tested — iteration_14, all green):**
+- 5-tab navigation (expo-router): Cockpit · Portfolio · Reports · Settings (+ Login, asset/[symbol], strategy/[id])
+- Auth: login + biometric (FaceID/fingerprint) unlock gate (expo-local-authentication)
+- Cockpit: portfolio hero, today P&L, PAPER/LIVE pill, horizontal market rail, engine status, AI decision timeline, open-positions preview, pull-to-refresh
+- Portfolio: Active / Closed / Performance segmented tabs; native SVG equity curve + win rate/profit factor/avg win/avg loss/expectancy; manual-close confirm sheet
+- Reports: strategy cards w/ attrition funnel + drilldown (vs-Hunter comparison)
+- Settings: Trading/Risk/Strategies/Notifications/Account/Developer sections; env + kill-switch + biometric + notif toggles
+- Asset detail: native SVG candlestick + engine read + current reasoning
+- Charts built with `react-native-svg` (no WebView) per requirement
+- Push notification INFRA: mobile `expo-notifications` registration + backend `push_service.py`
+  (`POST /api/notifications/register`, `/api/notifications/test`) + kill-switch & manual-close
+  broadcast hooks. NOTE: push delivery only works on a published build with Firebase
+  `google-services.json` (user to provide) — no-op in Expo Go/web preview.
+
+**Backlog (mobile):**
+- Wire remaining push event hooks (trade_opened, stop_loss, trailing_stop) into engine during Phase E
+- Pause polling when app backgrounded (battery)
+- Server-side respect of per-event notification opt-out
+
+## NEXT MAJOR PHASE → Engine Phase E (see /app/memory/ENGINE_PHASE_E.md)
+Regime-first multi-model router; Hunter (3 regime-aware entry profiles) & Squeeze fully
+independent active traders; ATR-structural stops; Squeeze retest timing; Entry Quality Scoring;
+Reason Chain schema. User approved sequencing: mobile first (DONE), engine next.
