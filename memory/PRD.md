@@ -535,3 +535,17 @@ Details + E2 backlog in /app/memory/ENGINE_PHASE_E.md
   devices opted into that event. Mobile syncs toggles to backend on change + on register. Verified.
 Verified: PDF builds (200, valid), opt-out filter unit-checked, mobile cockpit renders, engine opened a
 live AAVE paper position (engine path healthy). Pending only: user provides google-services.json + Publish.
+
+## Production 520 / OOM Root Cause + Fix (2026-06-26)
+ROOT CAUSE: Cloudflare 520 on livetrading247.com is the recurring production OOM crash. Lightweight
+endpoints (/api/, /portfolio, /market/snapshots) return 200, but data-HEAVY endpoints (/settings,
+/research/*, /analytics/*, /trades?limit=200, /reasoning, /news) consistently 520 — they load large
+in-memory aggregations that exceed the production container's memory, OOM-killing it and cascading the
+whole API into a 520 crash loop. The mobile app's "mock data" is a downstream SYMPTOM (it falls back
+when these calls fail). Backend is healthy in preview; CORS is open (*); not a routing/CORS/offline issue.
+FIX (code, preview — needs REDEPLOY to take effect on prod): right-sized every heavy query
+(research_log 8000->2000, sells 2000->800, sl_logs 3000->800, analytics 2000->800/5000->1000,
+graduation 10000->1500, on-demand research 8000->2000, entry_quality 1000->600), window 14d->10d,
+research cache loop 60s->180s. Verified: all heavy endpoints 200 in preview, lint clean, no accuracy
+loss at current data volume (~45 trades). Production may ALSO need a higher memory tier (Resources tab).
+SEPARATE: production OWNER password != preview password (prod login 401) — mobile login needs prod creds.

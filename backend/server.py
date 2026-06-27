@@ -479,10 +479,10 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
 
     rolling_trades = await db.trades.find(
         {"timestamp": {"$gte": rolling_cutoff}, **synthetic_filter}, {"_id": 0},
-    ).sort("timestamp", 1).to_list(2000)
+    ).sort("timestamp", 1).to_list(800)
     calendar_trades = await db.trades.find(
         {"timestamp": {"$gte": calendar_cutoff}, **synthetic_filter}, {"_id": 0},
-    ).sort("timestamp", 1).to_list(2000)
+    ).sort("timestamp", 1).to_list(800)
 
     portfolio = await load_portfolio(db)
     open_positions = [p.model_dump() for p in portfolio.positions if p.quantity > 0]
@@ -491,7 +491,7 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
     # all-time closed trades power the "Best Regime to Trade" insight
     all_sells = await db.trades.find(
         {"side": "SELL", "status": "FILLED", **synthetic_filter}, {"_id": 0},
-    ).sort("timestamp", 1).to_list(5000)
+    ).sort("timestamp", 1).to_list(1000)
     insight = regime_insight(all_sells)
 
     synthetic_count = await db.trades.count_documents({"note": "DEMO_SEED"})
@@ -521,7 +521,7 @@ async def analytics_graduation():
     mere profitability. Excludes synthetic DEMO_SEED trades."""
     trades = await db.trades.find(
         {"note": {"$ne": "DEMO_SEED"}}, {"_id": 0},
-    ).sort("timestamp", 1).to_list(10000)
+    ).sort("timestamp", 1).to_list(1500)
 
     portfolio = await load_portfolio(db)
     settings = await load_settings(db)
@@ -536,7 +536,7 @@ async def analytics_graduation():
 # ---- Research aggregation cache (precomputed every 60s -> instant tab loads, credit-free) ----
 _RESEARCH_CACHE: dict = {}
 _RESEARCH_CACHE_TS: float = 0.0
-_RESEARCH_WINDOW_DAYS = 14  # cap scan window (counterfactuals resolve within 7d anyway)
+_RESEARCH_WINDOW_DAYS = 10  # cap scan window (counterfactuals resolve within 7d anyway)
 # Exclude the heavy nested fields the aggregations never use -> big memory cut on large DBs.
 _RESEARCH_PROJECTION = {"_id": 0, "evidence": 0, "sector_data": 0, "level": 0}
 
@@ -550,9 +550,9 @@ async def compute_research_cache() -> dict:
     cutoff = (datetime.now(UTC) - timedelta(days=_RESEARCH_WINDOW_DAYS)).isoformat()
     rows = await db.research_log.find(
         {"timestamp": {"$gte": cutoff}}, _RESEARCH_PROJECTION,
-    ).sort("timestamp", -1).to_list(8000)
-    sells = await db.trades.find({"side": "SELL"}, {"_id": 0}).sort("timestamp", -1).to_list(2000)
-    sl_logs = await db.stop_loss_simulation_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(3000)
+    ).sort("timestamp", -1).to_list(2000)
+    sells = await db.trades.find({"side": "SELL"}, {"_id": 0}).sort("timestamp", -1).to_list(800)
+    sl_logs = await db.stop_loss_simulation_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(800)
     rejections = await summarize_rejections(db)
     strategy_lab = await summarize_strategy_lab(db)
 
@@ -592,7 +592,7 @@ async def research_cache_loop():
             await compute_research_cache()
         except Exception as e:
             logger.warning("research cache compute failed (non-fatal): %s", e)
-        await asyncio.sleep(60)
+        await asyncio.sleep(180)
 
 
 
@@ -630,7 +630,7 @@ async def research_summary(band_pct: float = Query(1.5, ge=0.0, le=20.0)):
     cutoff = (datetime.now(UTC) - timedelta(days=_RESEARCH_WINDOW_DAYS)).isoformat()
     rows = await db.research_log.find(
         {"timestamp": {"$gte": cutoff}}, _RESEARCH_PROJECTION,
-    ).sort("timestamp", -1).to_list(8000)
+    ).sort("timestamp", -1).to_list(2000)
     return summarize_research(rows, band_pct=band_pct)
 
 
@@ -666,7 +666,7 @@ async def research_funnel(since_hours: int | None = Query(None)):
         cutoff = (datetime.now(UTC) - timedelta(hours=since_hours)).isoformat()
         rows = await db.research_log.find(
             {"timestamp": {"$gte": cutoff}}, _RESEARCH_PROJECTION,
-        ).to_list(8000)
+        ).to_list(2000)
         return {"funnel": summarize_funnel(rows), "breaker_accuracy": summarize_breaker_accuracy(rows)}
     c = await get_research_cache()
     return c["funnel"]
@@ -693,7 +693,7 @@ async def research_missed_opportunities(since_hours: int | None = Query(None)):
         cutoff = (datetime.now(UTC) - timedelta(hours=since_hours)).isoformat()
         rows = await db.research_log.find(
             {"timestamp": {"$gte": cutoff}}, _RESEARCH_PROJECTION,
-        ).to_list(8000)
+        ).to_list(2000)
         return summarize_missed_opportunities(rows)
     return (await get_research_cache())["missed_opportunities"]
 
@@ -737,8 +737,8 @@ async def research_entry_quality():
     cursor = db.trades.find(
         {"side": "SELL", "trade_result": {"$in": ["WIN", "LOSS", "BREAKEVEN"]}},
         {"trade_result": 1, "return_pct": 1, "pnl": 1, "entry_attribution": 1, "_id": 0},
-    ).sort("timestamp", -1).limit(1000)
-    rows = await cursor.to_list(length=1000)
+    ).sort("timestamp", -1).limit(600)
+    rows = await cursor.to_list(length=600)
 
     def _bucket():
         return {"count": 0, "wins": 0, "sum_return": 0.0, "sum_pnl": 0.0}
