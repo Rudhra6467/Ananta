@@ -9,7 +9,7 @@ import SettingsPage from "@/pages/Settings";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
-import AnantaTrident from "@/components/AnantaTrident";
+import anantaEmblem from "@/assets/ananta-emblem.png";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 
@@ -41,7 +41,13 @@ export default function AppShell() {
             >
                 <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <AnantaTrident size={30} />
+                        <img
+                            src={anantaEmblem}
+                            alt="Ananta"
+                            data-testid="ananta-emblem"
+                            className="h-10 w-10 md:h-11 md:w-11 object-contain select-none"
+                            draggable={false}
+                        />
                         <div>
                             <div className="font-heading font-semibold tracking-tight text-base md:text-lg leading-none text-atlas-text">
                                 Ananta
