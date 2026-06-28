@@ -575,6 +575,63 @@ def _reason_chain_block(s, trades: list[dict], limit: int = 6) -> Iterable:
     return flow
 
 
+def _exit_engine_block(s, trades: list[dict]) -> Iterable:
+    """Phase F Universal Exit Engine analytics: per-module distribution + MFE/MAE
+    capture efficiency. Built from closed SELL legs (research, not advice)."""
+    sells = [t for t in trades if t.get("side") == "SELL" and (t.get("exit_module") or t.get("exit_reason"))]
+    flow = [Paragraph("UNIVERSAL EXIT ENGINE · RESEARCH (PHASE F)", s["h2"]),
+            Paragraph("Decoupled Trade Manager. Modules A-F evaluated every cycle; deterministic priority "
+                      "arbitration executes the single highest-priority action. MFE/MAE capture efficiency "
+                      "shows how much of the best achievable move each exit kept.", s["subtitle"]), Spacer(1, 8)]
+    if not sells:
+        flow.append(Paragraph("No engine-managed exits recorded yet — populates as positions close.", s["italic"]))
+        return flow
+
+    _names = {
+        "A": "A · Structural Failure", "B": "B · Momentum Exhaustion (50%)", "C": "C · ATR Trail",
+        "D": "D · EMA Trend Loss", "E": "E · Time Exit", "F": "F · Profit Protection", "KILL": "Kill / Emergency",
+    }
+    # group by module (fall back to legacy exit_reason)
+    groups: dict[str, list[dict]] = {}
+    for t in sells:
+        key = t.get("exit_module") or {"SL_HIT": "A", "TRAIL_HIT": "C"}.get(t.get("exit_reason"), "—")
+        groups.setdefault(key, []).append(t)
+
+    rows = []
+    for key in sorted(groups):
+        g = groups[key]
+        n = len(g)
+        wins = sum(1 for t in g if (t.get("pnl") or 0) > 0)
+        rets = [t.get("return_pct") for t in g if t.get("return_pct") is not None]
+        mfes = [t.get("mfe_pct") for t in g if t.get("mfe_pct") is not None]
+        maes = [t.get("mae_pct") for t in g if t.get("mae_pct") is not None]
+        avg_ret = round(sum(rets) / len(rets), 2) if rets else None
+        avg_mfe = round(sum(mfes) / len(mfes), 2) if mfes else None
+        avg_mae = round(sum(maes) / len(maes), 2) if maes else None
+        rows.append([_names.get(key, key), n, f"{round(wins / n * 100)}%",
+                     _fmt(avg_ret, "%"), _fmt(avg_mfe, "%"), _fmt(avg_mae, "%")])
+    flow += [Paragraph("Exit-Module Distribution", s["h3"]),
+             _kv_table(s, ["Exit Module", "Count", "Win%", "Avg Ret", "Avg MFE", "Avg MAE"], rows,
+                       [2.4 * inch, 0.8 * inch, 0.8 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch]), Spacer(1, 10)]
+
+    # capture efficiency: realized return vs the best achievable (MFE)
+    eff = [t for t in sells if t.get("return_pct") is not None and t.get("mfe_pct")]
+    if eff:
+        caps = [max(-100.0, min(200.0, (t["return_pct"] / t["mfe_pct"]) * 100.0)) for t in eff if t["mfe_pct"] > 0]
+        avg_cap = round(sum(caps) / len(caps), 1) if caps else None
+        avg_mfe = round(sum(t["mfe_pct"] for t in eff) / len(eff), 2)
+        avg_ret = round(sum(t["return_pct"] for t in eff) / len(eff), 2)
+        rows = [
+            ["Closed exits analysed", str(len(eff))],
+            ["Avg MFE (best achievable)", f"{avg_mfe}%"],
+            ["Avg realized return", f"{avg_ret}%"],
+            ["Avg capture of MFE", f"{avg_cap}%" if avg_cap is not None else "—"],
+        ]
+        flow += [Paragraph("MFE Capture Efficiency", s["h3"]),
+                 _kv_table(s, ["Metric", "Value"], rows, [3.6 * inch, 2.2 * inch]), Spacer(1, 10)]
+    return flow
+
+
 def build_report(
     portfolio: dict,
     risk: dict,
@@ -611,6 +668,8 @@ def build_report(
     if research:
         flow.append(PageBreak())
         flow.extend(_research_block(s, research))
+    flow.append(PageBreak())
+    flow.extend(_exit_engine_block(s, list(reversed(trades))))
     flow.append(PageBreak())
     flow.extend(_reason_chain_block(s, list(reversed(trades))))
     flow.append(PageBreak())

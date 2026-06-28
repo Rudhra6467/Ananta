@@ -549,3 +549,40 @@ graduation 10000->1500, on-demand research 8000->2000, entry_quality 1000->600),
 research cache loop 60s->180s. Verified: all heavy endpoints 200 in preview, lint clean, no accuracy
 loss at current data volume (~45 trades). Production may ALSO need a higher memory tier (Resources tab).
 SEPARATE: production OWNER password != preview password (prod login 401) — mobile login needs prod creds.
+
+## Phase F — Universal Exit Engine (2026-06-28)
+ARCHITECTURE: Exit logic decoupled from entry strategies into a centralized Trade Manager
+(`backend/exit_engine.py`, pure compute, zero LLM). Entry strategies only tag the position
+(`pos.strategy`) + initial profile; the engine owns ALL risk management thereafter.
+
+Strategy profiles (profit-arm %, ATR trail mult, time cap, EMA priority): hunter(5%/2.0x/72h),
+squeeze(4%/2.5x/none/EMA-priority), relative_strength(6%/2.0x/120h), neutral_crab(2.5%/1.5x/24h),
+bear_breakdown(5%/1.5x/none/EMA-priority).
+
+Modules + deterministic single-pass priority arbitration (lowest number wins):
+  P1 A Structural Failure  -> EXIT_FULL  (structural / % / locked-floor breach)
+  P2 KILL emergency stop   -> EXIT_FULL  (settings.manual_kill_switch)
+  P3 F Profit Protection   -> TIGHTEN    (MFE>=arm -> lock +1% floor, upgrade-only)
+  P4 B Momentum Exhaustion -> EXIT_PARTIAL 50% (overbought ZONE 70+/80+ + vol climax + exhaustion candle, one-time)
+  P5 D EMA Trend Loss      -> EXIT_FULL  (close<20EMA; squeeze=single close, hunter=needs dead-cross; 6h settle gate)
+  P6 C ATR Trail           -> EXIT_FULL  (armed peak - X*ATR)
+  P7 E Time Exit           -> EXIT_FULL  (48h stagnation OR profile hard cap)
+
+TELEMETRY: TradeLog gained exit_module, potential_best_exit (price@MFE), potential_worst_exit (price@MAE);
+MFE/MAE % already tracked. Position gained locked_profit_floor + momentum_partial_taken. New PAPER
+partial-sell path (_execute_partial_sell). PDF gained Exit-Engine Research section (module distribution +
+MFE capture efficiency).
+
+EXIT REASON CODES (changed): SL_HIT->STOP_LOSS, plus STRUCTURAL_STOP, PROFIT_FLOOR, ATR_TRAIL,
+EMA_TREND_LOSS, TIME_EXIT, MOMENTUM_EXHAUSTION, EMERGENCY_STOP.
+
+TESTING: 16 new unit tests (tests/test_exit_engine.py) + watch_once regression pass; live PositionWatcher
+running clean against real paper portfolio. (test_judge_and_pdf 3 failures are PRE-EXISTING owner-auth
+integration issues, unrelated.)
+
+BASELINE RESET: reuse existing owner endpoint POST /api/admin/fresh-start (drops trades/reasoning/
+research_log/shadow*/sim_logs/strategy_lab/cooldowns/pending_orders, resets $1200 book). Run on PROD
+after redeploy for a clean Phase-F forward-test baseline.
+
+ROADMAP (P2): surface MFE/MAE + exit-module telemetry in the MOBILE app UI (separate change in mobile
+workspace; backend contract already returns the fields). Squeeze retest-depth tuning after live trades.

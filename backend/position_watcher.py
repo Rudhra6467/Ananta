@@ -27,11 +27,13 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from live_execution import LiveExecutor, get_default_executor, get_dry_run_executor
-from market_data import fetch_snapshot
+from market_data import fetch_ohlcv_4h, fetch_snapshot
 from models import AIReasoning, MarketSnapshot, Position, RiskSettings, TradeLog, compute_return_and_hold
 from asset_profiles import eff_setting
+from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, evaluate_exit_engine
 from trading_engine import (
     _ensure_day_start,
+    _execute_partial_sell,
     _execute_sell,
     _record_live_sell,
     load_portfolio,
@@ -161,14 +163,140 @@ async def _route_executor(settings: RiskSettings) -> tuple[LiveExecutor | None, 
     return None, "PAPER"
 
 
+def _cooldown_for_module(module: str | None, settings: RiskSettings) -> tuple[int, str] | None:
+    """Symmetric per-symbol cooldown after a FULL exit, keyed by exit module."""
+    if module in ("A", "KILL"):
+        return settings.sl_cooldown_seconds, "SL_HIT"
+    if module in ("C", "D", "E"):
+        return settings.trail_cooldown_seconds, "TRAIL_HIT"
+    return None
+
+
+def _push_event_for(module: str | None) -> str:
+    if module in ("A", "KILL"):
+        return "stop_loss"
+    if module == "C":
+        return "trailing_stop"
+    return "trade_closed"
+
+
+async def _perform_exit(db, portfolio, pos, snap, settings, executor, trade_mode, decision) -> dict | None:
+    """Execute a FULL or PARTIAL exit chosen by the Universal Exit Engine and log
+    it with full telemetry (exit module + MFE/MAE best/worst exit prices)."""
+    is_partial = decision.action == ACT_EXIT_PARTIAL
+    fraction = decision.fraction if is_partial else 1.0
+    reason_code = decision.exit_reason or "EXIT"
+    module = decision.module
+    expected_trigger = decision.stop_price if decision.stop_price is not None else snap.bid
+
+    logger.info("ExitEngine %s %s module=%s reason=%s frac=%.2f",
+                decision.action, pos.symbol, module, reason_code, fraction)
+
+    # Persist a small reasoning row for traceability (no Gemini call).
+    reasoning = AIReasoning(
+        symbol=pos.symbol, bias="NEUTRAL", confidence=0.0,
+        reason=f"Universal Exit Engine [{module}] {reason_code}: {decision.reason}",
+        news_summary="(exit-engine; no Gemini call)",
+        evidence={"exit_module": module, "exit_reason": reason_code, "decision": decision.reason,
+                  "signals": decision.signals, "context": decision.context, "source": "exit_engine"},
+        decision="SELL",
+    )
+    await db.reasoning.insert_one(reasoning.model_dump())
+
+    # Capture excursion prices BEFORE the position is mutated/removed.
+    best_exit = pos.peak_price or None
+    worst_exit = pos.trough_price or None
+    if is_partial:
+        pos.momentum_partial_taken = True
+
+    cd = None if is_partial else _cooldown_for_module(module, settings)
+    push_evt = _push_event_for(module)
+
+    if executor is not None:
+        qty_to_sell = pos.quantity * fraction
+        result = await executor.place_sell(
+            symbol=pos.symbol, qty=qty_to_sell, bid=snap.bid, max_spread_pct=settings.max_spread_pct,
+        )
+        trade_doc = await _record_live_sell(
+            db, portfolio, pos.symbol, result, reasoning,
+            macro_confidence=0.0,
+            fusion_summary=f"EXIT_ENGINE [{module}] {reason_code} | {decision.reason}",
+            mode=trade_mode, exit_reason=reason_code, expected_trigger_price=expected_trigger,
+            exit_module=module,
+        )
+        if trade_doc and cd:
+            await set_symbol_cooldown(db, pos.symbol, cd[0], cd[1])
+        if trade_doc:
+            with contextlib.suppress(Exception):
+                from push_service import send_push_event
+                _pnl = trade_doc.get("pnl")
+                _tag = "trimmed 50%" if is_partial else f"exited ({reason_code})"
+                _m = f"{pos.symbol} {_tag}" + (f" · P&L ${_pnl:.2f}" if isinstance(_pnl, (int, float)) else "")
+                await send_push_event(db, push_evt, _m)
+        return trade_doc
+
+    # PAPER path
+    if is_partial:
+        qty, notional, realized, fee = _execute_partial_sell(portfolio, pos.symbol, snap.bid, fraction, settings.taker_fee_pct)
+    else:
+        qty, notional, realized, fee = _execute_sell(portfolio, pos.symbol, snap.bid, settings.taker_fee_pct)
+    if qty <= 0:
+        return None
+    slippage_usd = (expected_trigger - snap.bid) * qty
+    _ret_pct, _hold = compute_return_and_hold(pos.avg_cost, pos.entry_timestamp, snap.bid)
+    trade = TradeLog(
+        symbol=pos.symbol, side="SELL", quantity=qty, price=snap.bid, notional=notional,
+        mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, pnl=realized, fee_usd=fee,
+        slippage_usd=slippage_usd,
+        note=f"EXIT_ENGINE [{module}] {reason_code}{' PARTIAL-50%' if is_partial else ''} | {decision.reason}",
+        exit_reason=reason_code, exit_module=module,
+        potential_best_exit=best_exit, potential_worst_exit=worst_exit,
+        sector=pos.sector, atr_at_entry=pos.atr_at_entry,
+        atr_percentile_at_entry=pos.atr_percentile_at_entry, volatility_regime=pos.volatility_regime,
+        entry_extension_pct=pos.entry_extension_pct,
+        trade_result=("WIN" if realized > 0 else "LOSS" if realized < 0 else "BREAKEVEN"),
+        mfe_pct=pos.mfe_pct, mae_pct=pos.mae_pct,
+        entry_price=pos.avg_cost, entry_timestamp=pos.entry_timestamp,
+        return_pct=_ret_pct, hold_seconds=_hold,
+        entry_attribution=pos.entry_attribution or {},
+        strategy=pos.strategy, entry_profile=pos.entry_profile, regime_at_entry=pos.regime_at_entry,
+        entry_quality_grade=pos.entry_quality_grade,
+    )
+    await db.trades.insert_one(trade.model_dump())
+    if cd:
+        await set_symbol_cooldown(db, pos.symbol, cd[0], cd[1])
+    with contextlib.suppress(Exception):
+        from push_service import send_push_event
+        _tag = "trimmed 50%" if is_partial else f"exited ({reason_code})"
+        await send_push_event(db, push_evt, f"{pos.symbol} {_tag} · P&L ${realized:.2f} ({_ret_pct:+.2f}%)")
+
+    # Phase B: structure-based staged-exit shadow sim (only on full closes).
+    if not is_partial:
+        with contextlib.suppress(Exception):
+            from strategies import simulate_staged_exit
+            sim = simulate_staged_exit(
+                avg_cost=pos.avg_cost, qty=qty, trough_price=pos.trough_price,
+                structural_stop=pos.structural_stop,
+                support_low=(pos.entry_attribution or {}).get("support_low"),
+                actual_exit_price=snap.bid,
+            )
+            if sim:
+                sim.update({"symbol": pos.symbol, "timestamp": trade.timestamp,
+                            "exit_reason": reason_code, "exit_module": module, "trade_id": trade.id})
+                await db.stop_loss_simulation_logs.insert_one(sim)
+    return trade.model_dump()
+
+
 async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
-    """One sweep of all open positions. Returns trade docs for any exits."""
+    """One sweep of all open positions through the Universal Exit Engine.
+    Returns trade docs for any exits (partial or full)."""
     settings = await load_settings(db)
     portfolio = _ensure_day_start(await load_portfolio(db))
     if not portfolio.positions:
         return []
 
     executor, trade_mode = await _route_executor(settings)
+    emergency = bool(settings.manual_kill_switch)
     exits: list[dict] = []
     dirty = False
 
@@ -184,7 +312,7 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
         if new_peak != pos.peak_price:
             pos.peak_price = new_peak
             dirty = True
-        # trough update -> powers Max Adverse Excursion (Phase B research)
+        # trough update -> powers Max Adverse Excursion
         new_trough = min(pos.trough_price or pos.avg_cost, snap.price)
         if new_trough != pos.trough_price:
             pos.trough_price = new_trough
@@ -193,131 +321,29 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
             pos.mfe_pct = round((pos.peak_price - pos.avg_cost) / pos.avg_cost * 100, 4)
             pos.mae_pct = round((pos.trough_price - pos.avg_cost) / pos.avg_cost * 100, 4)
 
-        reason, details = evaluate_exit(pos, snap, settings)
-        if reason is None:
+        # 4h bars feed the technical exit modules (B/C/D). Cached fetch — pure compute.
+        bars_4h = None
+        try:
+            bars_4h = await fetch_ohlcv_4h(pos.symbol)
+        except Exception:
+            bars_4h = None
+
+        decision = evaluate_exit_engine(pos, snap.price, bars_4h, settings, emergency=emergency)
+        if decision.action == ACT_NONE:
             continue
 
-        logger.info("PositionWatcher EXIT %s reason=%s %s", pos.symbol, reason, details)
-
-        # expected trigger price for realized-slippage accounting
-        if reason == EXIT_SL:
-            if pos.structural_stop and snap.price <= pos.structural_stop:
-                expected_trigger = pos.structural_stop
-            else:
-                sl_pct = eff_setting(settings, pos.symbol, "stop_loss_pct")
-                expected_trigger = pos.avg_cost * (1.0 - sl_pct / 100.0)
-        elif reason == EXIT_TRAIL:
-            dist = trail_distance_for(pos, settings)
-            peak = max(pos.peak_price or pos.avg_cost, snap.price)
-            expected_trigger = peak * (1.0 - dist / 100.0)
-        else:
-            expected_trigger = snap.price
-
-        # Symmetric cooldown: lock the symbol so the bot doesn't immediately
-        # re-buy a bleeding asset, and lets momentum reset after a winner.
-        if reason == EXIT_SL:
-            await set_symbol_cooldown(db, pos.symbol, settings.sl_cooldown_seconds, EXIT_SL)
-        elif reason == EXIT_TRAIL:
-            await set_symbol_cooldown(db, pos.symbol, settings.trail_cooldown_seconds, EXIT_TRAIL)
-
-        # Persist a small reasoning row for traceability (no Gemini call).
-        reasoning = AIReasoning(
-            symbol=pos.symbol,
-            bias="NEUTRAL",
-            confidence=0.0,
-            reason=f"Position watcher exit: {reason}",
-            news_summary="(position-watcher; no Gemini call)",
-            evidence={"exit_reason": reason, "exit_details": details, "source": "position_watcher"},
-            decision="SELL",
-        )
-        await db.reasoning.insert_one(reasoning.model_dump())
-
-        # Exit via the same path the main engine uses.
-        if executor is not None:
-            result = await executor.place_sell(
-                symbol=pos.symbol,
-                qty=pos.quantity,
-                bid=snap.bid,
-                max_spread_pct=settings.max_spread_pct,
-            )
-            trade_doc = await _record_live_sell(
-                db, portfolio, pos.symbol, result, reasoning,
-                macro_confidence=0.0,
-                fusion_summary=f"WATCHER EXIT {reason} | {details}",
-                mode=trade_mode,
-                exit_reason=reason,
-                expected_trigger_price=expected_trigger,
-            )
-            if trade_doc:
-                exits.append(trade_doc)
-                try:
-                    from push_service import send_push_event
-                    _evt = "stop_loss" if reason == EXIT_SL else "trailing_stop" if reason == EXIT_TRAIL else "trade_closed"
-                    _pnl = trade_doc.get("pnl")
-                    _m = f"{pos.symbol} exited ({reason})" + (f" · P&L ${_pnl:.2f}" if isinstance(_pnl, (int, float)) else "")
-                    await send_push_event(db, _evt, _m)
-                except Exception:
-                    pass
-            dirty = True  # _record_live_sell already saves portfolio, but be safe
-        else:
-            qty, notional, realized, fee = _execute_sell(portfolio, pos.symbol, snap.bid, settings.taker_fee_pct)
-            if qty > 0:
-                slippage_usd = (expected_trigger - snap.bid) * qty
-                _ret_pct, _hold = compute_return_and_hold(pos.avg_cost, pos.entry_timestamp, snap.bid)
-                trade = TradeLog(
-                    symbol=pos.symbol,
-                    side="SELL",
-                    quantity=qty,
-                    price=snap.bid,
-                    notional=notional,
-                    mode="PAPER",
-                    confidence=0.0,
-                    reasoning_id=reasoning.id,
-                    pnl=realized,
-                    fee_usd=fee,
-                    slippage_usd=slippage_usd,
-                    note=f"WATCHER EXIT {reason} | {details}",
-                    exit_reason=reason,
-                    sector=pos.sector,
-                    atr_at_entry=pos.atr_at_entry,
-                    atr_percentile_at_entry=pos.atr_percentile_at_entry,
-                    volatility_regime=pos.volatility_regime,
-                    entry_extension_pct=pos.entry_extension_pct,
-                    trade_result=("WIN" if realized > 0 else "LOSS" if realized < 0 else "BREAKEVEN"),
-                    mfe_pct=pos.mfe_pct,
-                    mae_pct=pos.mae_pct,
-                    entry_price=pos.avg_cost,
-                    entry_timestamp=pos.entry_timestamp,
-                    return_pct=_ret_pct,
-                    hold_seconds=_hold,
-                    entry_attribution=pos.entry_attribution or {},
-                )
-                await db.trades.insert_one(trade.model_dump())
-                exits.append(trade.model_dump())
+        if decision.action == ACT_TIGHTEN:
+            if decision.new_floor is not None and decision.new_floor != pos.locked_profit_floor:
+                pos.locked_profit_floor = decision.new_floor
                 dirty = True
-                try:
-                    from push_service import send_push_event
-                    _evt = "stop_loss" if reason == EXIT_SL else "trailing_stop" if reason == EXIT_TRAIL else "trade_closed"
-                    await send_push_event(
-                        db, _evt,
-                        f"{pos.symbol} exited ({reason}) · P&L ${realized:.2f} ({_ret_pct:+.2f}%)",
-                    )
-                except Exception:
-                    pass
+                logger.info("ExitEngine TIGHTEN %s -> locked floor %.6f (%s)",
+                            pos.symbol, decision.new_floor, decision.reason)
+            continue
 
-                # Phase B: structure-based staged-exit shadow sim (Actual vs 33/33/34).
-                with contextlib.suppress(Exception):
-                    from strategies import simulate_staged_exit
-                    sim = simulate_staged_exit(
-                        avg_cost=pos.avg_cost, qty=qty, trough_price=pos.trough_price,
-                        structural_stop=pos.structural_stop,
-                        support_low=(pos.entry_attribution or {}).get("support_low"),
-                        actual_exit_price=snap.bid,
-                    )
-                    if sim:
-                        sim.update({"symbol": pos.symbol, "timestamp": trade.timestamp,
-                                    "exit_reason": reason, "trade_id": trade.id})
-                        await db.stop_loss_simulation_logs.insert_one(sim)
+        trade_doc = await _perform_exit(db, portfolio, pos, snap, settings, executor, trade_mode, decision)
+        if trade_doc:
+            exits.append(trade_doc)
+        dirty = True
 
     if dirty:
         await save_portfolio(db, portfolio)

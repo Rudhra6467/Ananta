@@ -388,6 +388,33 @@ def _execute_sell(p: Portfolio, symbol: str, price: float, fee_pct: float = 0.0)
     return qty, notional, realized_net, fee
 
 
+def _execute_partial_sell(
+    p: Portfolio, symbol: str, price: float, fraction: float, fee_pct: float = 0.0,
+) -> tuple[float, float, float, float]:
+    """Sell a fraction (0..1) of a position; keep the remainder open.
+    Returns (qty_sold, notional, realized_pnl_net, fee_usd). Buy-side fees are
+    allocated proportionally so the remaining lot keeps its share."""
+    pos = next((x for x in p.positions if x.symbol == symbol), None)
+    if pos is None or pos.quantity <= 0:
+        return 0.0, 0.0, 0.0, 0.0
+    fraction = max(0.0, min(1.0, fraction))
+    qty = pos.quantity * fraction
+    if qty <= 0:
+        return 0.0, 0.0, 0.0, 0.0
+    notional = qty * price
+    fee = notional * (fee_pct / 100.0)
+    gross = (price - pos.avg_cost) * qty
+    buy_fee_alloc = pos.fee_paid_buy * fraction
+    realized_net = gross - fee - buy_fee_alloc
+    p.cash += notional - fee
+    p.realized_pnl += realized_net
+    pos.quantity -= qty
+    pos.fee_paid_buy -= buy_fee_alloc
+    if pos.quantity < 1e-12:
+        p.positions = [x for x in p.positions if x.symbol != symbol]
+    return qty, notional, realized_net, fee
+
+
 # ---------- live execution bookkeeping ----------
 async def _record_live_buy(
     db: AsyncIOMotorDatabase,
@@ -463,6 +490,7 @@ async def _record_live_sell(
     mode: str = "LIVE",
     exit_reason: str | None = None,
     expected_trigger_price: float | None = None,
+    exit_module: str | None = None,
 ) -> dict | None:
     """Persist a LIVE SELL. Realised P/L is based on the actual fill, and the
     position is decremented by the exact filled amount (partials supported)."""
@@ -484,6 +512,9 @@ async def _record_live_sell(
         avg_cost = result.filled_price  # P/L unknown
         entry_sector = entry_atr = entry_atr_pct = entry_regime = None
         entry_ext = None
+        _strategy = _entry_profile = _regime_at_entry = _eq_grade = None
+        _mfe = _mae = _best = _worst = None
+        _attr = {}
     else:
         avg_cost = pos.avg_cost
         entry_sector = pos.sector
@@ -491,6 +522,15 @@ async def _record_live_sell(
         entry_atr_pct = pos.atr_percentile_at_entry
         entry_regime = pos.volatility_regime
         entry_ext = pos.entry_extension_pct
+        _strategy = pos.strategy
+        _entry_profile = pos.entry_profile
+        _regime_at_entry = pos.regime_at_entry
+        _eq_grade = pos.entry_quality_grade
+        _mfe = pos.mfe_pct
+        _mae = pos.mae_pct
+        _best = pos.peak_price or None
+        _worst = pos.trough_price or None
+        _attr = pos.entry_attribution or {}
     realized = (result.filled_price - avg_cost) * result.filled_qty
     portfolio.cash += result.filled_notional
     portfolio.realized_pnl += realized
@@ -508,10 +548,15 @@ async def _record_live_sell(
         notional=result.filled_notional, mode=mode, confidence=macro_confidence,
         reasoning_id=reasoning.id, pnl=realized, slippage_usd=slippage_usd,
         note=f"[{result.status}] limit={result.limit_price:.6f} order={result.order_id} | {fusion_summary}",
-        exit_reason=exit_reason,
+        exit_reason=exit_reason, exit_module=exit_module,
+        potential_best_exit=_best, potential_worst_exit=_worst,
         sector=entry_sector, atr_at_entry=entry_atr,
         atr_percentile_at_entry=entry_atr_pct, volatility_regime=entry_regime,
         entry_extension_pct=entry_ext,
+        trade_result=("WIN" if realized > 0 else "LOSS" if realized < 0 else "BREAKEVEN"),
+        mfe_pct=_mfe, mae_pct=_mae,
+        strategy=_strategy, entry_profile=_entry_profile, regime_at_entry=_regime_at_entry,
+        entry_quality_grade=_eq_grade, entry_attribution=_attr,
     )
     await db.trades.insert_one(trade.model_dump())
     await save_portfolio(db, portfolio)

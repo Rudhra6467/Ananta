@@ -124,6 +124,10 @@ class TradeLog(BaseModel):
     status: Literal["FILLED", "REJECTED"] = "FILLED"
     note: str = ""
     exit_reason: str | None = None  # SL_HIT / TRAIL_HIT / MACRO_BEARISH
+    # --- Phase F Universal Exit Engine telemetry ---
+    exit_module: str | None = None  # A..F / KILL — module that won priority arbitration
+    potential_best_exit: float | None = None  # price at peak MFE (best achievable exit)
+    potential_worst_exit: float | None = None  # price at peak MAE (worst achievable exit)
     # --- analytics / research layer (Phase A) ---
     sector: str | None = None  # asset sector taxonomy at trade time
     atr_at_entry: float | None = None  # ATR(14) snapshot at entry (carried onto the exit leg)
@@ -176,6 +180,9 @@ class Position(BaseModel):
     entry_quality_grade: str | None = None  # A+ / A / B / C
     entry_quality_score: float | None = None  # 0..100
     regime_at_entry: str | None = None  # market regime at entry
+    # --- Phase F Universal Exit Engine state ---
+    locked_profit_floor: float | None = None  # Module F: hard floor locked once MFE arms profit protection
+    momentum_partial_taken: bool = False  # Module B: 50% trim already executed (one-time)
 
     @property
     def cost_basis(self) -> float:

@@ -302,9 +302,11 @@ async def test_watch_once_paper_sl_exit(monkeypatch):
     exits = await watch_once(db)
     assert len(exits) == 1
     assert exits[0]["side"] == "SELL"
-    assert exits[0]["exit_reason"] == EXIT_SL
+    # Phase F Universal Exit Engine emits granular codes; -2% vs 1.5% stop -> Module A STOP_LOSS
+    assert exits[0]["exit_reason"] == "STOP_LOSS"
+    assert exits[0]["exit_module"] == "A"
     # reasoning row written with exit_reason
-    assert db.reasoning.inserted[-1]["evidence"]["exit_reason"] == EXIT_SL
+    assert db.reasoning.inserted[-1]["evidence"]["exit_reason"] == "STOP_LOSS"
     # portfolio saved -> position closed
     final_portfolio = db.portfolio._doc
     assert all(p["symbol"] != "BTC/USD" for p in final_portfolio["positions"])
