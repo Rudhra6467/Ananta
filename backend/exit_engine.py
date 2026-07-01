@@ -110,14 +110,17 @@ class ExitDecision:
     context: dict = field(default_factory=dict)
 
 
-def _age_hours(iso_ts: str) -> float:
+def _age_hours(iso_ts: str, now: datetime | None = None) -> float:
     if not iso_ts:
         return 0.0
+    ref = now or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
     try:
         ts = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        return max(0.0, (datetime.now(timezone.utc) - ts).total_seconds() / 3600.0)
+        return max(0.0, (ref - ts).total_seconds() / 3600.0)
     except Exception:
         return 0.0
 
@@ -292,13 +295,22 @@ def evaluate_exit_engine(
     bars_4h: list[list[float]] | None,
     settings,
     emergency: bool = False,
+    now: datetime | None = None,
+    profile_override: StrategyProfile | None = None,
 ) -> ExitDecision:
-    """Run all modules, arbitrate by hardcoded priority, return the winning action."""
+    """Run all modules, arbitrate by hardcoded priority, return the winning action.
+
+    ``now`` — injectable clock (defaults to real wall-clock). Backtests MUST pass the
+    simulated bar time so Module E / the EMA settle-gate age correctly.
+    ``profile_override`` — swap the strategy profile (optimization sweeps / Option B);
+    when None the live per-strategy PROFILES entry is used. Both keep live behaviour
+    byte-for-byte unchanged when omitted.
+    """
     if pos.avg_cost <= 0 or last_price <= 0:
         return ExitDecision(ACT_NONE, reason="no entry/last price")
 
-    prof = get_profile(getattr(pos, "strategy", "hunter"))
-    age_h = _age_hours(pos.entry_timestamp)
+    prof = profile_override or get_profile(getattr(pos, "strategy", "hunter"))
+    age_h = _age_hours(pos.entry_timestamp, now)
     ind = _indicators(bars_4h)
 
     signals: list[ExitSignal] = []

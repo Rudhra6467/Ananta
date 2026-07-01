@@ -586,3 +586,33 @@ after redeploy for a clean Phase-F forward-test baseline.
 
 ROADMAP (P2): surface MFE/MAE + exit-module telemetry in the MOBILE app UI (separate change in mobile
 workspace; backend contract already returns the fields). Squeeze retest-depth tuning after live trades.
+
+## Research Lab — Increment 1: Simulator Foundation (2026-06-28)
+GOAL: Offline, credit-free strategy validation. Convert legacy settings into a "Research Lab"
+with a "Strategy Validation" engine. Build order agreed: data store -> reusable replay engine ->
+injectable clock -> realistic fills -> reporting/WFA -> UI -> approval gate.
+
+SHIPPED (foundation):
+- `backend/lab/data_store.py` — SQLite (WAL) at /app/backend/data/historical_candles.db,
+  table candles(symbol,timeframe,ts,o,h,l,c,v) UNIQUE(symbol,timeframe,ts); idempotent
+  INSERT OR IGNORE; CCXT paginated backfill (Kraken->Coinbase); append_latest for daily cron.
+- `backend/lab/backtest.py` — deterministic replay that REUSES live functions (classify_regime,
+  route, evaluate_primary, evaluate_squeeze, evaluate_exit_engine) = parity guaranteed. Entry at
+  next-bar OPEN (no look-ahead), pessimistic intrabar exits (LOW pass for stop/trail, CLOSE pass
+  for F/B/D/E), taker fee + 0.05% slippage, 200-bar warmup. Reports: total return, win rate,
+  max DD, avg MFE/MAE, exit-module (A-F) breakdown, regime breakdown, per-trade Trade Quality
+  Score v1 (0.5*capture + 0.3*mae_term + 0.2*hold_eff).
+- `backend/lab/backfill.py` — CLI: `python -m lab.backfill` (watchlist, 4h+1d, ~2y).
+- INJECTABLE CLOCK: exit_engine.evaluate_exit_engine gained `now` + `profile_override` params
+  (BACKWARD-COMPATIBLE; live/prod behaviour unchanged when omitted). Fixes Module E / EMA-settle
+  aging in historical replay. Tests prove no false time-exit.
+- Tests: tests/test_lab_backtest.py (6) + full suite 56 pass; live path unaffected.
+
+DATA LIMITATION (flagged): Kraken/Coinbase free OHLCV cap 4h history at ~720 candles (~120 days).
+Daily (1d) goes back ~2y fine. Options: accept 120d 4h + 2y daily, accumulate 4h forward via the
+daily-append job, or source deeper 4h from another provider later.
+
+USER REFINEMENTS TO IMPLEMENT NEXT (agreed): 60/20/20 Train/Validation/Test, Walk-Forward Analysis,
+regime-segmented Sharpe/DD, parameter sensitivity sweeps (plateau not peak), git-hash + full inputs
+per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manual approval gate
+(lab_param_proposals -> owner "Apply to Production"), standalone PDF, Research Lab UI.
