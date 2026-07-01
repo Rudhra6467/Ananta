@@ -616,3 +616,15 @@ USER REFINEMENTS TO IMPLEMENT NEXT (agreed): 60/20/20 Train/Validation/Test, Wal
 regime-segmented Sharpe/DD, parameter sensitivity sweeps (plateau not peak), git-hash + full inputs
 per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manual approval gate
 (lab_param_proposals -> owner "Apply to Production"), standalone PDF, Research Lab UI.
+
+## Research Lab — Deep history seeding via Binance (2026-06-28)
+- `backend/lab/seed_history.py`: FREE/keyless deep-history seeder.
+  * seed_from_binance() — pulls monthly 4h/1d kline CSVs from data.binance.vision
+    (USD->USDT map; RENDER falls back to RNDR). Normalises ms/micro/sec timestamps.
+  * seed_from_csv() — parses uploaded CryptoDataDownload / generic OHLCV CSVs.
+- SEEDED: all 10 watchlist symbols, ~2 years each: 4h ~4200-4385 bars, 1d ~675-731 bars,
+  into /app/backend/data/historical_candles.db. Detaches us from Kraken's 120-day 4h cap.
+- CCXT lab.data_store.append_latest() verified to top up the current-month tail (nightly).
+- Validated: 1-yr replays BTC(112 trades)/ETH(108) with full A-F + regime breakdowns.
+- Run manually to (re)seed: `python -m lab.seed_history`  (idempotent).
+- Tests: tests/test_lab_seed.py (3) pass.
