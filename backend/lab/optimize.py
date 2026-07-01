@@ -79,12 +79,14 @@ def _run(symbols: list[str], start_ms: int, end_ms: int, so: dict, po: dict) -> 
 
 
 def grid_search(symbols, start_ms, end_ms, grid: dict, metric: str = "return_over_dd",
-                min_trades: int = MIN_TRADES) -> dict:
+                min_trades: int = MIN_TRADES, progress_cb=None) -> dict:
     """Sweep the full grid over [start_ms, end_ms]; return combos ranked by `metric`."""
     if isinstance(symbols, str):
         symbols = [symbols]
+    combos = _expand(grid)
+    total = len(combos) or 1
     results = []
-    for combo in _expand(grid):
+    for idx, combo in enumerate(combos):
         so, po = _split_overrides(combo)
         summ = _run(symbols, start_ms, end_ms, so, po)
         m = _metric(summ, metric) if summ["trades"] >= min_trades else -1e9
@@ -92,15 +94,18 @@ def grid_search(symbols, start_ms, end_ms, grid: dict, metric: str = "return_ove
                         "trades": summ["trades"], "total_return_pct": summ.get("total_return_pct"),
                         "win_rate_pct": summ.get("win_rate_pct"),
                         "max_drawdown_pct": summ.get("max_drawdown_pct")})
+        if progress_cb:
+            progress_cb((idx + 1) / total)
     ranked = sorted(results, key=lambda x: (x["metric"] is not None, x["metric"] or -1e9), reverse=True)
     return {"metric": metric, "combos_tested": len(results), "best": ranked[0] if ranked else None,
             "ranked": ranked}
 
 
 def sensitivity(symbols, start_ms, end_ms, target: str, values: list,
-                metric: str = "total_return_pct", min_trades: int = MIN_TRADES) -> dict:
+                metric: str = "total_return_pct", min_trades: int = MIN_TRADES,
+                progress_cb=None) -> dict:
     """Vary a SINGLE parameter across `values`; expose plateau (robust) vs cliff (fragile)."""
-    gs = grid_search(symbols, start_ms, end_ms, {target: values}, metric, min_trades)
+    gs = grid_search(symbols, start_ms, end_ms, {target: values}, metric, min_trades, progress_cb)
     curve = [{"value": r["params"][target], "metric": r["metric"], "trades": r["trades"],
               "total_return_pct": r["total_return_pct"]} for r in gs["ranked"]]
     curve.sort(key=lambda x: x["value"])
@@ -135,7 +140,7 @@ def _usable_window(symbols: list[str], timeframe: str = "4h") -> tuple[int, int]
 
 
 def walk_forward(symbols, grid: dict, folds: int = 5, metric: str = "return_over_dd",
-                 min_trades: int = MIN_TRADES) -> dict:
+                 min_trades: int = MIN_TRADES, progress_cb=None) -> dict:
     """Rolling In-Sample optimize -> Out-of-Sample test. Each fold optimizes on a train
     block then evaluates the FROZEN best params on the next (unseen) test block."""
     if isinstance(symbols, str):
@@ -173,6 +178,8 @@ def walk_forward(symbols, grid: dict, folds: int = 5, metric: str = "return_over
             "oos_metric": round(oos_m, 4) if oos_m is not None else None,
             "oos_trades": oos["trades"], "oos_return_pct": oos.get("total_return_pct"),
         })
+        if progress_cb:
+            progress_cb((k + 1) / folds)
 
     avg_is = round(statistics.mean(is_metrics), 4) if is_metrics else None
     avg_oos = round(statistics.mean(oos_metrics), 4) if oos_metrics else None

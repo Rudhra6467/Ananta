@@ -79,6 +79,11 @@ position_watcher = PositionWatcher(db, default_interval=15)
 research_resolver = ResearchResolverLoop(db, interval_seconds=600)
 shadow_watcher = ShadowWatcherLoop(db, interval_seconds=30)
 
+# Research Lab: async job queue worker (offline backtests / sweeps / walk-forward)
+from lab.runner import LabWorker, create_run  # noqa: E402
+
+lab_worker = LabWorker(db)
+
 
 # ---------- request/response models ----------
 class SettingsUpdate(BaseModel):
@@ -1297,6 +1302,79 @@ async def report_reasoning_pdf(limit: int = Query(200, le=1000)):
     )
 
 
+# ---- Research Lab: async validation queue ----
+class LabRunCreate(BaseModel):
+    kind: str  # backtest | grid_search | sensitivity | walk_forward
+    symbols: list[str]
+    period: str = "3m"  # 1m|2m|3m|quarter|6m|1y|2y|custom
+    start_ms: int | None = None
+    end_ms: int | None = None
+    metric: str = "return_over_dd"
+    folds: int = 5
+    min_trades: int = 8
+    grid: dict | None = None
+    setting_overrides: dict | None = None
+    profile_overrides: dict | None = None
+    target: str | None = None
+    values: list | None = None
+    label: str | None = None
+
+
+@api_router.get("/lab/data/coverage", dependencies=[Depends(require_owner)])
+async def lab_data_coverage():
+    """What history is seeded locally (drives the Research Lab asset/period pickers)."""
+    from lab import data_store
+    from lab.runner import _PERIOD_MONTHS  # noqa
+    watch = (await load_settings(db)).enabled_symbols or []
+    default = ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "XRP/USD",
+               "PAXG/USD", "LINK/USD", "AAVE/USD", "ARB/USD", "RENDER/USD"]
+    syms = watch or default
+    out = []
+    for s in syms:
+        c4 = data_store.coverage(s, "4h")
+        c1 = data_store.coverage(s, "1d")
+        out.append({"symbol": s, "bars_4h": c4["count"], "bars_1d": c1["count"],
+                    "from": c4["min_ts"], "to": c4["max_ts"]})
+    return {"symbols": out, "periods": list(_PERIOD_MONTHS.keys()) + ["custom"]}
+
+
+@api_router.post("/lab/runs", dependencies=[Depends(require_owner)])
+async def lab_create_run(body: LabRunCreate):
+    try:
+        doc = await create_run(db, body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"id": doc["id"], "status": doc["status"], "kind": doc["kind"]}
+
+
+@api_router.get("/lab/runs", dependencies=[Depends(require_owner)])
+async def lab_list_runs(limit: int = Query(30, le=100)):
+    cur = db.lab_runs.find({}, {"_id": 0, "result": 0}).sort("created_at", -1).limit(limit)
+    return {"runs": await cur.to_list(length=limit)}
+
+
+@api_router.get("/lab/runs/{run_id}", dependencies=[Depends(require_owner)])
+async def lab_get_run(run_id: str):
+    run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    return run
+
+
+@api_router.get("/lab/runs/{run_id}/pdf", dependencies=[Depends(require_owner)])
+async def lab_run_pdf(run_id: str):
+    run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.get("status") != "DONE":
+        raise HTTPException(status_code=409, detail=f"run not finished (status={run.get('status')})")
+    from lab.lab_report import build_lab_report
+    pdf_bytes = build_lab_report(run)
+    fname = f"ananta_lab_{run['kind']}_{run_id[:8]}.pdf"
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 # ---- mount router and CORS ----
 app.include_router(api_router)
 app.add_middleware(
@@ -1320,6 +1398,7 @@ async def on_startup():
     position_watcher.start()
     research_resolver.start()
     shadow_watcher.start()
+    lab_worker.start()
     # Heavy index builds + first cache compute run OFF the boot path so the backend
     # becomes healthy instantly even on a large production DB (avoids boot-probe timeouts).
     asyncio.create_task(_background_warmup())
@@ -1357,4 +1436,5 @@ async def on_shutdown():
     await position_watcher.stop()
     await research_resolver.stop()
     await shadow_watcher.stop()
+    await lab_worker.stop()
     client.close()

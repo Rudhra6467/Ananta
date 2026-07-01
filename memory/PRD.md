@@ -642,3 +642,21 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
 - run_backtest signature: profile_override -> profile_overrides {strategy:{field:val}} (per-strategy).
 - Validated on real seeded data (sensitivity + 3-fold WFA on BTC). Tests: test_lab_optimize.py (5) pass;
   full lab+exit suites green.
+
+## Research Lab — Increment: Async Job Queue + PDF Export (2026-07-01)
+- `backend/lab/runner.py`: LabWorker (background asyncio task, single-worker ThreadPool)
+  polls `lab_runs` for QUEUED jobs, runs ONE at a time off the request path, streams
+  progress_pct to Mongo, stores result. create_run() validates + persists with git_hash +
+  resolved window. Recovers stuck RUNNING->QUEUED on boot. Kinds: backtest/grid_search/
+  sensitivity/walk_forward. Period dropdown (1m/2m/3m/quarter/6m/1y/2y/custom) -> window.
+- `backend/lab/lab_report.py`: standalone PDF (reuses pdf_report styling) — config+git
+  provenance, then kind-specific section (backtest metrics + exit-module A-F + regime;
+  grid ranking; sensitivity curve+verdict; walk-forward folds + WFA efficiency + verdict).
+- optimize.grid_search/sensitivity/walk_forward gained progress_cb.
+- server.py endpoints (owner-gated): GET /api/lab/data/coverage, POST /api/lab/runs,
+  GET /api/lab/runs, GET /api/lab/runs/{id}, GET /api/lab/runs/{id}/pdf. LabWorker started/
+  stopped in lifecycle.
+- VERIFIED e2e via curl: create walk_forward -> progress 33->67->100 -> DONE (git recorded)
+  -> valid PDF (4KB). Tests: test_lab_runner.py (7) + full lab suite 37 pass. No live regression.
+- REMAINING: Research Lab UI (config -> queue -> progress -> download; dual-track Validate
+  Current/Fresh Values) + manual approval gate (lab_param_proposals -> Apply to Production).
