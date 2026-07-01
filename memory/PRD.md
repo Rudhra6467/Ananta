@@ -628,3 +628,17 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
 - Validated: 1-yr replays BTC(112 trades)/ETH(108) with full A-F + regime breakdowns.
 - Run manually to (re)seed: `python -m lab.seed_history`  (idempotent).
 - Tests: tests/test_lab_seed.py (3) pass.
+
+## Research Lab — Increment: Walk-Forward + Parameter Sensitivity (2026-06-28)
+- `backend/lab/optimize.py` (pure compute, credit-free):
+  * grid_search(symbols,start,end,grid,metric) — Cartesian sweep, ranked combos (see plateau).
+  * sensitivity(target,values) — vary ONE param; verdict ROBUST(plateau)/FRAGILE(cliff) via CV.
+  * walk_forward(grid,folds) — rolling IS-optimize -> OOS-test; reports wfa_efficiency (OOS/IS),
+    oos_positive_folds, verdict (ROBUST / WEAK-OVERFIT / NO-IN-SAMPLE-EDGE / INCONCLUSIVE).
+  * Grid keys are prefixed: "set:<field>" (RiskSettings) or "prof:<strategy>:<field>" (exit profile),
+    so sweeps can target Hunter/Squeeze exit profiles or entry/risk settings independently.
+- PERF/PARITY: run_backtest now uses a bounded ANALYSIS_LOOKBACK=540 trailing window (matches the
+  live ~540-bar fetch limit) -> full 2y BTC replay ~12s (was O(N^2)/timeout). Also bounded zone calc.
+- run_backtest signature: profile_override -> profile_overrides {strategy:{field:val}} (per-strategy).
+- Validated on real seeded data (sensitivity + 3-fold WFA on BTC). Tests: test_lab_optimize.py (5) pass;
+  full lab+exit suites green.

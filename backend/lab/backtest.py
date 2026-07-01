@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 
 from exit_engine import (
     ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN,
-    PARTIAL_FRACTION, evaluate_exit_engine,
+    PARTIAL_FRACTION, evaluate_exit_engine, get_profile,
 )
+from dataclasses import replace as _dc_replace
 from levels import compute_levels, nearest_support
 from models import Position, Portfolio, RiskSettings
 from primary_layer import evaluate_primary
@@ -34,6 +35,7 @@ logger = logging.getLogger("ananta.lab.backtest")
 
 _O, _H, _L, _C, _V = 1, 2, 3, 4, 5
 WARMUP_BARS = 200          # EMA200 / regime need deep history before the test window
+ANALYSIS_LOOKBACK = 540    # trailing bars fed to strategy fns — MATCHES live (fetch limit ~540)
 SLIPPAGE_PCT = 0.05        # per-leg synthetic slippage (%)
 
 
@@ -59,12 +61,15 @@ def run_backtest(
     end_ms: int,
     settings: RiskSettings | None = None,
     setting_overrides: dict | None = None,
-    profile_override=None,
+    profile_overrides: dict | None = None,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms]. Returns trades + aggregate metrics.
 
-    `setting_overrides` patches RiskSettings fields (Option B sweeps on stop/arm/etc.).
-    `profile_override` swaps the exit StrategyProfile (ATR mult / profit-arm sweeps).
+    `setting_overrides` patches RiskSettings fields (stop_loss_pct, trail_arm_pct,
+    rsi_reset_max, ... — Option B / sweeps on entry & risk params).
+    `profile_overrides` = {strategy: {field: value}} patches the exit StrategyProfile
+    per strategy (e.g. {"squeeze": {"trail_atr_mult": 2.0}}). Both keep live behaviour
+    unchanged when omitted.
     """
     s = settings or RiskSettings()
     if setting_overrides:
@@ -92,12 +97,11 @@ def run_backtest(
     max_dd = 0.0
     zone_cache: dict[int, list[dict]] = {}
 
-    def _zones_at(ts_ms: int) -> list[dict]:
+    def _zones_at(ts_ms: int, hwin: list) -> list[dict]:
         day = ts_ms // 86_400_000
         if day not in zone_cache:
-            d_bars = [d for d in daily if d[0] <= ts_ms]        # point-in-time, no look-ahead
-            h_bars = [b for b in bars if b[0] <= ts_ms]
-            zone_cache[day] = compute_levels(d_bars, h_bars) if d_bars else []
+            d_bars = [d for d in daily if d[0] <= ts_ms][-ANALYSIS_LOOKBACK:]  # point-in-time, no look-ahead
+            zone_cache[day] = compute_levels(d_bars, hwin) if d_bars else []
         return zone_cache[day]
 
     def _close(exit_price: float, module, reason, ts, frac: float):
@@ -128,7 +132,7 @@ def run_backtest(
 
     for i in range(start_idx, end_idx):
         bar = bars[i]
-        window = bars[: i + 1]            # closed bars only
+        window = bars[max(0, i + 1 - ANALYSIS_LOOKBACK): i + 1]   # bounded trailing window (parity w/ live)
         px = bar[_C]
 
         # ---- manage an open position on THIS bar (before considering new entries) ----
@@ -139,15 +143,20 @@ def run_backtest(
             pos.mae_pct = round((pos.trough_price - pos.avg_cost) / pos.avg_cost * 100, 4)
             now_dt = _dt(bar[0])
 
+            # per-strategy exit-profile override (sweeps): patch the live profile
+            pos_profile = None
+            if profile_overrides and pos.strategy in profile_overrides:
+                pos_profile = _dc_replace(get_profile(pos.strategy), **profile_overrides[pos.strategy])
+
             # pessimistic pass 1: feed the LOW to catch hard-stop / trail breaches
-            d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=profile_override)
+            d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=pos_profile)
             if d_low.action == ACT_EXIT_FULL and d_low.module in ("A", "C", "KILL"):
                 lvl = d_low.stop_price if d_low.stop_price is not None else bar[_L]
                 _close(lvl, d_low.module, d_low.exit_reason, bar[0], 1.0)
                 pos = None
             else:
                 # pass 2: bar CLOSE handles upside modules (F tighten, B partial, D, E)
-                d = evaluate_exit_engine(pos, px, window, s, now=now_dt, profile_override=profile_override)
+                d = evaluate_exit_engine(pos, px, window, s, now=now_dt, profile_override=pos_profile)
                 if d.action == ACT_TIGHTEN and d.new_floor:
                     pos.locked_profit_floor = d.new_floor
                 elif d.action == ACT_EXIT_PARTIAL:
@@ -164,7 +173,7 @@ def run_backtest(
             regime = classify_regime(window)
             strategy = entry_profile = struct_stop = None
             if hunter_allowed(regime.regime):
-                zones = _zones_at(bar[0])
+                zones = _zones_at(bar[0], window)
                 sig = evaluate_primary(symbol, px, window, zones, s, regime=regime)
                 if sig.triggered:
                     strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
