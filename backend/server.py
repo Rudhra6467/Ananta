@@ -52,7 +52,7 @@ from analytics import compute_performance, graduation_readiness, regime_insight,
 from auth import authenticate, is_owner_request, require_owner, seed_owner
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
-from market_data import fetch_snapshot, fetch_snapshots
+from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, warm_snapshots
 from models import MarketSnapshot
 from news_source import get_cache_info, get_current_summary
 from position_watcher import PositionWatcher
@@ -141,7 +141,7 @@ async def root():
 @api_router.get("/market/snapshots")
 async def market_snapshots():
     settings = await load_settings(db)
-    snaps = await fetch_snapshots(settings.enabled_symbols)
+    snaps = await fetch_snapshots_cached(settings.enabled_symbols)
     return {"symbols": settings.enabled_symbols, "snapshots": [s.model_dump() for s in snaps]}
 
 
@@ -160,7 +160,7 @@ async def get_portfolio():
     portfolio = await load_portfolio(db)
     settings = await load_settings(db)
     # compute live equity using latest prices
-    snaps = await fetch_snapshots([p.symbol for p in portfolio.positions]) if portfolio.positions else []
+    snaps = await fetch_snapshots_cached([p.symbol for p in portfolio.positions]) if portfolio.positions else []
     price_map = {s.symbol: s.price for s in snaps}
     live_positions: list[dict] = []
     positions_value = 0.0
@@ -1488,6 +1488,26 @@ async def _background_warmup():
     with contextlib.suppress(Exception):
         await compute_research_cache()
     asyncio.create_task(research_cache_loop())
+    # Warm the market-snapshot cache immediately + keep it fresh so /portfolio and
+    # /market/snapshots serve from memory (<5ms) instead of blocking on exchange calls.
+    with contextlib.suppress(Exception):
+        settings = await load_settings(db)
+        await warm_snapshots(settings.enabled_symbols)
+    asyncio.create_task(_snapshot_warm_loop())
+
+
+async def _snapshot_warm_loop():
+    """Refresh enabled + open-position symbols every few seconds so the API fast path
+    always has warm ticker data. Runs off the request path — purely credit-free public data."""
+    while True:
+        try:
+            settings = await load_settings(db)
+            portfolio = await load_portfolio(db)
+            syms = list({*settings.enabled_symbols, *[p.symbol for p in portfolio.positions]})
+            await warm_snapshots(syms)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("snapshot warm loop tick failed: %s", e)
+        await asyncio.sleep(5)
 
 
 @app.on_event("shutdown")

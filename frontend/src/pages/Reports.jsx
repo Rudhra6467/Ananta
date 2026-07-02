@@ -119,9 +119,8 @@ export default function Reports() {
                 <StagedExitCard data={staged} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
                 <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
-                <SetupFunnel funnel={funnel} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -491,57 +490,6 @@ function ZoneEffectiveness({ data }) {
                     </tbody>
                 </table>
             )}
-        </div>
-    );
-}
-
-/* ---------------- Setup Funnel ---------------- */
-function SetupFunnel({ funnel }) {
-    const f = funnel?.funnel;
-    if (!f) {
-        return (
-            <div className="panel p-6" data-testid="setup-funnel">
-                <div className="font-heading font-medium text-lg text-atlas-text">Setup Funnel</div>
-                <div className="font-mono text-xs text-atlas-textSecondary py-6 text-center">No evaluations logged yet.</div>
-            </div>
-        );
-    }
-    const breaker = f.breaker || { PASS: 0, CAUTION: 0, VETO: 0 };
-    const stages = [
-        { key: "detected", label: "Detected", value: f.detected, color: "#C0C5CE" },
-        { key: "qualified", label: "Qualified (Hunter)", value: f.qualified, color: "#8FA0B8" },
-        { key: "pass", label: "Breaker · PASS", value: breaker.PASS, color: "#10B981" },
-        { key: "executed", label: "Executed (PAPER)", value: f.executed, color: "#34D399" },
-    ];
-    const max = Math.max(1, f.detected || 0);
-    return (
-        <div className="panel p-6" data-testid="setup-funnel">
-            <div className="flex items-baseline justify-between mb-1">
-                <div className="font-heading font-medium text-lg text-atlas-text">Setup Funnel</div>
-                <div className="font-mono text-[10px] text-atlas-textTertiary">Detected → Qualified → Breaker → Executed</div>
-            </div>
-            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mb-4">Capital-flow attrition through the pipeline</div>
-            <div className="space-y-3">
-                {stages.map((s) => (
-                    <div key={s.key} data-testid={`funnel-${s.key}`}>
-                        <div className="flex items-center justify-between font-mono text-xs mb-1">
-                            <span className="text-atlas-textSecondary">{s.label}</span>
-                            <span className="text-atlas-text tabular-nums">{s.value}</span>
-                        </div>
-                        <div className="h-2.5 bg-atlas-bg rounded overflow-hidden">
-                            <div className="h-full rounded transition-all" style={{ width: `${((s.value || 0) / max) * 100}%`, background: s.color }} />
-                        </div>
-                    </div>
-                ))}
-            </div>
-            <div className="mt-4 pt-4 border-t border-atlas-border grid grid-cols-3 gap-2 text-center font-mono">
-                {["PASS", "CAUTION", "VETO"].map((st) => (
-                    <div key={st} data-testid={`funnel-breaker-${st}`}>
-                        <div className={`text-lg font-bold tabular-nums ${st === "PASS" ? "text-atlas-positive" : st === "CAUTION" ? "text-atlas-text" : "text-atlas-negative"}`}>{breaker[st] ?? 0}</div>
-                        <div className="text-[9px] uppercase tracking-widest text-atlas-textTertiary mt-0.5">{st}</div>
-                    </div>
-                ))}
-            </div>
         </div>
     );
 }

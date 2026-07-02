@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, Brain, ChevronDown, ChevronRight, RefreshCw, Trophy, Scale } from "lucide-react";
 import {
     Bar,
     BarChart,
@@ -12,9 +12,11 @@ import {
     YAxis,
 } from "recharts";
 import api from "@/lib/api";
+import { useAppData } from "@/context/AppDataContext";
 import CandleChart from "@/components/CandleChart";
 import ManualExitButton from "@/components/ManualExitButton";
 import WatchlistControl from "@/components/WatchlistControl";
+import ReasoningTimeline from "@/components/ReasoningTimeline";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 
 const SILVER = "#C0C5CE";
@@ -23,33 +25,10 @@ const ROSE = "#F43F5E";
 const MUTED = "#5C6370";
 
 export default function Dashboard() {
-    const [portfolio, setPortfolio] = useState(null);
-    const [snapshots, setSnapshots] = useState([]);
-    const [enabledSymbols, setEnabledSymbols] = useState([]);
+    const { portfolio, snapshots, enabledSymbols, trades, brain, summary, regime, reasoning, refresh } = useAppData();
     const [selected, setSelected] = useState(null);
     const [candles, setCandles] = useState([]);
     const [loadingChart, setLoadingChart] = useState(false);
-    const [brain, setBrain] = useState(null);
-    const [regime, setRegime] = useState("—");
-    const [summary, setSummary] = useState(null);
-    const [trades, setTrades] = useState([]);
-
-    const refreshAll = () => {
-        api.portfolio().then(setPortfolio).catch(() => {});
-        api.marketSnapshots().then((s) => setSnapshots(s.snapshots || [])).catch(() => {});
-        api.settings().then((st) => st?.enabled_symbols && setEnabledSymbols(st.enabled_symbols)).catch(() => {});
-        api.researchRejections(24).then(setBrain).catch(() => {});
-        api.researchSummary().then(setSummary).catch(() => {});
-        api.trades(100).then((t) => setTrades(t.items || [])).catch(() => {});
-        api.reasoning(1).then((d) => d.items?.[0] && setRegime(d.items[0].bias || "NEUTRAL")).catch(() => {});
-    };
-
-    useEffect(() => {
-        refreshAll();
-        const t1 = setInterval(() => api.marketSnapshots().then((s) => setSnapshots(s.snapshots || [])).catch(() => {}), 8000);
-        const t2 = setInterval(refreshAll, 15000);
-        return () => { clearInterval(t1); clearInterval(t2); };
-    }, []);
 
     useEffect(() => {
         if (!selected && enabledSymbols.length) setSelected(enabledSymbols[0]);
@@ -66,19 +45,12 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-6" data-testid="cockpit-page">
-            <ExecutiveHeader
-                portfolio={portfolio}
-                brain={brain}
-                regime={regime}
-                scanned={enabledSymbols.length}
-                onRefresh={refreshAll}
-            />
+            <ExecutiveHeader portfolio={portfolio} brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
-            <OpenPositionsSnapshot portfolio={portfolio} onDone={refreshAll} />
-            <AnalyticsCarousel summary={summary} />
-            <LeaderboardAnalytics trades={trades} />
-            <Footer portfolio={portfolio} brain={brain} trades={trades} />
+            <TradeLifecyclePanel portfolio={portfolio} />
+            <AnalyticsGroup summary={summary} trades={trades} reasoning={reasoning} regime={regime} />
+            <ConsolidatedPositions portfolio={portfolio} trades={trades} onDone={refresh} />
         </div>
     );
 }
@@ -102,7 +74,6 @@ function ExecutiveHeader({ portfolio, brain, regime, scanned, onRefresh }) {
 
     return (
         <div className="panel p-6 md:p-8" data-testid="executive-header">
-            {/* Row A — Portfolio */}
             <div className="flex flex-wrap items-end justify-between gap-6">
                 <div>
                     <div className="label-tag">ACCOUNT VALUE</div>
@@ -111,21 +82,17 @@ function ExecutiveHeader({ portfolio, brain, regime, scanned, onRefresh }) {
                     </div>
                 </div>
                 <div className="flex items-end gap-8">
-                    <HeaderStat label="DEPLOYED" testid="deployed-positions"
-                        value={`$${positionsValue.toFixed(2)}`} sub={`(${slots})`} />
+                    <HeaderStat label="DEPLOYED" testid="deployed-positions" value={`$${positionsValue.toFixed(2)}`} sub={`(${slots})`} />
                     <HeaderStat label="TOTAL P&L" testid="total-pnl" valueClass={pnlCls}
                         value={`${up ? "+" : ""}$${totalPnl.toFixed(2)}`} sub={`${up ? "+" : ""}${totalPct.toFixed(2)}%`} />
                     <HeaderStat label="DAILY P&L" testid="daily-pnl"
                         valueClass={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"}
                         value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`} />
-                    <button data-testid="cockpit-refresh" onClick={onRefresh}
-                        className="text-atlas-textSecondary hover:text-atlas-text transition-colors mb-1">
+                    <button data-testid="cockpit-refresh" onClick={onRefresh} className="text-atlas-textSecondary hover:text-atlas-text transition-colors mb-1">
                         <RefreshCw className="w-4 h-4" />
                     </button>
                 </div>
             </div>
-
-            {/* Row B — Bot Brain */}
             <div className="mt-6 pt-4 border-t border-atlas-border flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs" data-testid="bot-brain-strip">
                 <BrainStat label="Scanned" value={scanned} />
                 <Sep />
@@ -156,45 +123,45 @@ function BrainStat({ label, value, valueClass = "text-atlas-text" }) {
 }
 const Sep = () => <span className="text-atlas-border">|</span>;
 
-/* ---------------- Watchlist Ribbon ---------------- */
+/* ---------------- Watchlist Ribbon — compact single-line selector ---------------- */
 function WatchlistRibbon({ snapshots, symbols, selected, onSelect }) {
     const priceMap = useMemo(() => Object.fromEntries(snapshots.map((s) => [s.symbol, s])), [snapshots]);
+    const sel = selected ? priceMap[selected] : null;
+    const chg = sel?.change_24h_pct ?? null;
+    const fmt = (p) => (p == null ? "—" : `$${p.toLocaleString(undefined, { minimumFractionDigits: p < 10 ? 4 : 2, maximumFractionDigits: p < 10 ? 4 : 2 })}`);
     return (
-        <div data-testid="watchlist-ribbon">
-            <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                <div className="label-tag">WATCHLIST · {symbols.length}</div>
-                <WatchlistControl />
+        <div className="panel px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="watchlist-ribbon">
+            <div className="flex items-center gap-3 min-w-0">
+                <span className="label-tag shrink-0">WATCHLIST</span>
+                <select
+                    data-testid="watchlist-select"
+                    value={selected || ""}
+                    onChange={(e) => onSelect(e.target.value)}
+                    className="bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm font-bold text-atlas-text focus:border-atlas-cyan outline-none"
+                >
+                    {symbols.map((sym) => {
+                        const s = priceMap[sym];
+                        const base = sym.split("/")[0];
+                        return <option key={sym} value={sym}>{base}{s ? ` · ${fmt(s.price)}` : ""}</option>;
+                    })}
+                </select>
+                {sel && (
+                    <span className="font-mono text-sm tabular-nums text-atlas-textSecondary flex items-center gap-2">
+                        {fmt(sel.price)}
+                        {chg != null && (
+                            <span className={`text-xs font-bold ${chg > 0 ? "text-atlas-positive" : chg < 0 ? "text-atlas-negative" : "text-atlas-textTertiary"}`}>
+                                {chg > 0 ? "+" : ""}{chg.toFixed(2)}%
+                            </span>
+                        )}
+                    </span>
+                )}
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 atlas-scroll">
-                {symbols.map((sym) => {
-                    const s = priceMap[sym];
-                    const sel = selected === sym;
-                    const base = sym.split("/")[0];
-                    return (
-                        <button
-                            key={sym}
-                            data-testid={`watchlist-card-${base}`}
-                            onClick={() => onSelect(sym)}
-                            className={`shrink-0 min-w-[140px] text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                                sel ? "border-atlas-cyan bg-atlas-panelHover shadow-[0_0_0_1px_rgba(96,165,250,0.4),0_0_18px_-4px_rgba(96,165,250,0.5)]" : "border-atlas-border bg-atlas-panel hover:bg-atlas-panelHover"
-                            }`}
-                        >
-                            <div className="font-mono font-bold text-sm text-atlas-text">{base}</div>
-                            <div className="font-mono text-sm tabular-nums text-atlas-textSecondary mt-1">
-                                {s ? `$${s.price.toFixed(s.price < 10 ? 4 : 2)}` : "—"}
-                            </div>
-                            <div className="font-mono text-[10px] tabular-nums text-atlas-textTertiary mt-0.5">
-                                {s ? `spread ${(s.spread_pct || 0).toFixed(3)}%` : ""}
-                            </div>
-                        </button>
-                    );
-                })}
-            </div>
+            <WatchlistControl />
         </div>
     );
 }
 
-/* ---------------- Chart Drawer (button → bottom drawer) ---------------- */
+/* ---------------- Chart Drawer ---------------- */
 function ChartDrawer({ selected, candles, loading }) {
     return (
         <Drawer>
@@ -224,73 +191,162 @@ function ChartDrawer({ selected, candles, loading }) {
     );
 }
 
-/* ---------------- Open Positions Snapshot ---------------- */
-function OpenPositionsSnapshot({ portfolio, onDone }) {
-    const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
+/* ---------------- Trade Life Cycle — one live progress line per open trade ---------------- */
+const LC_STEPS = ["Entered", "In Profit", "Trail Armed", "Exit Watch"];
+
+function LifecycleRow({ p }) {
+    const base = p.symbol.split("/")[0];
+    const avg = p.avg_cost || 0;
+    const last = p.last_price || avg;
+    const peak = p.peak_price || Math.max(last, avg);
+    const stop = p.structural_stop || avg * 0.95;
+    const pnl = p.unrealized_pnl || 0;
+    const gainPct = avg > 0 ? ((last - avg) / avg) * 100 : 0;
+    const peakGainPct = avg > 0 ? ((peak - avg) / avg) * 100 : 0;
+    const pullbackPct = peak > 0 ? ((peak - last) / peak) * 100 : 0;
+    const distStopPct = last > 0 ? ((last - stop) / last) * 100 : 0;
+
+    let active = 0;
+    if (gainPct > 0) active = 1;
+    if (peakGainPct >= 1.5) active = 2;
+    if (pullbackPct >= 1 || (distStopPct <= 1 && distStopPct >= -50)) active = 3;
+
+    // marker position of current price within [stop, peak]
+    const lo = Math.min(stop, avg, last), hi = Math.max(peak, last);
+    const frac = hi > lo ? Math.min(1, Math.max(0, (last - lo) / (hi - lo))) : 0.5;
+    const entryFrac = hi > lo ? Math.min(1, Math.max(0, (avg - lo) / (hi - lo))) : 0.5;
+    const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
+
     return (
-        <div className="panel overflow-hidden" data-testid="open-positions-snapshot">
-            <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
-                <div className="label-tag">OPEN POSITIONS SNAPSHOT</div>
-                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} active</span>
+        <div data-testid={`lifecycle-row-${base}`}>
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-sm text-atlas-text">{base}</span>
+                    {p.breakout_mode && <span className="text-[9px] text-atlas-cyan font-bold">BO</span>}
+                </div>
+                <span className={`font-mono text-sm font-bold tabular-nums ${pnlCls}`}>
+                    {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({gainPct >= 0 ? "+" : ""}{gainPct.toFixed(2)}%)</span>
+                </span>
             </div>
-            {positions.length === 0 ? (
-                <div className="p-8 text-center font-mono text-xs text-atlas-textSecondary" data-testid="snapshot-zero-state">
-                    No open positions. The Hunter is evaluating support zones.
+            {/* stepper */}
+            <div className="flex items-center">
+                {LC_STEPS.map((s, i) => (
+                    <div key={s} className="flex items-center flex-1 last:flex-none">
+                        <div className="flex flex-col items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${i < active ? "bg-atlas-positive" : i === active ? "bg-atlas-cyan glow-cyan" : "bg-atlas-border"}`} />
+                            <span className={`font-mono text-[9px] tracking-wide whitespace-nowrap ${i <= active ? "text-atlas-text" : "text-atlas-textTertiary"}`}>{s}</span>
+                        </div>
+                        {i < LC_STEPS.length - 1 && <div className={`h-px flex-1 mx-2 ${i < active ? "bg-atlas-positive" : "bg-atlas-border"}`} />}
+                    </div>
+                ))}
+            </div>
+            {/* price range: stop --- entry --- current --- peak */}
+            <div className="relative mt-3 h-1.5 rounded-full bg-atlas-bg border border-atlas-border">
+                <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-atlas-negative/40 to-atlas-positive/60" style={{ width: `${frac * 100}%` }} />
+                <span className="absolute -top-0.5 w-2 h-2 rounded-full bg-atlas-textTertiary" style={{ left: `calc(${entryFrac * 100}% - 4px)` }} title={`Entry ${avg}`} />
+                <span className="absolute -top-1 w-3.5 h-3.5 rounded-full bg-atlas-cyan border-2 border-atlas-bg" style={{ left: `calc(${frac * 100}% - 7px)` }} title={`Now ${last}`} />
+            </div>
+            <div className="flex items-center justify-between mt-1.5 font-mono text-[9px] text-atlas-textTertiary tabular-nums">
+                <span>STOP ${stop.toFixed(stop < 10 ? 4 : 2)}</span>
+                <span>PEAK +{peakGainPct.toFixed(1)}%{pullbackPct > 0.05 ? ` · −${pullbackPct.toFixed(1)}% off` : ""}</span>
+            </div>
+        </div>
+    );
+}
+
+function TradeLifecyclePanel({ portfolio }) {
+    const open = (portfolio?.positions || []).filter((p) => p.quantity > 0);
+    return (
+        <div className="panel p-6" data-testid="trade-lifecycle">
+            <div className="flex items-center justify-between mb-4">
+                <div className="label-tag">TRADE LIFE CYCLE</div>
+                <span className="font-mono text-[10px] text-atlas-textTertiary">{open.length} live</span>
+            </div>
+            {open.length === 0 ? (
+                <div className="py-8 text-center font-mono text-xs text-atlas-textSecondary" data-testid="lifecycle-empty">
+                    No live trades. The Hunter is evaluating support zones.
                 </div>
             ) : (
-                <div className="divide-y divide-atlas-border">
-                    {positions.map((p) => {
-                        const base = p.symbol.split("/")[0];
-                        const pnl = p.unrealized_pnl || 0;
-                        const pnlPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
-                        const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
-                        return (
-                            <div key={p.symbol} className="flex items-center justify-between gap-4 px-6 py-3.5" data-testid={`snapshot-row-${base}`}>
-                                <div className="flex items-center gap-4 min-w-0">
-                                    <span className="font-mono font-bold text-sm text-atlas-text w-14">{base}</span>
-                                    <span className="font-mono text-xs tabular-nums text-atlas-textSecondary">${(p.market_value || 0).toFixed(2)}</span>
-                                    <span className="font-mono text-[11px] tabular-nums text-atlas-textTertiary hidden sm:inline">@ ${(p.avg_cost || 0).toFixed(p.avg_cost < 10 ? 4 : 2)}</span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className={`font-mono text-sm font-bold tabular-nums text-right ${pnlCls}`}>
-                                        {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
-                                    </span>
-                                    <ManualExitButton symbol={p.symbol} onDone={onDone} compact />
-                                </div>
-                            </div>
-                        );
-                    })}
+                <div className="space-y-6">
+                    {open.map((p) => <LifecycleRow key={p.symbol} p={p} />)}
                 </div>
             )}
         </div>
     );
 }
 
-/* ---------------- Analytics Carousel ---------------- */
-function AnalyticsCarousel({ summary }) {
-    const trackRef = useRef(null);
-    const scrollBy = (dir) => {
-        const el = trackRef.current;
-        if (el) el.scrollBy({ left: dir * el.clientWidth, behavior: "smooth" });
-    };
+/* ---------------- Analytics group — expandable preview tiles ---------------- */
+function AnalyticsGroup({ summary, trades, reasoning, regime }) {
+    const [expanded, setExpanded] = useState("leaderboard");
+    const sells = (trades || []).filter((t) => t.side === "SELL");
+    const net = sells.reduce((a, t) => a + (t.pnl || 0), 0);
+    const wins = sells.filter((t) => (t.pnl || 0) > 0).length;
     const buckets = summary?.confidence_buckets || [];
     const correct = buckets.reduce((a, b) => a + (b.correct_rejection || 0), 0);
     const missed = buckets.reduce((a, b) => a + (b.missed_opportunity || 0), 0);
 
+    const CARDS = [
+        { id: "leaderboard", title: "Leaderboard & Analytics", icon: Trophy,
+          preview: <PreviewStat main={`${sells.length} closed`} sub={`${net >= 0 ? "+" : ""}$${net.toFixed(2)} net · ${sells.length ? Math.round((wins / sells.length) * 100) : 0}% win`} tone={net >= 0 ? "pos" : "neg"} /> },
+        { id: "counterfactual", title: "Counterfactual Engine", icon: Scale,
+          preview: <PreviewStat main={`${correct + missed} resolved`} sub={`${correct} correct · ${missed} missed`} tone={correct >= missed ? "pos" : "neg"} /> },
+        { id: "reasoning", title: "AI Reasoning", icon: Brain,
+          preview: <PreviewStat main={regime} sub={`${(reasoning || []).length} recent decisions`} tone={regime === "BULLISH" ? "pos" : regime === "BEARISH" ? "neg" : "mut"} /> },
+    ];
+
     return (
-        <div data-testid="analytics-carousel">
-            <div className="flex items-center justify-between mb-2">
-                <div className="label-tag">ANALYTICS</div>
-                <div className="flex gap-1">
-                    <button data-testid="carousel-prev" onClick={() => scrollBy(-1)} className="p-1.5 border border-atlas-border rounded text-atlas-textSecondary hover:text-atlas-text transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                    <button data-testid="carousel-next" onClick={() => scrollBy(1)} className="p-1.5 border border-atlas-border rounded text-atlas-textSecondary hover:text-atlas-text transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                </div>
+        <div data-testid="analytics-group">
+            <div className="label-tag mb-2">ANALYTICS</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {CARDS.map((c) => {
+                    const Icon = c.icon;
+                    const on = expanded === c.id;
+                    return (
+                        <button key={c.id} data-testid={`analytics-preview-${c.id}`}
+                            onClick={() => setExpanded((e) => (e === c.id ? null : c.id))}
+                            className={`panel p-4 text-left transition-all ${on ? "border-atlas-cyan shadow-[0_0_0_1px_rgba(96,165,250,0.4),0_0_18px_-4px_rgba(96,165,250,0.5)]" : "hover:bg-atlas-panelHover"}`}>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Icon className="w-4 h-4 text-atlas-cyan" strokeWidth={2} />
+                                    <span className="font-heading font-medium text-[15px] text-atlas-text">{c.title}</span>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-atlas-textSecondary transition-transform ${on ? "rotate-180" : ""}`} />
+                            </div>
+                            <div className="mt-3">{c.preview}</div>
+                        </button>
+                    );
+                })}
             </div>
-            <div ref={trackRef} className="flex gap-6 overflow-x-auto snap-x snap-mandatory atlas-scroll pb-2">
-                <CarouselSlide title="Counterfactual Engine" subtitle="Correct Rejections vs Missed Opportunities" testid="slide-counterfactual">
-                    {correct + missed === 0 ? (
-                        <EmptyChart text="Awaiting counterfactual resolution (24h/72h/7d)..." />
-                    ) : (
+
+            <div className={`overflow-hidden transition-all duration-300 ease-out ${expanded ? "max-h-[1600px] opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
+                {expanded === "leaderboard" && <LeaderboardAnalytics trades={trades} />}
+                {expanded === "counterfactual" && <CounterfactualPanel summary={summary} correct={correct} missed={missed} />}
+                {expanded === "reasoning" && <ReasoningPanel reasoning={reasoning} />}
+            </div>
+        </div>
+    );
+}
+
+function PreviewStat({ main, sub, tone }) {
+    const cls = tone === "pos" ? "text-atlas-positive" : tone === "neg" ? "text-atlas-negative" : "text-atlas-text";
+    return (
+        <div>
+            <div className={`font-mono text-lg font-bold tabular-nums ${cls}`}>{main}</div>
+            <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{sub}</div>
+        </div>
+    );
+}
+
+/* ---------------- Counterfactual + confidence distribution (expanded) ---------------- */
+function CounterfactualPanel({ summary, correct, missed }) {
+    const buckets = summary?.confidence_buckets || [];
+    return (
+        <section className="panel p-6" data-testid="counterfactual-panel">
+            <div className="font-heading font-medium text-lg text-atlas-text">Counterfactual Engine</div>
+            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Correct rejections vs missed opportunities · confidence distribution</div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    {correct + missed === 0 ? <EmptyChart text="Awaiting counterfactual resolution (24h/72h/7d)..." /> : (
                         <ResponsiveContainer width="100%" height={240}>
                             <PieChart>
                                 <Pie data={[{ name: "Correct Rejections", value: correct }, { name: "Missed Opportunities", value: missed }]}
@@ -303,12 +359,10 @@ function AnalyticsCarousel({ summary }) {
                         </ResponsiveContainer>
                     )}
                     <Legend items={[["Correct Rejections", GREEN, correct], ["Missed Opportunities", ROSE, missed]]} />
-                </CarouselSlide>
-
-                <CarouselSlide title="Confidence Distribution" subtitle="Setups grouped by confidence band" testid="slide-confidence">
-                    {buckets.every((b) => !b.count) ? (
-                        <EmptyChart text="No setups logged yet for this sprint." />
-                    ) : (
+                </div>
+                <div>
+                    <div className="label-tag mb-2">CONFIDENCE DISTRIBUTION</div>
+                    {buckets.every((b) => !b.count) ? <EmptyChart text="No setups logged yet for this sprint." /> : (
                         <ResponsiveContainer width="100%" height={240}>
                             <BarChart data={buckets} margin={{ top: 10, right: 12, bottom: 0, left: -10 }}>
                                 <XAxis dataKey="bucket" tick={{ fill: MUTED, fontSize: 10, fontFamily: "JetBrains Mono" }} stroke="#2A2D35" />
@@ -318,23 +372,29 @@ function AnalyticsCarousel({ summary }) {
                             </BarChart>
                         </ResponsiveContainer>
                     )}
-                </CarouselSlide>
+                </div>
             </div>
-        </div>
+        </section>
     );
 }
 
-function CarouselSlide({ title, subtitle, children, testid }) {
+/* ---------------- AI Reasoning (expanded) ---------------- */
+function ReasoningPanel({ reasoning }) {
     return (
-        <div className="panel p-6 min-w-full snap-center" data-testid={testid}>
-            <div className="font-heading font-medium text-lg text-atlas-text">{title}</div>
-            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">{subtitle}</div>
-            {children}
-        </div>
+        <section className="panel p-6" data-testid="reasoning-panel">
+            <div className="font-heading font-medium text-lg text-atlas-text">AI Reasoning</div>
+            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Latest engine decisions · bias · conviction</div>
+            {(!reasoning || reasoning.length === 0) ? (
+                <EmptyChart text="Awaiting first evaluation cycle..." />
+            ) : (
+                <ReasoningTimeline items={reasoning} />
+            )}
+        </section>
     );
 }
+
 function EmptyChart({ text }) {
-    return <div className="h-[240px] flex items-center justify-center text-atlas-textSecondary font-mono text-xs text-center px-6">{text}</div>;
+    return <div className="h-[200px] flex items-center justify-center text-atlas-textSecondary font-mono text-xs text-center px-6">{text}</div>;
 }
 function Legend({ items }) {
     return (
@@ -379,8 +439,7 @@ function LeaderboardAnalytics({ trades }) {
             else if (property === "drawdown") { if (pnl < 0) add(base, pnl, false); }
         });
         const groups = Object.values(map);
-        const pieData = groups.map((g) => ({ name: g.key, value: property === "drawdown" ? Math.abs(g.net) : g.count }))
-            .filter((d) => d.value > 0);
+        const pieData = groups.map((g) => ({ name: g.key, value: property === "drawdown" ? Math.abs(g.net) : g.count })).filter((d) => d.value > 0);
         const leaders = [...groups].sort((a, b) => property === "drawdown" ? a.net - b.net : b.net - a.net).slice(0, 6);
         const total = pieData.reduce((a, d) => a + d.value, 0);
         return { pieData, leaders, total };
@@ -405,7 +464,6 @@ function LeaderboardAnalytics({ trades }) {
                 <EmptyChart text="No closed trades yet for this breakdown." />
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-                    {/* dynamic pie */}
                     <div data-testid="leaderboard-pie">
                         <ResponsiveContainer width="100%" height={260}>
                             <PieChart>
@@ -417,14 +475,11 @@ function LeaderboardAnalytics({ trades }) {
                         </ResponsiveContainer>
                         <Legend items={pieData.slice(0, 6).map((d, i) => [d.name, PIE_PALETTE[i % PIE_PALETTE.length], d.value])} />
                     </div>
-
-                    {/* leaderboard ranked by net P&L */}
                     <div data-testid="leaderboard-table">
                         <div className="label-tag mb-3">RANKED BY NET P&amp;L</div>
                         <div className="space-y-1.5">
                             {leaders.map((g, i) => (
-                                <div key={g.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border"
-                                    data-testid={`leaderboard-row-${i}`}>
+                                <div key={g.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border" data-testid={`leaderboard-row-${i}`}>
                                     <div className="flex items-center gap-3 min-w-0">
                                         <span className="font-mono text-[11px] text-atlas-textTertiary w-4">{i + 1}</span>
                                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: PIE_PALETTE[i % PIE_PALETTE.length] }} />
@@ -447,41 +502,50 @@ function LeaderboardAnalytics({ trades }) {
     );
 }
 
-/* ---------------- Footer: lifecycle + today's executions ---------------- */
-function Footer({ portfolio, brain, trades }) {
-    const positions = portfolio?.positions || [];
-    const inProfit = positions.some((p) => (p.last_price - p.avg_cost) > 0);
+/* ---------------- Consolidated positions + today's executions (bottom) ---------------- */
+function ConsolidatedPositions({ portfolio, trades, onDone }) {
+    const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
     const today = new Date().toDateString();
     const todays = (trades || []).filter((t) => t.timestamp && new Date(t.timestamp).toDateString() === today);
 
-    const steps = ["Detected", "Qualified", "Entered", "Trailing Armed", "Exited"];
-    let active = 0;
-    if ((brain?.total_evaluations ?? 0) > 0) active = 0;
-    if ((brain?.greenlit ?? 0) > 0) active = 1;
-    if (positions.length > 0) active = 2;
-    if (inProfit) active = 3;
-    if (todays.some((t) => t.side === "SELL")) active = 4;
-
     return (
-        <div className="grid grid-cols-1 gap-6">
-            {/* Lifecycle stepper */}
-            <div className="panel p-6" data-testid="lifecycle-stepper">
-                <div className="label-tag mb-4">TRADE LIFECYCLE</div>
-                <div className="flex items-center">
-                    {steps.map((s, i) => (
-                        <div key={s} className="flex items-center flex-1 last:flex-none">
-                            <div className="flex flex-col items-center gap-2">
-                                <span className={`w-3 h-3 rounded-full ${i < active ? "bg-atlas-positive" : i === active ? "bg-atlas-cyan" : "bg-atlas-border"}`} />
-                                <span className={`font-mono text-[10px] tracking-wide whitespace-nowrap ${i <= active ? "text-atlas-text" : "text-atlas-textTertiary"}`}>{s}</span>
-                            </div>
-                            {i < steps.length - 1 && <div className={`h-px flex-1 mx-2 ${i < active ? "bg-atlas-positive" : "bg-atlas-border"}`} />}
-                        </div>
-                    ))}
-                </div>
+        <div className="panel overflow-hidden" data-testid="consolidated-positions">
+            <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
+                <div className="label-tag">POSITION TRACKER</div>
+                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open · {todays.length} today</span>
             </div>
 
-            {/* Today's executions — collapsed by default to keep the cockpit focused */}
-            <details className="panel group" data-testid="todays-executions">
+            {positions.length === 0 ? (
+                <div className="p-8 text-center font-mono text-xs text-atlas-textSecondary" data-testid="tracker-zero-state">
+                    No open positions. The Hunter is evaluating support zones.
+                </div>
+            ) : (
+                <div className="divide-y divide-atlas-border">
+                    {positions.map((p) => {
+                        const base = p.symbol.split("/")[0];
+                        const pnl = p.unrealized_pnl || 0;
+                        const pnlPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
+                        const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
+                        return (
+                            <div key={p.symbol} className="flex items-center justify-between gap-4 px-6 py-3.5" data-testid={`tracker-row-${base}`}>
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <span className="font-mono font-bold text-sm text-atlas-text w-14">{base}</span>
+                                    <span className="font-mono text-xs tabular-nums text-atlas-textSecondary">${(p.market_value || 0).toFixed(2)}</span>
+                                    <span className="font-mono text-[11px] tabular-nums text-atlas-textTertiary hidden sm:inline">@ ${(p.avg_cost || 0).toFixed(p.avg_cost < 10 ? 4 : 2)}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className={`font-mono text-sm font-bold tabular-nums text-right ${pnlCls}`}>
+                                        {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+                                    </span>
+                                    <ManualExitButton symbol={p.symbol} onDone={onDone} compact />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            <details className="group border-t border-atlas-border" data-testid="tracker-todays-executions">
                 <summary className="px-6 py-3 flex items-center justify-between cursor-pointer list-none select-none">
                     <span className="label-tag">TODAY&apos;S EXECUTIONS</span>
                     <span className="font-mono text-[10px] text-atlas-textTertiary flex items-center gap-2">

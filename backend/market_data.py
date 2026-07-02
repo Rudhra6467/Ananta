@@ -131,6 +131,40 @@ async def fetch_snapshots(symbols: list[str]) -> list[MarketSnapshot]:
     return out
 
 
+def get_cached_snapshot(symbol: str) -> MarketSnapshot | None:
+    """Return the last cached snapshot for a symbol regardless of age (may be stale)."""
+    c = _CACHE.get(symbol)
+    return c[1] if c else None
+
+
+async def fetch_snapshots_cached(symbols: list[str]) -> list[MarketSnapshot]:
+    """Fast path for API endpoints: serve whatever is already in the in-memory cache
+    instantly (ignoring the 5s TTL). Only symbols with NO cache entry at all trigger a
+    live network fetch (first cold load). A background warmer keeps the cache fresh, so
+    steady-state calls never touch the exchange and return in <5ms."""
+    out: list[MarketSnapshot] = []
+    missing: list[str] = []
+    for s in symbols:
+        c = _CACHE.get(s)
+        if c is not None:
+            out.append(c[1])
+        else:
+            missing.append(s)
+    if missing:
+        out.extend(await fetch_snapshots(missing))
+    return out
+
+
+async def warm_snapshots(symbols: list[str]) -> None:
+    """Background refresh hook: re-fetch any symbol whose cache entry is older than the
+    TTL so the fast path always has warm data. Cheap no-op when everything is fresh."""
+    now = time.time()
+    stale = [s for s in symbols
+             if (c := _CACHE.get(s)) is None or now - c[0] >= _CACHE_TTL]
+    if stale:
+        await fetch_snapshots(stale)
+
+
 # ---------------- 1h OHLCV fetch (for adaptive sizing classifier) ----------------
 def _fetch_ohlcv_1h_sync(symbol: str, limit: int = 750) -> list[list[float]]:
     """Try Kraken first, then Coinbase. Returns CCXT-format OHLCV

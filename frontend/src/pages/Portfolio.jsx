@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { Activity, Layers, Archive, Compass } from "lucide-react";
-import api from "@/lib/api";
+import { useMemo, useState } from "react";
+import { Layers, Archive } from "lucide-react";
+import { useAppData } from "@/context/AppDataContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ManualExitButton from "@/components/ManualExitButton";
 
-const fmtPrice = (v) => (v == null ? "—" : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: Number(v) < 10 ? 4 : 2, maximumFractionDigits: Number(v) < 10 ? 4 : 2 })}`);
+const fmtNum = (v, dp = 2) => (v == null ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }));
+const fmtPrice = (v) => (v == null ? "—" : `$${fmtNum(v, Number(v) < 10 ? 4 : 2)}`);
 const fmtDateTime = (ts) => (ts ? new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 
 function fmtDuration(seconds) {
@@ -17,24 +18,10 @@ function fmtDuration(seconds) {
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
 }
-const durationFrom = (ts) => (ts ? fmtDuration((Date.now() - new Date(ts).getTime()) / 1000) : "—");
 const pnlCls = (v) => (v > 0 ? "text-atlas-positive" : v < 0 ? "text-atlas-negative" : "text-atlas-textSecondary");
 
 export default function Portfolio() {
-    const [portfolio, setPortfolio] = useState(null);
-    const [trades, setTrades] = useState([]);
-
-    const refresh = () => {
-        api.portfolio().then(setPortfolio).catch(() => {});
-        api.trades(300).then((t) => setTrades(t.items || [])).catch(() => setTrades([]));
-    };
-
-    useEffect(() => {
-        refresh();
-        const t = setInterval(refresh, 10000);
-        return () => clearInterval(t);
-    }, []);
-
+    const { portfolio, trades } = useAppData();
     const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
     const closed = (trades || []).filter((t) => t.side === "SELL" && (t.status || "FILLED") === "FILLED");
 
@@ -47,20 +34,16 @@ export default function Portfolio() {
                 </div>
             </div>
 
-            <Tabs defaultValue="active" className="atlas-tabs">
+            <Tabs defaultValue="holdings" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-6">
-                    <SubTab value="active" label="ACTIVE" icon={Activity} />
-                    <SubTab value="open" label="OPEN" icon={Layers} />
-                    <SubTab value="closed" label="CLOSED" icon={Archive} />
+                    <SubTab value="holdings" label="HOLDINGS" count={positions.length} icon={Layers} />
+                    <SubTab value="positions" label="POSITIONS" count={closed.length} icon={Archive} />
                 </TabsList>
 
-                <TabsContent value="active" className="m-0">
-                    <ActivePositions positions={positions} onDone={refresh} />
+                <TabsContent value="holdings" className="m-0">
+                    <Holdings positions={positions} portfolio={portfolio} />
                 </TabsContent>
-                <TabsContent value="open" className="m-0">
-                    <OpenPositions positions={positions} />
-                </TabsContent>
-                <TabsContent value="closed" className="m-0">
+                <TabsContent value="positions" className="m-0">
                     <ClosedPositions closed={closed} />
                 </TabsContent>
             </Tabs>
@@ -68,125 +51,110 @@ export default function Portfolio() {
     );
 }
 
-function SubTab({ value, label, icon: Icon }) {
+function SubTab({ value, label, count, icon: Icon }) {
     return (
         <TabsTrigger value={value} data-testid={`portfolio-subtab-${value}`}
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors duration-150 hover:text-white">
-            <Icon className="w-4 h-4 mr-2" strokeWidth={2} /> {label}
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors duration-150 hover:text-white flex items-center gap-2">
+            <Icon className="w-4 h-4" strokeWidth={2} /> {label}
+            <span className="text-[10px] font-bold text-atlas-textTertiary bg-atlas-panelHover rounded-full px-1.5 py-0.5 min-w-[20px] text-center">{count}</span>
         </TabsTrigger>
     );
 }
 
-function ZeroState({ testid, title, sub }) {
-    return (
-        <div className="panel p-12 flex flex-col items-center justify-center text-center gap-3" data-testid={testid}>
-            <Compass className="w-9 h-9 text-atlas-textTertiary" strokeWidth={1.5} />
-            <div className="font-heading text-lg text-atlas-text">{title}</div>
-            <div className="font-mono text-xs text-atlas-textSecondary max-w-sm">{sub}</div>
-        </div>
-    );
-}
+/* ---------------- HOLDINGS · Zerodha-style summary + list ---------------- */
+function Holdings({ positions, portfolio }) {
+    const { invested, current, pnl, pnlPct } = useMemo(() => {
+        const invested = positions.reduce((a, p) => a + (p.avg_cost || 0) * (p.quantity || 0), 0);
+        const current = positions.reduce((a, p) => a + (p.market_value || (p.last_price || 0) * (p.quantity || 0)), 0);
+        const pnl = current - invested;
+        return { invested, current, pnl, pnlPct: invested > 0 ? (pnl / invested) * 100 : 0 };
+    }, [positions]);
 
-/* ---------------- TAB 1 · ACTIVE POSITIONS ---------------- */
-function ActivePositions({ positions, onDone }) {
-    if (positions.length === 0) return <ZeroState testid="active-zero-state" title="No active positions." sub="Positions managed by the live execution loops appear here the moment a setup clears all gates." />;
+    const dayStart = portfolio?.day_start_equity ?? portfolio?.starting_balance ?? 0;
+    const todayPnl = (portfolio?.equity ?? 0) - dayStart;
+    const todayPct = portfolio?.daily_pnl_pct ?? 0;
+
+    if (positions.length === 0) {
+        return (
+            <div className="panel p-12 flex flex-col items-center justify-center text-center gap-3" data-testid="holdings-zero-state">
+                <Layers className="w-9 h-9 text-atlas-textTertiary" strokeWidth={1.5} />
+                <div className="font-heading text-lg text-atlas-text">No holdings yet.</div>
+                <div className="font-mono text-xs text-atlas-textSecondary max-w-sm">Positions opened by the live execution engines appear here the moment a setup clears all gates.</div>
+            </div>
+        );
+    }
+
     return (
-        <div className="panel overflow-hidden" data-testid="active-positions">
-            <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
-                <div>
-                    <div className="font-heading text-base text-atlas-text">Active Positions</div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Live-tracked by the active execution engines</div>
+        <div className="space-y-4" data-testid="holdings">
+            {/* Summary card */}
+            <div className="panel p-6" data-testid="holdings-summary">
+                <div className="grid grid-cols-2 gap-6">
+                    <div>
+                        <div className="label-tag">INVESTED</div>
+                        <div className="font-mono text-2xl md:text-3xl font-light tabular-nums text-atlas-text mt-1" data-testid="holdings-invested">{fmtNum(invested)}</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="label-tag">CURRENT</div>
+                        <div className="font-mono text-2xl md:text-3xl font-light tabular-nums text-atlas-text mt-1" data-testid="holdings-current">{fmtNum(current)}</div>
+                    </div>
                 </div>
-                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} active</span>
-            </div>
-            <div className="overflow-x-auto atlas-scroll">
-                <table className="w-full text-[12px] font-mono whitespace-nowrap">
-                    <thead>
-                        <tr className="border-b border-atlas-border text-atlas-textSecondary text-[10px] uppercase tracking-widest">
-                            <th className="text-left px-4 py-3">Asset</th>
-                            <th className="text-right px-4 py-3">Entry Price</th>
-                            <th className="text-right px-4 py-3">Current Price</th>
-                            <th className="text-right px-4 py-3">Unrealized PnL</th>
-                            <th className="text-right px-4 py-3">Duration</th>
-                            <th className="text-right px-4 py-3">Stop Level</th>
-                            <th className="text-right px-4 py-3">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {positions.map((p) => {
-                            const base = p.symbol.split("/")[0];
-                            const pnl = p.unrealized_pnl || 0;
-                            const pnlPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
-                            return (
-                                <tr key={p.symbol} className="border-b border-atlas-border last:border-b-0 hover:bg-atlas-panelHover/40" data-testid={`active-row-${base}`}>
-                                    <td className="px-4 py-3 text-atlas-text font-bold">{base}{p.breakout_mode && <span className="ml-1.5 text-[9px] text-atlas-cyan">BO</span>}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-textSecondary">{fmtPrice(p.avg_cost)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-text">{fmtPrice(p.last_price)}</td>
-                                    <td className={`px-4 py-3 text-right tabular-nums font-bold ${pnlCls(pnl)}`} data-testid={`active-pnl-${base}`}>
-                                        {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}<span className="block text-[10px] font-normal opacity-80">{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-textSecondary">{durationFrom(p.entry_timestamp)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-negative/80">{fmtPrice(p.structural_stop)}</td>
-                                    <td className="px-4 py-3 text-right"><ManualExitButton symbol={p.symbol} onDone={onDone} compact /></td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-}
-
-/* ---------------- TAB 2 · OPEN POSITIONS ---------------- */
-function OpenPositions({ positions }) {
-    if (positions.length === 0) return <ZeroState testid="open-zero-state" title="No open positions." sub="A consolidated, date-agnostic view of every open trade across the account will appear here." />;
-    return (
-        <div className="panel overflow-hidden" data-testid="open-positions">
-            <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
-                <div>
-                    <div className="font-heading text-base text-atlas-text">Open Positions</div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">All open trades across the account · no date boundaries</div>
+                <div className="mt-4 pt-4 border-t border-atlas-border flex items-center justify-between">
+                    <div className="label-tag">P&amp;L</div>
+                    <div className="text-right">
+                        <div className={`font-mono text-2xl font-medium tabular-nums ${pnlCls(pnl)}`} data-testid="holdings-pnl">
+                            {pnl >= 0 ? "+" : ""}{fmtNum(pnl)}
+                        </div>
+                        <div className={`font-mono text-xs font-bold ${pnlCls(pnl)}`}>{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)} %</div>
+                    </div>
                 </div>
-                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open</span>
             </div>
-            <div className="overflow-x-auto atlas-scroll">
-                <table className="w-full text-[12px] font-mono whitespace-nowrap">
-                    <thead>
-                        <tr className="border-b border-atlas-border text-atlas-textSecondary text-[10px] uppercase tracking-widest">
-                            <th className="text-left px-4 py-3">Asset</th>
-                            <th className="text-left px-4 py-3">Entry Date</th>
-                            <th className="text-right px-4 py-3">Entry Price</th>
-                            <th className="text-right px-4 py-3">Current Price</th>
-                            <th className="text-right px-4 py-3">PnL</th>
-                            <th className="text-left px-4 py-3 pl-6">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {positions.map((p) => {
-                            const base = p.symbol.split("/")[0];
-                            const pnl = p.unrealized_pnl || 0;
-                            const status = pnl > 0 ? "IN PROFIT" : pnl < 0 ? "DRAWDOWN" : "FLAT";
-                            const statusCls = pnl > 0 ? "bg-atlas-positive/15 text-atlas-positive" : pnl < 0 ? "bg-atlas-negative/15 text-atlas-negative" : "bg-atlas-border text-atlas-textSecondary";
-                            return (
-                                <tr key={p.symbol} className="border-b border-atlas-border last:border-b-0 hover:bg-atlas-panelHover/40" data-testid={`open-row-${base}`}>
-                                    <td className="px-4 py-3 text-atlas-text font-bold">{base}{p.breakout_mode && <span className="ml-1.5 text-[9px] text-atlas-cyan">BO</span>}</td>
-                                    <td className="px-4 py-3 text-atlas-textSecondary">{fmtDateTime(p.entry_timestamp)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-textSecondary">{fmtPrice(p.avg_cost)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-atlas-text">{fmtPrice(p.last_price)}</td>
-                                    <td className={`px-4 py-3 text-right tabular-nums font-bold ${pnlCls(pnl)}`}>{pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}</td>
-                                    <td className="px-4 py-3 pl-6"><span className={`text-[9px] font-bold px-2 py-0.5 rounded ${statusCls}`}>{status}</span></td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+
+            {/* Holdings list */}
+            <div className="panel overflow-hidden" data-testid="holdings-list">
+                <div className="divide-y divide-atlas-border">
+                    {positions.map((p) => {
+                        const base = p.symbol.split("/")[0];
+                        const qty = p.quantity || 0;
+                        const inv = (p.avg_cost || 0) * qty;
+                        const rowPnl = p.unrealized_pnl || 0;
+                        const rowPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
+                        return (
+                            <div key={p.symbol} className="px-5 py-4" data-testid={`holding-row-${base}`}>
+                                <div className="flex items-center justify-between font-mono text-[11px] text-atlas-textTertiary">
+                                    <span>{qty} Qty. · Avg. {fmtNum(p.avg_cost, p.avg_cost < 10 ? 4 : 2)}</span>
+                                    <span className={`font-bold ${pnlCls(rowPnl)}`}>{rowPct >= 0 ? "+" : ""}{rowPct.toFixed(2)} %</span>
+                                </div>
+                                <div className="flex items-center justify-between mt-1">
+                                    <span className="font-mono font-bold text-base text-atlas-text flex items-center gap-2">
+                                        {base}
+                                        {p.breakout_mode && <span className="text-[9px] text-atlas-cyan">BO</span>}
+                                    </span>
+                                    <span className={`font-mono text-base font-bold tabular-nums ${pnlCls(rowPnl)}`}>{rowPnl >= 0 ? "+" : ""}{fmtNum(rowPnl)}</span>
+                                </div>
+                                <div className="flex items-center justify-between mt-1 font-mono text-[11px] text-atlas-textTertiary">
+                                    <span>Invested {fmtNum(inv)}</span>
+                                    <span className="flex items-center gap-3">
+                                        <span>LTP {fmtPrice(p.last_price)}</span>
+                                        <ManualExitButton symbol={p.symbol} compact />
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                {/* Sticky Today's P&L footer */}
+                <div className="sticky bottom-0 bg-atlas-panel border-t border-atlas-border px-5 py-3 flex items-center justify-between" data-testid="holdings-today-pnl">
+                    <span className="font-mono text-sm text-atlas-text font-bold">Today&apos;s P&amp;L</span>
+                    <span className={`font-mono text-sm font-bold tabular-nums ${pnlCls(todayPnl)}`}>
+                        {todayPnl >= 0 ? "+" : ""}{fmtNum(todayPnl)} <span className="ml-2">{todayPct >= 0 ? "+" : ""}{todayPct.toFixed(2)} %</span>
+                    </span>
+                </div>
             </div>
         </div>
     );
 }
 
-/* ---------------- TAB 3 · CLOSED POSITIONS ---------------- */
+/* ---------------- POSITIONS · closed-trade history (retained) ---------------- */
 const WINDOWS = [
     { key: "today", label: "TODAY" },
     { key: "7d", label: "7D" },
@@ -215,7 +183,7 @@ function ClosedPositions({ closed }) {
         <div className="panel overflow-hidden" data-testid="closed-positions">
             <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <div className="font-heading text-base text-atlas-text">Closed Positions</div>
+                    <div className="font-heading text-base text-atlas-text">Positions · Closed</div>
                     <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Chronological historical performance archive</div>
                 </div>
                 <div className="flex items-center gap-1 font-mono" data-testid="closed-window-filters">
@@ -228,7 +196,11 @@ function ClosedPositions({ closed }) {
                 </div>
             </div>
             {rows.length === 0 ? (
-                <ZeroState testid="closed-zero-state" title="No closed trades in this window." sub="Completed round-trips will build a clean, scannable performance archive here." />
+                <div className="panel p-12 flex flex-col items-center justify-center text-center gap-3 border-0" data-testid="closed-zero-state">
+                    <Archive className="w-9 h-9 text-atlas-textTertiary" strokeWidth={1.5} />
+                    <div className="font-heading text-lg text-atlas-text">No closed trades in this window.</div>
+                    <div className="font-mono text-xs text-atlas-textSecondary max-w-sm">Completed round-trips will build a clean, scannable performance archive here.</div>
+                </div>
             ) : (
                 <div className="overflow-x-auto atlas-scroll">
                     <table className="w-full text-[12px] font-mono whitespace-nowrap">

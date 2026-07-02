@@ -10,7 +10,6 @@ import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import KillSwitchPanel from "@/components/KillSwitchPanel";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
-import GraduationScorecard from "@/components/GraduationScorecard";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import { useAuth } from "@/context/AuthContext";
 
@@ -202,9 +201,6 @@ export default function SettingsPage() {
                     </div>
                 </div>
             </section>
-
-            {/* GRADUATION READINESS SCORECARD (paper -> live gate) */}
-            <GraduationScorecard />
 
             {/* PERFORMANCE ANALYTICS (relocated from the home dashboard) */}
             <div data-testid="settings-analytics">
@@ -470,51 +466,6 @@ export default function SettingsPage() {
                                     onChange={(v) => upd({ dynamic_trail_max_pct: v })}
                                 />
                             </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* VAULT ENGINE (capital sourcing) */}
-                <section className="panel" data-testid="settings-vault">
-                    <SectionHeader label="VAULT ENGINE" title="Capital Sourcing" />
-                    <div className="p-5 space-y-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="label-tag">LIVE BALANCE SYNC</div>
-                                <div className="mt-1 text-[11px] font-mono text-atlas-textSecondary">
-                                    When ON (LIVE / DRY-RUN only), the bot pulls your free USD + USDC from the exchange each cycle and caps deployable capital at the override below. PAPER mode stays fully simulated.
-                                </div>
-                            </div>
-                            <Switch
-                                data-testid="vault-sync-switch"
-                                checked={!!s.vault_sync_enabled}
-                                onCheckedChange={(v) => upd({ vault_sync_enabled: v })}
-                                className="data-[state=checked]:bg-atlas-cyan data-[state=unchecked]:bg-atlas-border"
-                            />
-                        </div>
-                        <NumberField
-                            id="vault-max-override-usd"
-                            label="MAX DEPLOYABLE CAPITAL (USD)"
-                            value={s.vault_max_override_usd}
-                            min={1}
-                            max={1000000}
-                            step={1}
-                            onChange={(v) => upd({ vault_max_override_usd: v })}
-                            description="Hard ceiling on the capital the bot can deploy. Used as the cap even when live balance is larger; the smaller live balance wins when sync is on."
-                        />
-                        <div className="flex items-center justify-between border-t border-atlas-border pt-5">
-                            <div>
-                                <div className="label-tag">4H TREND FILTER</div>
-                                <div className="mt-1 text-[11px] font-mono text-atlas-textSecondary">
-                                    Require Price &gt; 4h EMA50 &gt; 4h EMA200 before any swing BUY. Keeps entries aligned with the higher-timeframe uptrend.
-                                </div>
-                            </div>
-                            <Switch
-                                data-testid="htf-trend-switch"
-                                checked={!!s.htf_trend_enabled}
-                                onCheckedChange={(v) => upd({ htf_trend_enabled: v })}
-                                className="data-[state=checked]:bg-atlas-cyan data-[state=unchecked]:bg-atlas-border"
-                            />
                         </div>
                     </div>
                 </section>
