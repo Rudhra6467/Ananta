@@ -660,3 +660,21 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
   -> valid PDF (4KB). Tests: test_lab_runner.py (7) + full lab suite 37 pass. No live regression.
 - REMAINING: Research Lab UI (config -> queue -> progress -> download; dual-track Validate
   Current/Fresh Values) + manual approval gate (lab_param_proposals -> Apply to Production).
+
+## Research Lab UI + Cockpit Leaderboard (2026-07-02, web frontend)
+- NAV/PAGE: "SETTINGS" tab renamed to "RESEARCH LAB" (FlaskConical icon, AppShell.jsx).
+  Settings.jsx now shows a "Research Lab" title + StrategyValidationPanel FIRST, existing
+  risk/engine config moved below.
+- `components/StrategyValidationPanel.jsx`: owner control panel wired to /api/lab/*.
+  Asset chips (from /lab/data/coverage), period dropdown, RUN VALIDATION -> dual-track dialog:
+  Track A "Current Scenario" (backtest, live params) / Track B "Fresh Values" (param sweep ->
+  walk_forward, rolling IS->OOS). Runs list with live progress polling + Download PDF (blob).
+- api.js: labCoverage/labCreateRun/labRuns/labRun/labRunPdf.
+- COCKPIT (Dashboard.jsx): two existing charts (AnalyticsCarousel) kept in place; added
+  LeaderboardAnalytics section — dynamic recharts pie + property dropdown (Strategy/Model,
+  Crypto Asset, Exit Module A-F, Win/Loss, Drawdown by Asset) computed client-side from
+  SELL trades, with a net-P&L ranked leaderboard; Today's Executions moved to the very bottom.
+- Tested: testing_agent web frontend 6/6 pass (iteration_15). Lint clean. No live-path regression.
+- BACKLOG (from testing agent): split Dashboard.jsx/Settings.jsx into smaller files;
+  leaderboard currently slices last 100 trades. Manual approval gate (lab_param_proposals ->
+  Apply to Production) still pending.
