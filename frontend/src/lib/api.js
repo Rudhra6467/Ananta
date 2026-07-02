@@ -95,6 +95,12 @@ export const api = {
     researchStrategyLab: () => cget("/research/strategy_lab"),
     freshStart: () => client.post("/admin/fresh-start").then((r) => r.data),
     researchStagedExit: () => cget("/research/staged_exit"),
+    // --- Research Lab (offline strategy validation) ---
+    labCoverage: () => client.get("/lab/data/coverage").then((r) => r.data),
+    labCreateRun: (spec) => client.post("/lab/runs", spec).then((r) => r.data),
+    labRuns: (limit = 20) => client.get(`/lab/runs?limit=${limit}`).then((r) => r.data),
+    labRun: (id) => client.get(`/lab/runs/${id}`).then((r) => r.data),
+    labRunPdf: (id) => client.get(`/lab/runs/${id}/pdf`, { responseType: "blob" }).then((r) => r.data),
     watchlistValidate: () => cget("/watchlist/validate", 10000),
     watchlistSync: () =>
         client.post("/watchlist/sync").then((r) => {

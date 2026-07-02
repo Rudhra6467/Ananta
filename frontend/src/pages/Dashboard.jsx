@@ -77,6 +77,7 @@ export default function Dashboard() {
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <OpenPositionsSnapshot portfolio={portfolio} onDone={refreshAll} />
             <AnalyticsCarousel summary={summary} />
+            <LeaderboardAnalytics trades={trades} />
             <Footer portfolio={portfolio} brain={brain} trades={trades} />
         </div>
     );
@@ -348,6 +349,103 @@ function Legend({ items }) {
     );
 }
 const tooltipStyle = { background: "#121418", border: "1px solid #2A2D35", borderRadius: 6, fontFamily: "JetBrains Mono", fontSize: 11, color: "#E2E4E9" };
+
+/* ---------------- Leaderboard & Analytics: dynamic property pie ---------------- */
+const PIE_PALETTE = [SILVER, GREEN, ROSE, "#38BDF8", "#F59E0B", "#14B8A6", "#EAB308", MUTED];
+const LB_PROPERTIES = [
+    { v: "strategy", label: "Strategy / Model" },
+    { v: "asset", label: "Crypto Asset" },
+    { v: "exit", label: "Exit Module (A–F)" },
+    { v: "winloss", label: "Win / Loss" },
+    { v: "drawdown", label: "Drawdown by Asset" },
+];
+
+function LeaderboardAnalytics({ trades }) {
+    const [property, setProperty] = useState("strategy");
+
+    const { pieData, leaders, total } = useMemo(() => {
+        const sells = (trades || []).filter((t) => t.side === "SELL");
+        const map = {};
+        const add = (key, pnl, win) => {
+            const g = map[key] || (map[key] = { key, count: 0, net: 0, wins: 0 });
+            g.count += 1; g.net += pnl; if (win) g.wins += 1;
+        };
+        sells.forEach((t) => {
+            const pnl = t.pnl || 0; const win = pnl > 0; const base = (t.symbol || "—").split("/")[0];
+            if (property === "strategy") add((t.strategy || "unknown").toUpperCase(), pnl, win);
+            else if (property === "asset") add(base, pnl, win);
+            else if (property === "exit") add(t.exit_module ? `Module ${t.exit_module}` : (t.exit_reason || "—"), pnl, win);
+            else if (property === "winloss") add(win ? "Wins" : pnl < 0 ? "Losses" : "Breakeven", pnl, win);
+            else if (property === "drawdown") { if (pnl < 0) add(base, pnl, false); }
+        });
+        const groups = Object.values(map);
+        const pieData = groups.map((g) => ({ name: g.key, value: property === "drawdown" ? Math.abs(g.net) : g.count }))
+            .filter((d) => d.value > 0);
+        const leaders = [...groups].sort((a, b) => property === "drawdown" ? a.net - b.net : b.net - a.net).slice(0, 6);
+        const total = pieData.reduce((a, d) => a + d.value, 0);
+        return { pieData, leaders, total };
+    }, [trades, property]);
+
+    return (
+        <section className="panel p-6" data-testid="leaderboard-analytics">
+            <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+                <div>
+                    <div className="font-heading font-medium text-lg text-atlas-text">Leaderboard &amp; Analytics</div>
+                    <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5">
+                        Closed-trade breakdown · switch the lens to slice the data live
+                    </div>
+                </div>
+                <select data-testid="leaderboard-property-select" value={property} onChange={(e) => setProperty(e.target.value)}
+                    className="bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-xs text-atlas-text">
+                    {LB_PROPERTIES.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
+                </select>
+            </div>
+
+            {total === 0 ? (
+                <EmptyChart text="No closed trades yet for this breakdown." />
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                    {/* dynamic pie */}
+                    <div data-testid="leaderboard-pie">
+                        <ResponsiveContainer width="100%" height={260}>
+                            <PieChart>
+                                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={2} stroke="none">
+                                    {pieData.map((d, i) => <RCell key={d.name} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
+                                </Pie>
+                                <RTooltip contentStyle={tooltipStyle} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <Legend items={pieData.slice(0, 6).map((d, i) => [d.name, PIE_PALETTE[i % PIE_PALETTE.length], d.value])} />
+                    </div>
+
+                    {/* leaderboard ranked by net P&L */}
+                    <div data-testid="leaderboard-table">
+                        <div className="label-tag mb-3">RANKED BY NET P&amp;L</div>
+                        <div className="space-y-1.5">
+                            {leaders.map((g, i) => (
+                                <div key={g.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border"
+                                    data-testid={`leaderboard-row-${i}`}>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="font-mono text-[11px] text-atlas-textTertiary w-4">{i + 1}</span>
+                                        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: PIE_PALETTE[i % PIE_PALETTE.length] }} />
+                                        <span className="font-mono text-xs text-atlas-text truncate">{g.key}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4 font-mono text-[11px] tabular-nums shrink-0">
+                                        <span className="text-atlas-textTertiary">{g.count}t</span>
+                                        <span className="text-atlas-textSecondary">{Math.round((g.wins / g.count) * 100)}%</span>
+                                        <span className={`font-bold w-20 text-right ${g.net > 0 ? "text-atlas-positive" : g.net < 0 ? "text-atlas-negative" : "text-atlas-textSecondary"}`}>
+                                            {g.net >= 0 ? "+" : ""}${g.net.toFixed(2)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </section>
+    );
+}
 
 /* ---------------- Footer: lifecycle + today's executions ---------------- */
 function Footer({ portfolio, brain, trades }) {

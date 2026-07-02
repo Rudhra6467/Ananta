@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Briefcase, Database, Settings as SettingsIcon, ShieldHalf } from "lucide-react";
+import { Activity, Briefcase, Database, FlaskConical, ShieldHalf } from "lucide-react";
 import { Toaster } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Dashboard from "@/pages/Dashboard";
@@ -17,7 +17,7 @@ const NAV = [
     { id: "dashboard", label: "COCKPIT", icon: Activity },
     { id: "portfolio", label: "PORTFOLIO", icon: Briefcase },
     { id: "reports", label: "DATALOGS / REPORTS", icon: Database },
-    { id: "settings", label: "SETTINGS", icon: SettingsIcon },
+    { id: "settings", label: "RESEARCH LAB", icon: FlaskConical },
 ];
 
 export default function AppShell() {

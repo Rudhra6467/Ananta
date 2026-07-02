@@ -1,0 +1,274 @@
+import { useEffect, useMemo, useState } from "react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
+import { toast } from "sonner";
+import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+
+// Parameter presets for the "Fresh Values" optimization sandbox. Keys map to the
+// backend grid targets ("prof:<strategy>:<field>" or "set:<field>").
+const PARAMS = [
+    { key: "prof:squeeze:trail_atr_mult", label: "Squeeze — ATR Trail Multiple", def: "2.0, 2.25, 2.5, 2.75" },
+    { key: "prof:hunter:trail_atr_mult", label: "Hunter — ATR Trail Multiple", def: "1.6, 1.8, 2.0, 2.2, 2.4" },
+    { key: "prof:hunter:profit_arm_pct", label: "Hunter — Profit-Lock Threshold %", def: "4, 5, 6" },
+    { key: "prof:squeeze:profit_arm_pct", label: "Squeeze — Profit-Lock Threshold %", def: "3, 4, 5" },
+    { key: "set:stop_loss_pct", label: "Global — Stop-Loss %", def: "8, 10, 12" },
+];
+
+const STATUS_CLS = {
+    QUEUED: "text-atlas-textSecondary", RUNNING: "text-atlas-cyan",
+    DONE: "text-atlas-positive", FAILED: "text-atlas-negative",
+};
+
+export default function StrategyValidationPanel() {
+    const [cov, setCov] = useState(null);
+    const [assets, setAssets] = useState([]);
+    const [period, setPeriod] = useState("3m");
+    const [runs, setRuns] = useState([]);
+    const [open, setOpen] = useState(false);
+    const [track, setTrack] = useState("current");
+    const [param, setParam] = useState(PARAMS[0].key);
+    const [values, setValues] = useState(PARAMS[0].def);
+    const [folds, setFolds] = useState(4);
+    const [busy, setBusy] = useState(false);
+    const [dl, setDl] = useState(null);
+
+    const loadRuns = () => api.labRuns(12).then((d) => setRuns(d.runs || [])).catch(() => {});
+
+    useEffect(() => {
+        api.labCoverage().then((c) => {
+            setCov(c);
+            const avail = (c.symbols || []).filter((s) => s.bars_4h > 0).map((s) => s.symbol);
+            setAssets(avail.slice(0, 3));
+        }).catch(() => {});
+        loadRuns();
+    }, []);
+
+    // poll while any run is active
+    useEffect(() => {
+        const active = runs.some((r) => r.status === "QUEUED" || r.status === "RUNNING");
+        if (!active) return;
+        const t = setInterval(loadRuns, 2500);
+        return () => clearInterval(t);
+    }, [runs]);
+
+    const symbols = useMemo(() => (cov?.symbols || []).filter((s) => s.bars_4h > 0), [cov]);
+    const periods = cov?.periods || ["1m", "2m", "3m", "quarter", "6m", "1y", "2y", "custom"];
+
+    const toggleAsset = (sym) =>
+        setAssets((cur) => (cur.includes(sym) ? cur.filter((x) => x !== sym) : [...cur, sym]));
+
+    const onPickParam = (k) => {
+        setParam(k);
+        setValues(PARAMS.find((p) => p.key === k)?.def || "");
+    };
+
+    const submit = async () => {
+        if (!assets.length) { toast.error("Select at least one asset"); return; }
+        setBusy(true);
+        try {
+            let spec;
+            if (track === "current") {
+                spec = { kind: "backtest", symbols: assets, period };
+            } else {
+                const vals = values.split(",").map((v) => parseFloat(v.trim())).filter((v) => !Number.isNaN(v));
+                if (vals.length < 2) { toast.error("Enter at least 2 comma-separated values"); setBusy(false); return; }
+                spec = {
+                    kind: "walk_forward", symbols: assets, period,
+                    grid: { [param]: vals }, folds: Number(folds) || 4,
+                    metric: "total_return_pct", min_trades: 3,
+                    label: `Fresh: ${PARAMS.find((p) => p.key === param)?.label}`,
+                };
+            }
+            const res = await api.labCreateRun(spec);
+            toast.success("VALIDATION QUEUED", { description: `${res.kind} · run ${res.id.slice(0, 8)}` });
+            setOpen(false);
+            loadRuns();
+        } catch (e) {
+            toast.error("QUEUE FAILED", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const downloadPdf = async (id) => {
+        setDl(id);
+        try {
+            const blob = await api.labRunPdf(id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `ananta_lab_${id.slice(0, 8)}.pdf`;
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            toast.error("PDF UNAVAILABLE", { description: String(e?.response?.data?.detail || e) });
+        } finally {
+            setDl(null);
+        }
+    };
+
+    return (
+        <section className="panel p-6 md:p-8" data-testid="strategy-validation-panel">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                    <FlaskConical className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
+                    <div>
+                        <div className="font-heading font-medium text-lg text-atlas-text">STRATEGY VALIDATION</div>
+                        <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5">
+                            Offline simulation · $1,200 baseline · parity with the live engine · credit-free
+                        </div>
+                    </div>
+                </div>
+                <Dialog open={open} onOpenChange={setOpen}>
+                    <DialogTrigger asChild>
+                        <Button data-testid="run-validation-btn" className="gap-2" disabled={!assets.length}>
+                            <Play className="w-4 h-4" /> RUN VALIDATION
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-atlas-panel border-atlas-border max-w-lg" data-testid="validation-dialog">
+                        <DialogHeader>
+                            <DialogTitle className="font-heading tracking-wide">CHOOSE VALIDATION TRACK</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-3 mt-2">
+                            <button data-testid="track-current"
+                                onClick={() => setTrack("current")}
+                                className={`text-left p-4 rounded-lg border-2 transition-all ${track === "current" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                <Sparkles className="w-4 h-4 text-atlas-cyan mb-2" />
+                                <div className="font-mono text-sm font-bold text-atlas-text">A · Current Scenario</div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">Live production parameters vs past regimes.</div>
+                            </button>
+                            <button data-testid="track-fresh"
+                                onClick={() => setTrack("fresh")}
+                                className={`text-left p-4 rounded-lg border-2 transition-all ${track === "fresh" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                <SlidersHorizontal className="w-4 h-4 text-atlas-cyan mb-2" />
+                                <div className="font-mono text-sm font-bold text-atlas-text">B · Fresh Values</div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">Sweep a param · rolling In-Sample→Out-of-Sample.</div>
+                            </button>
+                        </div>
+
+                        {track === "fresh" && (
+                            <div className="space-y-3 mt-2 pt-3 border-t border-atlas-border" data-testid="fresh-values-config">
+                                <div>
+                                    <Label className="label-tag text-[10px]">PARAMETER</Label>
+                                    <select data-testid="param-select" value={param} onChange={(e) => onPickParam(e.target.value)}
+                                        className="w-full mt-1 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
+                                        {PARAMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="col-span-2">
+                                        <Label className="label-tag text-[10px]">CANDIDATE VALUES</Label>
+                                        <Input data-testid="values-input" value={values} onChange={(e) => setValues(e.target.value)}
+                                            className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" placeholder="2.0, 2.5, 3.0" />
+                                    </div>
+                                    <div>
+                                        <Label className="label-tag text-[10px]">FOLDS</Label>
+                                        <Input data-testid="folds-input" type="number" min={2} max={8} value={folds}
+                                            onChange={(e) => setFolds(e.target.value)}
+                                            className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <Button data-testid="submit-validation-btn" onClick={submit} disabled={busy} className="w-full mt-3 gap-2">
+                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                            {track === "current" ? "RUN CURRENT-SCENARIO BACKTEST" : "RUN WALK-FORWARD VALIDATION"}
+                        </Button>
+                    </DialogContent>
+                </Dialog>
+            </div>
+
+            {/* config: assets + period */}
+            <div className="mt-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3">
+                    <Label className="label-tag text-[10px]">ASSETS · {assets.length} selected</Label>
+                    <div className="flex flex-wrap gap-2 mt-2" data-testid="asset-chips">
+                        {symbols.length === 0 && <span className="font-mono text-xs text-atlas-textSecondary">No seeded history found. Run the backfill first.</span>}
+                        {symbols.map((s) => {
+                            const base = s.symbol.split("/")[0];
+                            const on = assets.includes(s.symbol);
+                            return (
+                                <button key={s.symbol} data-testid={`asset-chip-${base}`} onClick={() => toggleAsset(s.symbol)}
+                                    className={`px-3 py-1.5 rounded-full border font-mono text-xs transition-all ${on ? "border-atlas-cyan bg-atlas-panelHover text-atlas-text" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                                    {base} <span className="text-[9px] text-atlas-textTertiary">{s.bars_4h}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                <div>
+                    <Label className="label-tag text-[10px]">HISTORICAL PERIOD</Label>
+                    <select data-testid="period-select" value={period} onChange={(e) => setPeriod(e.target.value)}
+                        className="w-full mt-2 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
+                        {periods.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            {/* runs */}
+            <div className="mt-8">
+                <div className="label-tag mb-3">VALIDATION RUNS</div>
+                {runs.length === 0 ? (
+                    <div className="p-6 text-center font-mono text-xs text-atlas-textSecondary border border-atlas-border rounded-lg" data-testid="runs-empty">
+                        No runs yet. Configure assets and hit RUN VALIDATION.
+                    </div>
+                ) : (
+                    <div className="space-y-2" data-testid="runs-list">
+                        {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id} />)}
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function RunRow({ run, onDownload, downloading }) {
+    const isDone = run.status === "DONE";
+    const summary = runSummary(run);
+    return (
+        <div className="border border-atlas-border rounded-lg p-4 bg-atlas-panel" data-testid={`run-row-${run.id.slice(0, 8)}`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-atlas-border text-atlas-textSecondary">{run.kind}</span>
+                    <span className="font-mono text-xs text-atlas-textSecondary truncate">{run.label || (run.symbols || []).join(", ")}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <span className={`font-mono text-[11px] font-bold ${STATUS_CLS[run.status] || "text-atlas-textSecondary"}`} data-testid={`run-status-${run.id.slice(0, 8)}`}>
+                        {run.status}{run.status === "RUNNING" ? ` ${Math.round(run.progress_pct || 0)}%` : ""}
+                    </span>
+                    {isDone && (
+                        <Button size="sm" variant="outline" data-testid={`download-pdf-${run.id.slice(0, 8)}`}
+                            onClick={() => onDownload(run.id)} disabled={downloading} className="gap-1.5 h-7">
+                            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                        </Button>
+                    )}
+                </div>
+            </div>
+            {run.status === "RUNNING" && (
+                <div className="mt-3 h-1.5 bg-atlas-border rounded-full overflow-hidden">
+                    <div className="h-full bg-atlas-cyan transition-all" style={{ width: `${run.progress_pct || 0}%` }} />
+                </div>
+            )}
+            {summary && <div className="mt-2 font-mono text-[11px] text-atlas-textSecondary" data-testid={`run-summary-${run.id.slice(0, 8)}`}>{summary}</div>}
+            {run.status === "FAILED" && <div className="mt-2 font-mono text-[11px] text-atlas-negative">{run.error}</div>}
+        </div>
+    );
+}
+
+function runSummary(run) {
+    if (run.status !== "DONE" || !run.result) return run.git_hash ? `commit ${run.git_hash}` : null;
+    const r = run.result;
+    if (run.kind === "walk_forward") return `WFA efficiency ${r.wfa_efficiency ?? "—"} · OOS+ ${r.oos_positive_folds ?? "—"} · ${r.verdict || ""}`;
+    if (run.kind === "backtest") {
+        const syms = r.per_symbol || {};
+        const parts = Object.entries(syms).map(([k, v]) => `${k.split("/")[0]} ${v.total_return_pct ?? "?"}% (${v.trades ?? 0}t)`);
+        return parts.join("  ·  ");
+    }
+    if (run.kind === "sensitivity") return `${r.target} · ${r.verdict || ""}`;
+    return `commit ${run.git_hash}`;
+}
