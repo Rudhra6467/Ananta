@@ -19,6 +19,7 @@ import logging
 import asyncio
 import contextlib
 import os
+import uuid
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -80,9 +81,10 @@ research_resolver = ResearchResolverLoop(db, interval_seconds=600)
 shadow_watcher = ShadowWatcherLoop(db, interval_seconds=30)
 
 # Research Lab: async job queue worker (offline backtests / sweeps / walk-forward)
-from lab.runner import LabWorker, create_run  # noqa: E402
+from lab.runner import LabDataAppender, LabWorker, create_run  # noqa: E402
 
 lab_worker = LabWorker(db)
+lab_appender = LabDataAppender(db)
 
 
 # ---------- request/response models ----------
@@ -1375,6 +1377,63 @@ async def lab_run_pdf(run_id: str):
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+@api_router.post("/lab/runs/{run_id}/propose", dependencies=[Depends(require_owner)])
+async def lab_propose(run_id: str):
+    """Build a production-settings proposal from a completed run's best params (diff only)."""
+    run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.get("status") != "DONE":
+        raise HTTPException(status_code=409, detail="run not finished")
+    from lab.proposals import best_params_from_run, build_diff
+    params = best_params_from_run(run)
+    if not params:
+        raise HTTPException(status_code=400, detail="this run kind has no tunable params to promote")
+    settings = await load_settings(db)
+    doc = {
+        "id": str(uuid.uuid4()), "run_id": run_id, "kind": run["kind"],
+        "label": run.get("label"), "params": params, "diff": build_diff(params, settings),
+        "status": "PROPOSED", "git_hash": run.get("git_hash"),
+        "created_at": datetime.now(UTC).isoformat(), "applied_at": None,
+    }
+    await db.lab_param_proposals.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/lab/proposals", dependencies=[Depends(require_owner)])
+async def lab_list_proposals(limit: int = Query(20, le=100)):
+    cur = db.lab_param_proposals.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
+    return {"proposals": await cur.to_list(length=limit)}
+
+
+@api_router.post("/lab/proposals/{prop_id}/apply", dependencies=[Depends(require_owner)])
+async def lab_apply_proposal(prop_id: str):
+    """MANUAL APPROVAL GATE: push a proposal's params into the live production settings."""
+    prop = await db.lab_param_proposals.find_one({"id": prop_id}, {"_id": 0})
+    if not prop:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    if prop.get("status") == "APPLIED":
+        raise HTTPException(status_code=409, detail="proposal already applied")
+    from lab.proposals import apply_to_settings
+    settings = await load_settings(db)
+    changed = apply_to_settings(settings, prop["params"])
+    await save_settings(db, settings)
+    await db.lab_param_proposals.update_one(
+        {"id": prop_id}, {"$set": {"status": "APPLIED", "applied_at": datetime.now(UTC).isoformat(),
+                                   "applied_changes": changed}})
+    return {"status": "APPLIED", "applied": changed,
+            "note": "Live settings updated. Redeploy the backend to push to production."}
+
+
+@api_router.post("/lab/proposals/{prop_id}/reject", dependencies=[Depends(require_owner)])
+async def lab_reject_proposal(prop_id: str):
+    r = await db.lab_param_proposals.update_one({"id": prop_id}, {"$set": {"status": "REJECTED"}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    return {"status": "REJECTED"}
+
+
 # ---- mount router and CORS ----
 app.include_router(api_router)
 app.add_middleware(
@@ -1399,6 +1458,7 @@ async def on_startup():
     research_resolver.start()
     shadow_watcher.start()
     lab_worker.start()
+    lab_appender.start()
     # Heavy index builds + first cache compute run OFF the boot path so the backend
     # becomes healthy instantly even on a large production DB (avoids boot-probe timeouts).
     asyncio.create_task(_background_warmup())
@@ -1437,4 +1497,5 @@ async def on_shutdown():
     await research_resolver.stop()
     await shadow_watcher.stop()
     await lab_worker.stop()
+    await lab_appender.stop()
     client.close()

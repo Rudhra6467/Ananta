@@ -101,6 +101,9 @@ export const api = {
     labRuns: (limit = 20) => client.get(`/lab/runs?limit=${limit}`).then((r) => r.data),
     labRun: (id) => client.get(`/lab/runs/${id}`).then((r) => r.data),
     labRunPdf: (id) => client.get(`/lab/runs/${id}/pdf`, { responseType: "blob" }).then((r) => r.data),
+    labPropose: (runId) => client.post(`/lab/runs/${runId}/propose`).then((r) => r.data),
+    labApplyProposal: (pid) => client.post(`/lab/proposals/${pid}/apply`).then((r) => r.data),
+    labRejectProposal: (pid) => client.post(`/lab/proposals/${pid}/reject`).then((r) => r.data),
     watchlistValidate: () => cget("/watchlist/validate", 10000),
     watchlistSync: () =>
         client.post("/watchlist/sync").then((r) => {

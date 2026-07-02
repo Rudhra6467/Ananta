@@ -186,3 +186,57 @@ class LabWorker:
             logger.exception("LabWorker run %s failed: %s", rid, e)
             await self.db.lab_runs.update_one({"id": rid}, {"$set": {
                 "status": "FAILED", "error": str(e), "finished_at": _now()}})
+
+
+class LabDataAppender:
+    """Nightly, credit-free CCXT tail-append so the local history self-updates.
+    Keeps the Binance-seeded 2-year base fresh with new 4h/1d candles each day."""
+
+    def __init__(self, db, interval_hours: int = 24):
+        self.db = db
+        self.interval = interval_hours * 3600
+        self._task: asyncio.Task | None = None
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lab-append")
+        self._stop = asyncio.Event()
+
+    def start(self):
+        self._stop.clear()
+        self._task = asyncio.create_task(self._loop())
+        logger.info("LabDataAppender started (every %sh)", self.interval // 3600)
+
+    async def stop(self):
+        self._stop.set()
+        if self._task:
+            self._task.cancel()
+            with __import__("contextlib").suppress(asyncio.CancelledError):
+                await self._task
+        self._pool.shutdown(wait=False)
+
+    async def _symbols(self) -> list[str]:
+        from lab.seed_history import BINANCE_MAP
+        doc = await self.db.settings.find_one({"id": "singleton"}, {"enabled_symbols": 1})
+        return (doc or {}).get("enabled_symbols") or list(BINANCE_MAP.keys())
+
+    def _append_all(self, symbols: list[str]) -> dict:
+        summary = {}
+        for sym in symbols:
+            for tf in ("4h", "1d"):
+                try:
+                    summary[f"{sym}/{tf}"] = data_store.append_latest(sym, tf)["inserted"]
+                except Exception as e:
+                    logger.warning("append %s %s failed: %s", sym, tf, e)
+        return summary
+
+    async def _loop(self):
+        await asyncio.sleep(90)  # let boot settle
+        loop = asyncio.get_event_loop()
+        while not self._stop.is_set():
+            try:
+                syms = await self._symbols()
+                res = await loop.run_in_executor(self._pool, self._append_all, syms)
+                logger.info("LabDataAppender cycle: %d series updated", len(res))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("LabDataAppender error: %s", e)
+            await asyncio.sleep(self.interval)

@@ -82,6 +82,20 @@ def get_profile(strategy: str | None) -> StrategyProfile:
     return PROFILES.get((strategy or "hunter").lower(), DEFAULT_PROFILE)
 
 
+def profile_for(strategy: str | None, settings=None) -> StrategyProfile:
+    """Base profile patched with any Research-Lab-promoted overrides in settings.
+    Returns the untouched base profile when no overrides exist (live behaviour default)."""
+    from dataclasses import replace
+    prof = get_profile(strategy)
+    ov = getattr(settings, "profile_overrides", None) if settings is not None else None
+    key = (strategy or "hunter").lower()
+    if ov and ov.get(key):
+        valid = {k: v for k, v in ov[key].items() if hasattr(prof, k)}
+        if valid:
+            return replace(prof, **valid)
+    return prof
+
+
 # ---------------------------------------------------------------------------
 @dataclass
 class ExitSignal:

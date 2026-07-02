@@ -30,7 +30,7 @@ from live_execution import LiveExecutor, get_default_executor, get_dry_run_execu
 from market_data import fetch_ohlcv_4h, fetch_snapshot
 from models import AIReasoning, MarketSnapshot, Position, RiskSettings, TradeLog, compute_return_and_hold
 from asset_profiles import eff_setting
-from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, evaluate_exit_engine
+from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, evaluate_exit_engine, profile_for
 from trading_engine import (
     _ensure_day_start,
     _execute_partial_sell,
@@ -328,7 +328,8 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
         except Exception:
             bars_4h = None
 
-        decision = evaluate_exit_engine(pos, snap.price, bars_4h, settings, emergency=emergency)
+        decision = evaluate_exit_engine(pos, snap.price, bars_4h, settings, emergency=emergency,
+                                         profile_override=profile_for(pos.strategy, settings))
         if decision.action == ACT_NONE:
             continue
 

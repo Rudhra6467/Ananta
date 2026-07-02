@@ -678,3 +678,22 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
 - BACKLOG (from testing agent): split Dashboard.jsx/Settings.jsx into smaller files;
   leaderboard currently slices last 100 trades. Manual approval gate (lab_param_proposals ->
   Apply to Production) still pending.
+
+## Research Lab — Approval Gate + Nightly Auto-Append + Live Wiring (2026-07-02)
+- LIVE WIRING: RiskSettings.profile_overrides {strategy:{field:val}} added; exit_engine.profile_for()
+  patches the base profile with it; position_watcher now passes profile_for(pos.strategy, settings)
+  to evaluate_exit_engine -> lab-promoted params affect LIVE trading (default {} = unchanged).
+- MANUAL APPROVAL GATE (lab/proposals.py + endpoints): best_params_from_run (grid=best, sensitivity=
+  top metric, walk_forward=majority vote w/ best-OOS tiebreak). Endpoints (owner):
+  POST /api/lab/runs/{id}/propose (returns current->proposed diff), GET /api/lab/proposals,
+  POST /api/lab/proposals/{id}/apply (writes to live settings, clamps ranges, audit trail),
+  POST /api/lab/proposals/{id}/reject. Lab values NEVER auto-write; owner confirms.
+- NIGHTLY AUTO-APPEND: lab.runner.LabDataAppender background worker runs CCXT append_latest for the
+  watchlist (4h+1d) every 24h (credit-free) so the seeded 2y base self-updates. Started in lifecycle.
+- FRONTEND: StrategyValidationPanel "PROMOTE" button on DONE walk_forward/grid/sensitivity runs ->
+  promote-dialog with diff -> APPLY TO PRODUCTION / REJECT (api.labPropose/ApplyProposal/RejectProposal).
+- VERIFIED: propose->apply via curl (Hunter profit_arm 5.0->4.0 written to profile_overrides); UI
+  promote dialog screenshot; appender + worker started in logs. Tests: proposals(4)+runner(7)+lab suite
+  all pass; live exit path green. No regression.
+- REMAINING/BACKLOG: split Dashboard.jsx/Settings.jsx into smaller files; dedicated leaderboard
+  aggregate endpoint; optional 1h timeframe.

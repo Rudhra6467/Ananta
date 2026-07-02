@@ -286,6 +286,8 @@ class RiskSettings(BaseModel):
     # volatility-adaptive trailing envelope: dynamic_trail = clamp(k * ATR_percentile, min, max)
     dynamic_trail_enabled: bool = True  # when True (and ATR percentile known) the trail distance flexes with volatility
     dynamic_trail_k: float = 0.06  # slope: ATR percentile 0-100 -> ~0-6% before clamping
+    # Research-Lab-promoted exit-profile overrides {strategy: {field: value}} (manual approval gate)
+    profile_overrides: dict = {}
     dynamic_trail_min_pct: float = 2.0  # floor for the adaptive trailing distance
     dynamic_trail_max_pct: float = 6.0  # ceiling for the adaptive trailing distance
     position_watcher_interval_seconds: int = 15

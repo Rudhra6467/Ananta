@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ export default function StrategyValidationPanel() {
     const [folds, setFolds] = useState(4);
     const [busy, setBusy] = useState(false);
     const [dl, setDl] = useState(null);
+    const [proposal, setProposal] = useState(null);
+    const [promoteBusy, setPromoteBusy] = useState(false);
 
     const loadRuns = () => api.labRuns(12).then((d) => setRuns(d.runs || [])).catch(() => {});
 
@@ -109,6 +111,40 @@ export default function StrategyValidationPanel() {
         } finally {
             setDl(null);
         }
+    };
+
+    const promote = async (runId) => {
+        setPromoteBusy(true);
+        try {
+            const p = await api.labPropose(runId);
+            setProposal(p);
+        } catch (e) {
+            toast.error("PROMOTE FAILED", { description: String(e?.response?.data?.detail || e) });
+        } finally {
+            setPromoteBusy(false);
+        }
+    };
+
+    const applyProposal = async () => {
+        if (!proposal) return;
+        setPromoteBusy(true);
+        try {
+            const res = await api.labApplyProposal(proposal.id);
+            toast.success("APPLIED TO PRODUCTION", {
+                description: `${(res.applied || []).map((c) => `${c.target} → ${c.value}`).join(", ")} · redeploy to go live`,
+            });
+            setProposal(null);
+        } catch (e) {
+            toast.error("APPLY FAILED", { description: String(e?.response?.data?.detail || e) });
+        } finally {
+            setPromoteBusy(false);
+        }
+    };
+
+    const rejectProposal = async () => {
+        if (!proposal) return;
+        try { await api.labRejectProposal(proposal.id); } catch (_) { /* noop */ }
+        setProposal(null);
     };
 
     return (
@@ -219,16 +255,53 @@ export default function StrategyValidationPanel() {
                     </div>
                 ) : (
                     <div className="space-y-2" data-testid="runs-list">
-                        {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id} />)}
+                        {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id}
+                            onPromote={promote} promoting={promoteBusy} />)}
                     </div>
                 )}
             </div>
+
+            {/* Promote-to-Production approval gate */}
+            <Dialog open={!!proposal} onOpenChange={(o) => { if (!o) setProposal(null); }}>
+                <DialogContent className="bg-atlas-panel border-atlas-border max-w-lg" data-testid="promote-dialog">
+                    <DialogHeader>
+                        <DialogTitle className="font-heading tracking-wide flex items-center gap-2">
+                            <Rocket className="w-4 h-4 text-atlas-cyan" /> PROMOTE TO PRODUCTION
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="font-mono text-[11px] text-atlas-textTertiary">
+                        Review the change below. Nothing is applied until you confirm — and it only goes live
+                        after you redeploy the backend.
+                    </div>
+                    <div className="mt-3 space-y-2" data-testid="promote-diff">
+                        {(proposal?.diff || []).map((d) => (
+                            <div key={d.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-atlas-border">
+                                <span className="font-mono text-xs text-atlas-text">{d.target}</span>
+                                <span className="font-mono text-xs">
+                                    <span className="text-atlas-textSecondary">{String(d.current)}</span>
+                                    <span className="text-atlas-textTertiary mx-2">→</span>
+                                    <span className="text-atlas-positive font-bold">{String(d.proposed)}</span>
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                        <Button data-testid="apply-proposal-btn" onClick={applyProposal} disabled={promoteBusy} className="flex-1 gap-2">
+                            {promoteBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} APPLY TO PRODUCTION
+                        </Button>
+                        <Button data-testid="reject-proposal-btn" variant="outline" onClick={rejectProposal} disabled={promoteBusy} className="gap-2">
+                            <X className="w-4 h-4" /> REJECT
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </section>
     );
 }
 
-function RunRow({ run, onDownload, downloading }) {
+function RunRow({ run, onDownload, downloading, onPromote, promoting }) {
     const isDone = run.status === "DONE";
+    const canPromote = isDone && run.kind !== "backtest";
     const summary = runSummary(run);
     return (
         <div className="border border-atlas-border rounded-lg p-4 bg-atlas-panel" data-testid={`run-row-${run.id.slice(0, 8)}`}>
@@ -245,6 +318,12 @@ function RunRow({ run, onDownload, downloading }) {
                         <Button size="sm" variant="outline" data-testid={`download-pdf-${run.id.slice(0, 8)}`}
                             onClick={() => onDownload(run.id)} disabled={downloading} className="gap-1.5 h-7">
                             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                        </Button>
+                    )}
+                    {canPromote && (
+                        <Button size="sm" data-testid={`promote-${run.id.slice(0, 8)}`}
+                            onClick={() => onPromote(run.id)} disabled={promoting} className="gap-1.5 h-7">
+                            <Rocket className="w-3.5 h-3.5" /> PROMOTE
                         </Button>
                     )}
                 </div>
