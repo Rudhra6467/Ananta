@@ -39,6 +39,7 @@ export default function Reports() {
     const [zones, setZones] = useState(null);
     const [sandbox, setSandbox] = useState(null);
     const [staged, setStaged] = useState(null);
+    const [summary, setSummary] = useState(null);
     const [items, setItems] = useState([]);
 
     const refresh = () => {
@@ -50,6 +51,7 @@ export default function Reports() {
         api.researchZoneEffectiveness().then(setZones).catch(() => {});
         api.researchStrategyLab().then(setSandbox).catch(() => {});
         api.researchStagedExit().then(setStaged).catch(() => {});
+        api.researchSummary().then(setSummary).catch(() => {});
         api.reasoning(15, undefined, false).then((d) => setItems(d.items || [])).catch(() => setItems([]));
     };
 
@@ -140,12 +142,48 @@ export default function Reports() {
                 </div>
             </div>
 
-            <div>
-                <div className="label-tag mb-3">AI REASONING LOG · LATEST 15</div>
-                <div className="max-h-[70vh] overflow-y-auto pr-2 atlas-scroll" data-testid="reasoning-scroll-container">
-                    <ReasoningTimeline items={items} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <div className="label-tag mb-3">AI REASONING LOG · LATEST 15</div>
+                    <div className="max-h-[70vh] overflow-y-auto pr-2 atlas-scroll" data-testid="reasoning-scroll-container">
+                        <ReasoningTimeline items={items} />
+                    </div>
+                </div>
+                <div>
+                    <div className="label-tag mb-3">CONFIDENCE DISTRIBUTION</div>
+                    <ConfidenceDistribution summary={summary} />
                 </div>
             </div>
+        </div>
+    );
+}
+
+/* ---------------- Confidence Distribution (relocated from Cockpit) ---------------- */
+function ConfidenceDistribution({ summary }) {
+    const buckets = summary?.confidence_buckets || [];
+    const max = Math.max(1, ...buckets.map((b) => b.count || 0));
+    const empty = buckets.length === 0 || buckets.every((b) => !b.count);
+    return (
+        <div className="panel p-6" data-testid="confidence-distribution">
+            <div className="font-heading font-medium text-lg text-atlas-text">Confidence Distribution</div>
+            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Setups logged per LLM confidence bucket</div>
+            {empty ? (
+                <div className="py-10 text-center font-mono text-xs text-atlas-textSecondary">No setups logged yet for this sprint.</div>
+            ) : (
+                <div className="space-y-3">
+                    {buckets.map((b) => (
+                        <div key={b.bucket} data-testid={`conf-bucket-${b.bucket}`}>
+                            <div className="flex items-center justify-between font-mono text-[11px] mb-1">
+                                <span className="text-atlas-textSecondary">{b.bucket}</span>
+                                <span className="text-atlas-text tabular-nums">{b.count || 0}</span>
+                            </div>
+                            <div className="h-2.5 bg-atlas-bg rounded overflow-hidden">
+                                <div className="h-full bg-atlas-cyan/70 rounded transition-all" style={{ width: `${((b.count || 0) / max) * 100}%` }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

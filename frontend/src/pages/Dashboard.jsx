@@ -1,22 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronRight, RefreshCw } from "lucide-react";
+import { BarChart3, RefreshCw } from "lucide-react";
 import {
-    Bar,
-    BarChart,
     Cell as RCell,
     Pie,
     PieChart,
     ResponsiveContainer,
     Tooltip as RTooltip,
-    XAxis,
-    YAxis,
 } from "recharts";
 import api from "@/lib/api";
 import { useAppData } from "@/context/AppDataContext";
 import CandleChart from "@/components/CandleChart";
 import ManualExitButton from "@/components/ManualExitButton";
 import WatchlistControl from "@/components/WatchlistControl";
-import ReasoningTimeline from "@/components/ReasoningTimeline";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 
 const SILVER = "#C0C5CE";
@@ -25,7 +20,7 @@ const ROSE = "#F43F5E";
 const MUTED = "#5C6370";
 
 export default function Dashboard() {
-    const { portfolio, snapshots, enabledSymbols, trades, brain, summary, regime, reasoning, refresh } = useAppData();
+    const { portfolio, snapshots, enabledSymbols, trades, brain, summary, regime, refresh } = useAppData();
     const [selected, setSelected] = useState(null);
     const [candles, setCandles] = useState([]);
     const [loadingChart, setLoadingChart] = useState(false);
@@ -49,7 +44,7 @@ export default function Dashboard() {
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
-            <AnalyticsGroup summary={summary} trades={trades} reasoning={reasoning} />
+            <AnalyticsGroup summary={summary} trades={trades} />
             <ConsolidatedPositions portfolio={portfolio} trades={trades} onDone={refresh} />
         </div>
     );
@@ -237,72 +232,47 @@ function TradeLifecyclePanel({ portfolio }) {
     );
 }
 
-/* ---------------- Analytics group — three solid panels, always visible ---------------- */
-function AnalyticsGroup({ summary, trades, reasoning }) {
+/* ---------------- Analytics group — side-by-side slider (Leaderboard | Counterfactual) ---------------- */
+function AnalyticsGroup({ summary, trades }) {
+    const stop = (e) => e.stopPropagation();
     return (
-        <div data-testid="analytics-group" className="space-y-3">
-            <div className="label-tag">ANALYTICS</div>
-            <LeaderboardAnalytics trades={trades} />
-            <CounterfactualPanel summary={summary} />
-            <ReasoningPanel reasoning={reasoning} />
+        <div data-testid="analytics-group" className="space-y-2">
+            <div className="flex items-center justify-between">
+                <div className="label-tag">ANALYTICS</div>
+                <span className="font-mono text-[9px] text-atlas-textTertiary md:hidden">← swipe →</span>
+            </div>
+            <div onTouchStart={stop} onTouchEnd={stop}>
+                <div className="flex gap-3 overflow-x-auto atlas-scroll snap-x snap-mandatory pb-1" data-testid="analytics-slider">
+                    <div className="snap-center shrink-0 w-full md:w-[calc(50%-6px)]"><LeaderboardAnalytics trades={trades} /></div>
+                    <div className="snap-center shrink-0 w-full md:w-[calc(50%-6px)]"><CounterfactualPanel summary={summary} /></div>
+                </div>
+            </div>
         </div>
     );
 }
 
-/* ---------------- Counterfactual + confidence distribution ---------------- */
+/* ---------------- Counterfactual — correct rejections vs missed opportunities ---------------- */
 function CounterfactualPanel({ summary }) {
     const buckets = summary?.confidence_buckets || [];
     const correct = buckets.reduce((a, b) => a + (b.correct_rejection || 0), 0);
     const missed = buckets.reduce((a, b) => a + (b.missed_opportunity || 0), 0);
     return (
-        <section className="panel p-6" data-testid="counterfactual-panel">
+        <section className="panel p-6 h-full" data-testid="counterfactual-panel">
             <div className="font-heading font-medium text-lg text-atlas-text">Counterfactual Engine</div>
-            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Correct rejections vs missed opportunities · confidence distribution</div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                    {correct + missed === 0 ? <EmptyChart text="Awaiting counterfactual resolution (24h/72h/7d)..." /> : (
-                        <ResponsiveContainer width="100%" height={240}>
-                            <PieChart>
-                                <Pie data={[{ name: "Correct Rejections", value: correct }, { name: "Missed Opportunities", value: missed }]}
-                                    dataKey="value" nameKey="name" innerRadius={60} outerRadius={90} paddingAngle={2} stroke="none">
-                                    <RCell fill={GREEN} />
-                                    <RCell fill={ROSE} />
-                                </Pie>
-                                <RTooltip contentStyle={tooltipStyle} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    )}
-                    <Legend items={[["Correct Rejections", GREEN, correct], ["Missed Opportunities", ROSE, missed]]} />
-                </div>
-                <div>
-                    <div className="label-tag mb-2">CONFIDENCE DISTRIBUTION</div>
-                    {buckets.every((b) => !b.count) ? <EmptyChart text="No setups logged yet for this sprint." /> : (
-                        <ResponsiveContainer width="100%" height={240}>
-                            <BarChart data={buckets} margin={{ top: 10, right: 12, bottom: 0, left: -10 }}>
-                                <XAxis dataKey="bucket" tick={{ fill: MUTED, fontSize: 10, fontFamily: "JetBrains Mono" }} stroke="#2A2D35" />
-                                <YAxis allowDecimals={false} tick={{ fill: MUTED, fontSize: 10, fontFamily: "JetBrains Mono" }} stroke="#2A2D35" width={32} />
-                                <RTooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(192,197,206,0.06)" }} />
-                                <Bar dataKey="count" fill={SILVER} radius={[3, 3, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
-            </div>
-        </section>
-    );
-}
-
-/* ---------------- AI Reasoning (expanded) ---------------- */
-function ReasoningPanel({ reasoning }) {
-    return (
-        <section className="panel p-6" data-testid="reasoning-panel">
-            <div className="font-heading font-medium text-lg text-atlas-text">AI Reasoning</div>
-            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Latest engine decisions · bias · conviction</div>
-            {(!reasoning || reasoning.length === 0) ? (
-                <EmptyChart text="Awaiting first evaluation cycle..." />
-            ) : (
-                <ReasoningTimeline items={reasoning} />
+            <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Correct rejections vs missed opportunities</div>
+            {correct + missed === 0 ? <EmptyChart text="Awaiting counterfactual resolution (24h/72h/7d)..." /> : (
+                <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                        <Pie data={[{ name: "Correct Rejections", value: correct }, { name: "Missed Opportunities", value: missed }]}
+                            dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={2} stroke="none">
+                            <RCell fill={GREEN} />
+                            <RCell fill={ROSE} />
+                        </Pie>
+                        <RTooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                </ResponsiveContainer>
             )}
+            <Legend items={[["Correct Rejections", GREEN, correct], ["Missed Opportunities", ROSE, missed]]} />
         </section>
     );
 }
@@ -360,7 +330,7 @@ function LeaderboardAnalytics({ trades }) {
     }, [trades, property]);
 
     return (
-        <section className="panel p-6" data-testid="leaderboard-analytics">
+        <section className="panel p-6 h-full" data-testid="leaderboard-analytics">
             <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
                 <div>
                     <div className="font-heading font-medium text-lg text-atlas-text">Leaderboard &amp; Analytics</div>
@@ -419,14 +389,16 @@ function LeaderboardAnalytics({ trades }) {
 /* ---------------- Consolidated positions + today's executions (bottom) ---------------- */
 function ConsolidatedPositions({ portfolio, trades, onDone }) {
     const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
-    const today = new Date().toDateString();
-    const todays = (trades || []).filter((t) => t.timestamp && new Date(t.timestamp).toDateString() === today);
+    const executions = [...(trades || [])]
+        .filter((t) => t.timestamp)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 30);
 
     return (
         <div className="panel overflow-hidden" data-testid="consolidated-positions">
             <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
                 <div className="label-tag">POSITION TRACKER</div>
-                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open · {todays.length} today</span>
+                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open · {executions.length} executions</span>
             </div>
 
             {positions.length === 0 ? (
@@ -459,19 +431,14 @@ function ConsolidatedPositions({ portfolio, trades, onDone }) {
                 </div>
             )}
 
-            <details className="group border-t border-atlas-border" data-testid="tracker-todays-executions">
-                <summary className="px-6 py-3 flex items-center justify-between cursor-pointer list-none select-none">
-                    <span className="label-tag">TODAY&apos;S EXECUTIONS</span>
-                    <span className="font-mono text-[10px] text-atlas-textTertiary flex items-center gap-2">
-                        {todays.length} today
-                        <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
-                    </span>
-                </summary>
-                {todays.length === 0 ? (
-                    <div className="p-6 text-center font-mono text-xs text-atlas-textSecondary border-t border-atlas-border">No executions today. Tracking zones...</div>
+            {/* Executions detail — folded into the single tracker (no separate block) */}
+            <div className="border-t border-atlas-border" data-testid="tracker-executions">
+                <div className="px-6 py-2.5 label-tag border-b border-atlas-border">EXECUTIONS</div>
+                {executions.length === 0 ? (
+                    <div className="p-6 text-center font-mono text-xs text-atlas-textSecondary">No executions yet. Tracking zones...</div>
                 ) : (
-                    <div className="overflow-x-auto border-t border-atlas-border">
-                        <table className="w-full text-[12px] font-mono">
+                    <div className="overflow-x-auto atlas-scroll">
+                        <table className="w-full text-[12px] font-mono whitespace-nowrap">
                             <thead>
                                 <tr className="border-b border-atlas-border text-atlas-textSecondary text-[10px] uppercase tracking-widest">
                                     <th className="text-left px-4 py-3">Time</th>
@@ -484,9 +451,9 @@ function ConsolidatedPositions({ portfolio, trades, onDone }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {todays.map((t) => (
-                                    <tr key={t.id} className="border-b border-atlas-border last:border-b-0" data-testid={`today-trade-${t.id}`}>
-                                        <td className="px-4 py-2 text-atlas-textSecondary">{new Date(t.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                                {executions.map((t) => (
+                                    <tr key={t.id} className="border-b border-atlas-border last:border-b-0" data-testid={`exec-trade-${t.id}`}>
+                                        <td className="px-4 py-2 text-atlas-textSecondary">{new Date(t.timestamp).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
                                         <td className="px-4 py-2 text-atlas-text font-bold">{t.symbol}</td>
                                         <td className={`px-4 py-2 font-bold ${t.side === "BUY" ? "text-atlas-positive" : "text-atlas-negative"}`}>{t.side}</td>
                                         <td className="px-4 py-2 text-right tabular-nums">${(t.price || 0).toFixed(2)}</td>
@@ -499,7 +466,7 @@ function ConsolidatedPositions({ portfolio, trades, onDone }) {
                         </table>
                     </div>
                 )}
-            </details>
+            </div>
         </div>
     );
 }
