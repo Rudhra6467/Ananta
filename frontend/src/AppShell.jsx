@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Activity, Briefcase, Database, FlaskConical } from "lucide-react";
 import { Toaster } from "sonner";
 import Dashboard from "@/pages/Dashboard";
@@ -19,6 +19,29 @@ const TABS = [
     { id: "settings", label: "Research Lab", icon: FlaskConical, Component: SettingsPage },
 ];
 
+/* Native-feed header physics: hides on scroll-down, glides back on scroll-up. */
+function useHideOnScroll(threshold = 60) {
+    const [hidden, setHidden] = useState(false);
+    useEffect(() => {
+        let lastY = window.scrollY;
+        let ticking = false;
+        const onScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+                const y = window.scrollY;
+                if (y > lastY + 4 && y > threshold) setHidden(true);
+                else if (y < lastY - 4) setHidden(false);
+                lastY = y;
+                ticking = false;
+            });
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, [threshold]);
+    return hidden;
+}
+
 export default function AppShell() {
     return (
         <AppDataProvider>
@@ -32,6 +55,7 @@ function Shell() {
     const [active, setActive] = useState(0);
     const [dir, setDir] = useState(1);
     const touch = useRef(null);
+    const hidden = useHideOnScroll(60);
 
     const go = (i) => {
         if (i < 0 || i >= TABS.length || i === active) return;
@@ -59,7 +83,7 @@ function Shell() {
 
     return (
         <div className="min-h-screen bg-atlas-bg text-white font-body grid-bg pb-24" data-testid="app-shell">
-            <TopHeader active={active} ready={ready} isOwner={isOwner} />
+            <TopHeader active={active} ready={ready} isOwner={isOwner} hidden={hidden} />
 
             <main
                 className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 overflow-x-hidden"
@@ -92,21 +116,26 @@ function Shell() {
     );
 }
 
-/* ---------------- Dynamic context top header ---------------- */
-function TopHeader({ active, ready, isOwner }) {
+/* ---------------- Dynamic context top header (hide-on-scroll) ---------------- */
+function TopHeader({ active, ready, isOwner, hidden }) {
     const { portfolio } = useAppData();
 
     return (
-        <header className="sticky top-0 z-30 backdrop-blur-xl bg-atlas-bg/85 border-b border-atlas-border" data-testid="app-header">
+        <header
+            className={`sticky top-0 z-30 backdrop-blur-xl bg-atlas-bg/90 border-b border-atlas-border transition-transform duration-300 will-change-transform ${
+                hidden ? "-translate-y-full" : "translate-y-0"
+            }`}
+            data-testid="app-header"
+        >
             <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-3">
-                {/* Row 1 — brand + master controls */}
-                <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                {/* Row 1 — brand + master controls (compact so the wordmark never clips) */}
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <img src={anantaEmblem} alt="Ananta" data-testid="ananta-emblem"
-                            className="h-8 w-8 md:h-9 md:w-9 object-contain select-none" draggable={false} />
+                            className="h-7 w-7 md:h-9 md:w-9 object-contain select-none" draggable={false} />
                         <div className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         <EnvironmentToggle />
                         <TradeHistoryPdfDialog />
                         <OwnerAuthControl />
@@ -186,7 +215,7 @@ function Metric({ label, value, sub, cls = "text-atlas-text", big = false }) {
     );
 }
 
-/* ---------------- Sticky bottom tab bar ---------------- */
+/* ---------------- Sticky bottom tab bar — prominent active state ---------------- */
 function BottomNav({ active, onSelect }) {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-atlas-bg/95 backdrop-blur-xl border-t border-atlas-border shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.9)]" data-testid="bottom-nav">
@@ -198,12 +227,20 @@ function BottomNav({ active, onSelect }) {
                         <button
                             key={t.id}
                             data-testid={`bottom-nav-${t.id}`}
+                            aria-current={on ? "page" : undefined}
                             onClick={() => onSelect(i)}
-                            className="relative flex flex-col items-center justify-center gap-1 py-2.5 transition-colors group"
+                            className="relative flex flex-col items-center justify-center gap-1 pt-2 pb-2.5 transition-colors"
                         >
-                            {on && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-atlas-cyan" />}
-                            <Icon className={`w-5 h-5 transition-colors ${on ? "text-atlas-cyan" : "text-atlas-textSecondary group-hover:text-atlas-text"}`} strokeWidth={2} />
-                            <span className={`font-mono text-[9px] tracking-wide uppercase transition-colors ${on ? "text-atlas-cyan font-bold" : "text-atlas-textTertiary group-hover:text-atlas-textSecondary"}`}>
+                            {on && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 rounded-full bg-atlas-cyan" />}
+                            <span className={`flex items-center justify-center rounded-full transition-all duration-200 ${on ? "bg-atlas-cyan/20 px-5 py-1.5" : "px-5 py-1.5"}`}>
+                                <Icon
+                                    className={`transition-all ${on ? "w-[22px] h-[22px] text-atlas-cyan" : "w-5 h-5 text-atlas-textTertiary"}`}
+                                    strokeWidth={on ? 2.4 : 1.8}
+                                    fill={on ? "currentColor" : "none"}
+                                    fillOpacity={on ? 0.18 : 0}
+                                />
+                            </span>
+                            <span className={`font-mono text-[9px] tracking-wide uppercase transition-colors ${on ? "text-atlas-cyan font-bold" : "text-atlas-textTertiary font-medium"}`}>
                                 {t.label}
                             </span>
                         </button>

@@ -30,7 +30,7 @@ export default function Portfolio() {
             <Tabs defaultValue="holdings" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-6">
                     <SubTab value="holdings" label="HOLDINGS" count={positions.length} icon={Layers} />
-                    <SubTab value="positions" label="POSITIONS" count={closed.length} icon={Archive} />
+                    <SubTab value="positions" label="CLOSED TRADES" count={closed.length} icon={Archive} />
                 </TabsList>
 
                 <TabsContent value="holdings" className="m-0">
@@ -146,7 +146,7 @@ function ClosedPositions({ closed }) {
         <div className="panel overflow-hidden" data-testid="closed-positions">
             <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <div className="font-heading text-base text-atlas-text">Positions · Closed</div>
+                    <div className="font-heading text-base text-atlas-text">Closed Trades</div>
                     <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Chronological historical performance archive</div>
                 </div>
                 <div className="flex items-center gap-1 font-mono" data-testid="closed-window-filters">

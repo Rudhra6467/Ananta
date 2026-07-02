@@ -1,5 +1,13 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-02 (c) — Mobile layout bug-fixes (web)
+
+- **Top header de-cluttered + hide-on-scroll**: fixed the clipped "Ananta" wordmark — owner login/logout is now icon-only on mobile (`hidden sm:inline` text) and the PDF button is slimmer, so brand + Paper/Live + Download + auth all fit. Header now uses native-feed physics (`useHideOnScroll`): slides up off-screen on scroll-down (verified top:-152), glides back on scroll-up. Bottom nav stays fixed.
+- **Prominent active bottom tab**: active tab now shows a filled cyan pill behind a larger icon + cyan bold label + top accent bar (Zerodha/Instagram style); inactive tabs dimmed grey.
+- **Analytics rollback**: removed the broken chevron/expand tiles — Leaderboard & Analytics, Counterfactual Engine, and AI Reasoning now render as **3 solid, always-visible panels** stacked in the Cockpit.
+- **Portfolio**: renamed the "POSITIONS" tab → **"CLOSED TRADES"** (and its section header).
+- Verified on mobile (414px): header hide/show, active-tab highlight, all 3 analytics panels present, lint clean.
+
 ## 2026-07-02 (b) — Bottom-nav + swipe navigation overhaul (web)
 
 - **Bottom tab bar** (`AppShell.jsx`, `data-testid=bottom-nav`): moved the 4 main tabs (Cockpit · Portfolio · Datalogs · Research Lab) out of the top header into a fixed, thumb-reachable bottom bar with minimalist icon + label and an active cyan indicator. Removed the old top nav + hide-on-scroll floating nav.

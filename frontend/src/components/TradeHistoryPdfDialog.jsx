@@ -58,7 +58,7 @@ export default function TradeHistoryPdfDialog() {
             <DialogTrigger asChild>
                 <button
                     data-testid="header-pdf-button"
-                    className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest font-bold px-3 py-2.5 border border-atlas-border hover:border-atlas-cyan hover:text-atlas-cyan text-atlas-textSecondary transition-colors"
+                    className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest font-bold px-2.5 py-2 border border-atlas-border hover:border-atlas-cyan hover:text-atlas-cyan text-atlas-textSecondary transition-colors"
                     title="Download trade-history PDF"
                 >
                     <Download className="w-4 h-4" />

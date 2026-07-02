@@ -51,9 +51,9 @@ export default function OwnerAuthControl() {
                     size="sm"
                     onClick={logout}
                     data-testid="owner-logout-button"
-                    className="font-mono text-[11px] uppercase tracking-wider text-atlas-textSecondary hover:text-white h-8"
+                    className="font-mono text-[11px] uppercase tracking-wider text-atlas-textSecondary hover:text-white h-8 px-2"
                 >
-                    <LogOut className="w-3.5 h-3.5 mr-1.5" /> Logout
+                    <LogOut className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Logout</span>
                 </Button>
             </div>
         );
@@ -66,9 +66,9 @@ export default function OwnerAuthControl() {
                     variant="outline"
                     size="sm"
                     data-testid="owner-login-button"
-                    className="font-mono text-[11px] uppercase tracking-wider border-atlas-border bg-transparent hover:bg-atlas-border/40 h-8"
+                    className="font-mono text-[11px] uppercase tracking-wider border-atlas-border bg-transparent hover:bg-atlas-border/40 h-8 px-2.5"
                 >
-                    <LogIn className="w-3.5 h-3.5 mr-1.5" /> Owner Login
+                    <LogIn className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Owner Login</span>
                 </Button>
             </DialogTrigger>
             <DialogContent className="bg-atlas-bg border-atlas-border" data-testid="owner-login-dialog">

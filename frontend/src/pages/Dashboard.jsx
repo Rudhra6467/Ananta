@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Brain, ChevronDown, ChevronRight, RefreshCw, Trophy, Scale } from "lucide-react";
+import { BarChart3, ChevronRight, RefreshCw } from "lucide-react";
 import {
     Bar,
     BarChart,
@@ -49,7 +49,7 @@ export default function Dashboard() {
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
-            <AnalyticsGroup summary={summary} trades={trades} reasoning={reasoning} regime={regime} />
+            <AnalyticsGroup summary={summary} trades={trades} reasoning={reasoning} />
             <ConsolidatedPositions portfolio={portfolio} trades={trades} onDone={refresh} />
         </div>
     );
@@ -237,71 +237,23 @@ function TradeLifecyclePanel({ portfolio }) {
     );
 }
 
-/* ---------------- Analytics group — expandable preview tiles ---------------- */
-function AnalyticsGroup({ summary, trades, reasoning, regime }) {
-    const [expanded, setExpanded] = useState("leaderboard");
-    const sells = (trades || []).filter((t) => t.side === "SELL");
-    const net = sells.reduce((a, t) => a + (t.pnl || 0), 0);
-    const wins = sells.filter((t) => (t.pnl || 0) > 0).length;
+/* ---------------- Analytics group — three solid panels, always visible ---------------- */
+function AnalyticsGroup({ summary, trades, reasoning }) {
+    return (
+        <div data-testid="analytics-group" className="space-y-3">
+            <div className="label-tag">ANALYTICS</div>
+            <LeaderboardAnalytics trades={trades} />
+            <CounterfactualPanel summary={summary} />
+            <ReasoningPanel reasoning={reasoning} />
+        </div>
+    );
+}
+
+/* ---------------- Counterfactual + confidence distribution ---------------- */
+function CounterfactualPanel({ summary }) {
     const buckets = summary?.confidence_buckets || [];
     const correct = buckets.reduce((a, b) => a + (b.correct_rejection || 0), 0);
     const missed = buckets.reduce((a, b) => a + (b.missed_opportunity || 0), 0);
-
-    const CARDS = [
-        { id: "leaderboard", title: "Leaderboard & Analytics", icon: Trophy,
-          preview: <PreviewStat main={`${sells.length} closed`} sub={`${net >= 0 ? "+" : ""}$${net.toFixed(2)} net · ${sells.length ? Math.round((wins / sells.length) * 100) : 0}% win`} tone={net >= 0 ? "pos" : "neg"} /> },
-        { id: "counterfactual", title: "Counterfactual Engine", icon: Scale,
-          preview: <PreviewStat main={`${correct + missed} resolved`} sub={`${correct} correct · ${missed} missed`} tone={correct >= missed ? "pos" : "neg"} /> },
-        { id: "reasoning", title: "AI Reasoning", icon: Brain,
-          preview: <PreviewStat main={regime} sub={`${(reasoning || []).length} recent decisions`} tone={regime === "BULLISH" ? "pos" : regime === "BEARISH" ? "neg" : "mut"} /> },
-    ];
-
-    return (
-        <div data-testid="analytics-group">
-            <div className="label-tag mb-2">ANALYTICS</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {CARDS.map((c) => {
-                    const Icon = c.icon;
-                    const on = expanded === c.id;
-                    return (
-                        <button key={c.id} data-testid={`analytics-preview-${c.id}`}
-                            onClick={() => setExpanded((e) => (e === c.id ? null : c.id))}
-                            className={`panel p-4 text-left transition-all ${on ? "border-atlas-cyan shadow-[0_0_0_1px_rgba(96,165,250,0.4),0_0_18px_-4px_rgba(96,165,250,0.5)]" : "hover:bg-atlas-panelHover"}`}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Icon className="w-4 h-4 text-atlas-cyan" strokeWidth={2} />
-                                    <span className="font-heading font-medium text-[15px] text-atlas-text">{c.title}</span>
-                                </div>
-                                <ChevronDown className={`w-4 h-4 text-atlas-textSecondary transition-transform ${on ? "rotate-180" : ""}`} />
-                            </div>
-                            <div className="mt-3">{c.preview}</div>
-                        </button>
-                    );
-                })}
-            </div>
-
-            <div className={`overflow-hidden transition-all duration-300 ease-out ${expanded ? "max-h-[1600px] opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
-                {expanded === "leaderboard" && <LeaderboardAnalytics trades={trades} />}
-                {expanded === "counterfactual" && <CounterfactualPanel summary={summary} correct={correct} missed={missed} />}
-                {expanded === "reasoning" && <ReasoningPanel reasoning={reasoning} />}
-            </div>
-        </div>
-    );
-}
-
-function PreviewStat({ main, sub, tone }) {
-    const cls = tone === "pos" ? "text-atlas-positive" : tone === "neg" ? "text-atlas-negative" : "text-atlas-text";
-    return (
-        <div>
-            <div className={`font-mono text-lg font-bold tabular-nums ${cls}`}>{main}</div>
-            <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{sub}</div>
-        </div>
-    );
-}
-
-/* ---------------- Counterfactual + confidence distribution (expanded) ---------------- */
-function CounterfactualPanel({ summary, correct, missed }) {
-    const buckets = summary?.confidence_buckets || [];
     return (
         <section className="panel p-6" data-testid="counterfactual-panel">
             <div className="font-heading font-medium text-lg text-atlas-text">Counterfactual Engine</div>
