@@ -27,13 +27,6 @@ export default function Portfolio() {
 
     return (
         <div className="space-y-6" data-testid="portfolio-page">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <div className="label-tag">EXECUTION · PORTFOLIO</div>
-                    <h2 className="font-heading font-light text-3xl tracking-tight mt-1 text-atlas-text">Portfolio</h2>
-                </div>
-            </div>
-
             <Tabs defaultValue="holdings" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-6">
                     <SubTab value="holdings" label="HOLDINGS" count={positions.length} icon={Layers} />
@@ -63,13 +56,6 @@ function SubTab({ value, label, count, icon: Icon }) {
 
 /* ---------------- HOLDINGS · Zerodha-style summary + list ---------------- */
 function Holdings({ positions, portfolio }) {
-    const { invested, current, pnl, pnlPct } = useMemo(() => {
-        const invested = positions.reduce((a, p) => a + (p.avg_cost || 0) * (p.quantity || 0), 0);
-        const current = positions.reduce((a, p) => a + (p.market_value || (p.last_price || 0) * (p.quantity || 0)), 0);
-        const pnl = current - invested;
-        return { invested, current, pnl, pnlPct: invested > 0 ? (pnl / invested) * 100 : 0 };
-    }, [positions]);
-
     const dayStart = portfolio?.day_start_equity ?? portfolio?.starting_balance ?? 0;
     const todayPnl = (portfolio?.equity ?? 0) - dayStart;
     const todayPct = portfolio?.daily_pnl_pct ?? 0;
@@ -86,29 +72,6 @@ function Holdings({ positions, portfolio }) {
 
     return (
         <div className="space-y-4" data-testid="holdings">
-            {/* Summary card */}
-            <div className="panel p-6" data-testid="holdings-summary">
-                <div className="grid grid-cols-2 gap-6">
-                    <div>
-                        <div className="label-tag">INVESTED</div>
-                        <div className="font-mono text-2xl md:text-3xl font-light tabular-nums text-atlas-text mt-1" data-testid="holdings-invested">{fmtNum(invested)}</div>
-                    </div>
-                    <div className="text-right">
-                        <div className="label-tag">CURRENT</div>
-                        <div className="font-mono text-2xl md:text-3xl font-light tabular-nums text-atlas-text mt-1" data-testid="holdings-current">{fmtNum(current)}</div>
-                    </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-atlas-border flex items-center justify-between">
-                    <div className="label-tag">P&amp;L</div>
-                    <div className="text-right">
-                        <div className={`font-mono text-2xl font-medium tabular-nums ${pnlCls(pnl)}`} data-testid="holdings-pnl">
-                            {pnl >= 0 ? "+" : ""}{fmtNum(pnl)}
-                        </div>
-                        <div className={`font-mono text-xs font-bold ${pnlCls(pnl)}`}>{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)} %</div>
-                    </div>
-                </div>
-            </div>
-
             {/* Holdings list */}
             <div className="panel overflow-hidden" data-testid="holdings-list">
                 <div className="divide-y divide-atlas-border">

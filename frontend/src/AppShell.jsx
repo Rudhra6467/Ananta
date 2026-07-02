@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
-import { Activity, Briefcase, Database, FlaskConical, ShieldHalf } from "lucide-react";
+import { useRef, useState } from "react";
+import { Activity, Briefcase, Database, FlaskConical } from "lucide-react";
 import { Toaster } from "sonner";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Dashboard from "@/pages/Dashboard";
 import Portfolio from "@/pages/Portfolio";
 import Reports from "@/pages/Reports";
@@ -11,162 +10,70 @@ import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
 import anantaEmblem from "@/assets/ananta-emblem.png";
 import { useAuth } from "@/context/AuthContext";
-import { AppDataProvider } from "@/context/AppDataContext";
-import api from "@/lib/api";
+import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
-const NAV = [
-    { id: "dashboard", label: "COCKPIT", icon: Activity },
-    { id: "portfolio", label: "PORTFOLIO", icon: Briefcase },
-    { id: "reports", label: "DATALOGS / REPORTS", icon: Database },
-    { id: "settings", label: "RESEARCH LAB", icon: FlaskConical },
+const TABS = [
+    { id: "dashboard", label: "Cockpit", icon: Activity, Component: Dashboard },
+    { id: "portfolio", label: "Portfolio", icon: Briefcase, Component: Portfolio },
+    { id: "reports", label: "Datalogs", icon: Database, Component: Reports },
+    { id: "settings", label: "Research Lab", icon: FlaskConical, Component: SettingsPage },
 ];
 
-/* Reveals the nav tabs the instant the user scrolls up, hides them (with the header)
-   when scrolling down — modern hide-on-scroll pattern that reclaims screen height. */
-function useScrollDirection(threshold = 200) {
-    const [pinned, setPinned] = useState(false);
-    useEffect(() => {
-        let lastY = window.scrollY;
-        let ticking = false;
-        const onScroll = () => {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(() => {
-                const y = window.scrollY;
-                if (y < lastY - 2 && y > threshold) setPinned(true);
-                else if (y > lastY + 2 || y <= threshold) setPinned(false);
-                lastY = y;
-                ticking = false;
-            });
-        };
-        window.addEventListener("scroll", onScroll, { passive: true });
-        return () => window.removeEventListener("scroll", onScroll);
-    }, [threshold]);
-    return pinned;
-}
-
-function NavTriggers({ testPrefix = "nav-tab" }) {
+export default function AppShell() {
     return (
-        <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 overflow-x-auto atlas-scroll flex-nowrap">
-            {NAV.map((n) => {
-                const Icon = n.icon;
-                return (
-                    <TabsTrigger
-                        key={n.id}
-                        value={n.id}
-                        data-testid={`${testPrefix}-${n.id}`}
-                        className="shrink-0 rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[10px] md:text-[11px] tracking-[0.15em] md:tracking-[0.2em] uppercase font-bold px-3.5 md:px-5 py-3 transition-colors duration-150 hover:text-white"
-                    >
-                        <Icon className="w-4 h-4 mr-1.5 md:mr-2" strokeWidth={2} />
-                        {n.label}
-                    </TabsTrigger>
-                );
-            })}
-        </TabsList>
+        <AppDataProvider>
+            <Shell />
+        </AppDataProvider>
     );
 }
 
-export default function AppShell() {
-    const [tab, setTab] = useState("dashboard");
-    const [health, setHealth] = useState(null);
-    const [now, setNow] = useState(new Date());
-    const { isOwner, ready } = useAuth();
-    const tabsPinned = useScrollDirection(200);
+function Shell() {
+    const { ready, isOwner } = useAuth();
+    const [active, setActive] = useState(0);
+    const [dir, setDir] = useState(1);
+    const touch = useRef(null);
 
-    useEffect(() => {
-        api.health().then(setHealth).catch(() => setHealth({ status: "down" }));
-        const t = setInterval(() => setNow(new Date()), 1000);
-        return () => clearInterval(t);
-    }, []);
+    const go = (i) => {
+        if (i < 0 || i >= TABS.length || i === active) return;
+        setDir(i > active ? 1 : -1);
+        setActive(i);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const onTouchStart = (e) => {
+        const t = e.touches[0];
+        touch.current = { x: t.clientX, y: t.clientY };
+    };
+    const onTouchEnd = (e) => {
+        if (!touch.current) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touch.current.x;
+        const dy = t.clientY - touch.current.y;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+            go(active + (dx < 0 ? 1 : -1));
+        }
+        touch.current = null;
+    };
+
+    const Active = TABS[active].Component;
 
     return (
-        <AppDataProvider>
-        <div className="min-h-screen bg-atlas-bg text-white font-body grid-bg" data-testid="app-shell">
-            <Tabs value={tab} onValueChange={setTab} className="atlas-tabs">
-                {/* Floating nav — slides down on scroll-up, tucks away on scroll-down */}
-                <div
-                    className={`fixed top-0 left-0 right-0 z-40 backdrop-blur-xl bg-atlas-bg/90 border-b border-atlas-border shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition-transform duration-300 will-change-transform ${
-                        tabsPinned ? "translate-y-0" : "-translate-y-full"
-                    }`}
-                    data-testid="floating-nav"
-                >
-                    <div className="max-w-[1600px] mx-auto px-4 md:px-6">
-                        <NavTriggers testPrefix="float-nav-tab" />
-                    </div>
+        <div className="min-h-screen bg-atlas-bg text-white font-body grid-bg pb-24" data-testid="app-shell">
+            <TopHeader active={active} ready={ready} isOwner={isOwner} />
+
+            <main
+                className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 overflow-x-hidden"
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+                data-testid="swipe-container"
+            >
+                <div key={active} className={dir > 0 ? "page-enter-right" : "page-enter-left"}>
+                    <Active />
                 </div>
+            </main>
 
-                {/* Header — scrolls away naturally with the page */}
-                <header className="border-b border-atlas-border bg-atlas-bg/70" data-testid="app-header">
-                    <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <img
-                                src={anantaEmblem}
-                                alt="Ananta"
-                                data-testid="ananta-emblem"
-                                className="h-10 w-10 md:h-11 md:w-11 object-contain select-none"
-                                draggable={false}
-                            />
-                            <div>
-                                <div className="font-heading font-semibold tracking-tight text-base md:text-lg leading-none text-atlas-text">
-                                    Ananta
-                                </div>
-                                <div className="label-tag mt-1 text-[9px] text-atlas-textSecondary">
-                                    ALGORITHMIC EXECUTION COCKPIT
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <EnvironmentToggle />
-                            <TradeHistoryPdfDialog />
-                            <OwnerAuthControl />
-                            <div className="hidden md:flex items-center gap-3">
-                                <StatusPill label="ENGINE" ok={health && health.status === "running"} />
-                                <div className="font-mono text-xs text-atlas-textSecondary">
-                                    {now.toISOString().replace("T", " ").slice(0, 19)} UTC
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </header>
+            <BottomNav active={active} onSelect={go} />
 
-                {ready && !isOwner && (
-                    <div className="bg-atlas-cyan/10 border-b border-atlas-cyan/30 text-atlas-cyan" data-testid="readonly-banner">
-                        <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-center">
-                            Public read-only view · log in as owner to configure & control
-                        </div>
-                    </div>
-                )}
-
-                <main className="max-w-[1600px] mx-auto px-4 md:px-6 py-6">
-                    {/* In-flow nav — visible at the top, scrolls away as you read */}
-                    <div className="mb-6">
-                        <NavTriggers />
-                    </div>
-
-                    <TabsContent value="dashboard" className="m-0">
-                        <Dashboard />
-                    </TabsContent>
-                    <TabsContent value="portfolio" className="m-0">
-                        <Portfolio />
-                    </TabsContent>
-                    <TabsContent value="reports" className="m-0">
-                        <Reports />
-                    </TabsContent>
-                    <TabsContent value="settings" className="m-0">
-                        <SettingsPage />
-                    </TabsContent>
-                </main>
-            </Tabs>
-
-            <footer className="border-t border-atlas-border mt-12">
-                <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-4 flex items-center justify-between text-[10px] font-mono text-atlas-textTertiary">
-                    <div>ANANTA · ALGORITHMIC SWING EXECUTION · PAPER VALIDATION · CAPITAL PRESERVATION FIRST</div>
-                    <div className="flex items-center gap-2">
-                        <ShieldHalf className="w-3 h-3" />
-                        <span>TECHNICAL-FIRST · EXPLAINABLE · DEFENSIVE ARCHITECTURE</span>
-                    </div>
-                </div>
-            </footer>
             <Toaster
                 position="top-right"
                 theme="dark"
@@ -182,18 +89,127 @@ export default function AppShell() {
                 }}
             />
         </div>
-        </AppDataProvider>
     );
 }
 
-function StatusPill({ label, ok }) {
+/* ---------------- Dynamic context top header ---------------- */
+function TopHeader({ active, ready, isOwner }) {
+    const { portfolio } = useAppData();
+
     return (
-        <div className="flex items-center gap-2" data-testid="engine-status-pill">
-            <span className="label-tag text-[9px]">{label}</span>
-            <span className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-bold px-2 py-0.5 ${ok ? "text-atlas-positive" : "text-atlas-negative"}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-atlas-positive glow-green" : "bg-atlas-negative glow-red"}`} />
-                {ok ? "ONLINE" : "OFFLINE"}
-            </span>
+        <header className="sticky top-0 z-30 backdrop-blur-xl bg-atlas-bg/85 border-b border-atlas-border" data-testid="app-header">
+            <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-3">
+                {/* Row 1 — brand + master controls */}
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <img src={anantaEmblem} alt="Ananta" data-testid="ananta-emblem"
+                            className="h-8 w-8 md:h-9 md:w-9 object-contain select-none" draggable={false} />
+                        <div className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <EnvironmentToggle />
+                        <TradeHistoryPdfDialog />
+                        <OwnerAuthControl />
+                    </div>
+                </div>
+
+                {/* Row 2 — per-tab context */}
+                <div className="py-3" data-testid="context-header">
+                    <ContextInfo active={active} portfolio={portfolio} />
+                </div>
+            </div>
+
+            {ready && !isOwner && (
+                <div className="bg-atlas-cyan/10 border-t border-atlas-cyan/30 text-atlas-cyan" data-testid="readonly-banner">
+                    <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-1 font-mono text-[9px] uppercase tracking-[0.15em] text-center">
+                        Public read-only view · log in as owner to configure & control
+                    </div>
+                </div>
+            )}
+        </header>
+    );
+}
+
+function ContextInfo({ active, portfolio }) {
+    const id = TABS[active].id;
+
+    if (id === "dashboard") {
+        const equity = portfolio?.equity ?? 0;
+        const deployed = portfolio?.positions_value ?? 0;
+        const slots = portfolio?.slots_used ?? 0;
+        const dailyPct = portfolio?.daily_pnl_pct ?? 0;
+        return (
+            <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll" data-testid="context-cockpit">
+                <Metric label="ACCOUNT VALUE" value={`$${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} big />
+                <Metric label="DEPLOYED" value={`$${deployed.toFixed(2)}`} sub={`(${slots})`} />
+                <Metric label="DAILY P&L"
+                    value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`}
+                    cls={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"} />
+            </div>
+        );
+    }
+
+    if (id === "portfolio") {
+        const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
+        const invested = positions.reduce((a, p) => a + (p.avg_cost || 0) * (p.quantity || 0), 0);
+        const current = positions.reduce((a, p) => a + (p.market_value || (p.last_price || 0) * (p.quantity || 0)), 0);
+        const pnl = current - invested;
+        const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+        const cls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-text";
+        return (
+            <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll" data-testid="context-portfolio">
+                <Metric label="INVESTED" value={invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} big />
+                <Metric label="CURRENT" value={current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
+                <Metric label="P&L" value={`${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`} sub={`${pnl >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} cls={cls} />
+            </div>
+        );
+    }
+
+    const title = id === "reports" ? "DataLogs / Reports" : "Research Lab";
+    const subtitle = id === "reports" ? "Validation · Analytics · Reasoning archive" : "Strategy validation · optimization sandbox · engine config";
+    return (
+        <div data-testid={`context-${id}`}>
+            <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
+            <div className="label-tag mt-1.5 text-[9px] text-atlas-textTertiary">{subtitle}</div>
         </div>
+    );
+}
+
+function Metric({ label, value, sub, cls = "text-atlas-text", big = false }) {
+    return (
+        <div className="shrink-0">
+            <div className="label-tag text-[9px]">{label}</div>
+            <div className={`font-mono tabular-nums font-medium mt-0.5 ${big ? "text-xl md:text-2xl font-light" : "text-base md:text-lg"} ${cls}`}>
+                {value} {sub && <span className="text-atlas-textTertiary text-xs">{sub}</span>}
+            </div>
+        </div>
+    );
+}
+
+/* ---------------- Sticky bottom tab bar ---------------- */
+function BottomNav({ active, onSelect }) {
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-atlas-bg/95 backdrop-blur-xl border-t border-atlas-border shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.9)]" data-testid="bottom-nav">
+            <div className="max-w-[1600px] mx-auto grid grid-cols-4">
+                {TABS.map((t, i) => {
+                    const Icon = t.icon;
+                    const on = active === i;
+                    return (
+                        <button
+                            key={t.id}
+                            data-testid={`bottom-nav-${t.id}`}
+                            onClick={() => onSelect(i)}
+                            className="relative flex flex-col items-center justify-center gap-1 py-2.5 transition-colors group"
+                        >
+                            {on && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-atlas-cyan" />}
+                            <Icon className={`w-5 h-5 transition-colors ${on ? "text-atlas-cyan" : "text-atlas-textSecondary group-hover:text-atlas-text"}`} strokeWidth={2} />
+                            <span className={`font-mono text-[9px] tracking-wide uppercase transition-colors ${on ? "text-atlas-cyan font-bold" : "text-atlas-textTertiary group-hover:text-atlas-textSecondary"}`}>
+                                {t.label}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </nav>
     );
 }

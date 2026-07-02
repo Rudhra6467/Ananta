@@ -45,7 +45,7 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-6" data-testid="cockpit-page">
-            <ExecutiveHeader portfolio={portfolio} brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
+            <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
@@ -55,69 +55,31 @@ export default function Dashboard() {
     );
 }
 
-/* ---------------- Executive Header ---------------- */
-function ExecutiveHeader({ portfolio, brain, regime, scanned, onRefresh }) {
-    const equity = portfolio?.equity ?? 0;
-    const positionsValue = portfolio?.positions_value ?? 0;
-    const slots = portfolio?.slots_used ?? 0;
-    const totalPnl = portfolio?.total_pnl ?? 0;
-    const totalPct = portfolio?.total_pnl_pct ?? 0;
-    const dailyPct = portfolio?.daily_pnl_pct ?? 0;
-    const up = totalPnl > 0.005, down = totalPnl < -0.005;
-    const pnlCls = up ? "text-atlas-positive" : down ? "text-atlas-negative" : "text-atlas-textSecondary";
-
+/* ---------------- Bot-brain strip (account metrics live in the top header now) ---------------- */
+function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
     const total = brain?.total_evaluations ?? 0;
     const qualified = brain?.greenlit ?? 0;
     const rejected = Math.max(total - qualified, 0);
     const regimeCls = regime === "BULLISH" ? "text-atlas-positive"
         : regime === "BEARISH" ? "text-atlas-negative" : "text-atlas-textSecondary";
-
     return (
-        <div className="panel p-6 md:p-8" data-testid="executive-header">
-            <div className="flex flex-wrap items-end justify-between gap-6">
-                <div>
-                    <div className="label-tag">ACCOUNT VALUE</div>
-                    <div className="font-mono text-4xl md:text-5xl font-light tracking-tight tabular-nums text-atlas-text mt-2" data-testid="portfolio-value">
-                        ${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                </div>
-                <div className="flex items-end gap-8">
-                    <HeaderStat label="DEPLOYED" testid="deployed-positions" value={`$${positionsValue.toFixed(2)}`} sub={`(${slots})`} />
-                    <HeaderStat label="TOTAL P&L" testid="total-pnl" valueClass={pnlCls}
-                        value={`${up ? "+" : ""}$${totalPnl.toFixed(2)}`} sub={`${up ? "+" : ""}${totalPct.toFixed(2)}%`} />
-                    <HeaderStat label="DAILY P&L" testid="daily-pnl"
-                        valueClass={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"}
-                        value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`} />
-                    <button data-testid="cockpit-refresh" onClick={onRefresh} className="text-atlas-textSecondary hover:text-atlas-text transition-colors mb-1">
-                        <RefreshCw className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-            <div className="mt-6 pt-4 border-t border-atlas-border flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs" data-testid="bot-brain-strip">
-                <BrainStat label="Scanned" value={scanned} />
-                <Sep />
-                <BrainStat label="Setups" value={total} />
-                <Sep />
-                <BrainStat label="Rejected" value={rejected} valueClass="text-atlas-negative" />
-                <Sep />
-                <BrainStat label="Qualified" value={qualified} valueClass="text-atlas-positive" />
-                <Sep />
-                <span className="text-atlas-textTertiary">Regime: <span className={`font-bold ${regimeCls}`} data-testid="regime-value">{regime}</span></span>
-            </div>
+        <div className="panel px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs" data-testid="bot-brain-strip">
+            <BrainStat label="Scanned" value={scanned} />
+            <Sep />
+            <BrainStat label="Setups" value={total} />
+            <Sep />
+            <BrainStat label="Rejected" value={rejected} valueClass="text-atlas-negative" />
+            <Sep />
+            <BrainStat label="Qualified" value={qualified} valueClass="text-atlas-positive" />
+            <Sep />
+            <span className="text-atlas-textTertiary">Regime: <span className={`font-bold ${regimeCls}`} data-testid="regime-value">{regime}</span></span>
+            <button data-testid="cockpit-refresh" onClick={onRefresh} className="ml-auto text-atlas-textSecondary hover:text-atlas-text transition-colors">
+                <RefreshCw className="w-4 h-4" />
+            </button>
         </div>
     );
 }
 
-function HeaderStat({ label, value, sub, valueClass = "text-atlas-text", testid }) {
-    return (
-        <div className="text-right" data-testid={testid}>
-            <div className="label-tag text-[9px]">{label}</div>
-            <div className={`font-mono text-xl font-medium tabular-nums mt-1 ${valueClass}`}>
-                {value} {sub && <span className="text-atlas-textTertiary text-sm">{sub}</span>}
-            </div>
-        </div>
-    );
-}
 function BrainStat({ label, value, valueClass = "text-atlas-text" }) {
     return <span className="text-atlas-textTertiary">{label}: <span className={`font-bold tabular-nums ${valueClass}`}>{value}</span></span>;
 }

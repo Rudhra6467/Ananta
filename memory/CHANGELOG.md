@@ -1,6 +1,18 @@
 # Ananta.AI — CHANGELOG
 
-## 2026-07-02 — UI polish + load-time optimization (web)
+## 2026-07-02 (b) — Bottom-nav + swipe navigation overhaul (web)
+
+- **Bottom tab bar** (`AppShell.jsx`, `data-testid=bottom-nav`): moved the 4 main tabs (Cockpit · Portfolio · Datalogs · Research Lab) out of the top header into a fixed, thumb-reachable bottom bar with minimalist icon + label and an active cyan indicator. Removed the old top nav + hide-on-scroll floating nav.
+- **Instagram-style swipe** (`swipe-container`): horizontal touch-swipe between tabs (dx>60px, horizontal-dominant) advances/retreats the active tab with an elastic slide animation (`page-enter-right/left` keyframes in `index.css`). Only the active page mounts (no height/perf issues). Tapping a bottom tab animates the same transition.
+- **Dynamic context top header** (`context-header`): no longer switches tabs; adapts per active tab —
+  - Cockpit → Account Value · Deployed · Daily P&L + Paper/Live switch
+  - Portfolio → Invested · Current · Overall P&L (above the Holdings/Positions sub-tabs)
+  - Datalogs / Research Lab → clean title + subtitle
+- **De-dup:** removed the Cockpit in-page account hero (kept the bot-brain strip) and the Portfolio Invested/Current/P&L summary card — those metrics now live only in the dynamic header.
+- Verified on mobile (430px) + desktop (1440px): bottom-nav tap, dynamic header swap, and simulated swipe all switch tabs correctly. Lint clean.
+- Note: in preview, the platform "Made with Emergent" badge overlaps the 4th (Research Lab) bottom tab in the corner — cosmetic, preview-only, absent in the published build.
+
+## 2026-07-02 (a) — UI polish + load-time optimization (web)
 
 ### ⚡ Performance (fresh-load latency)
 - **Root cause:** `/market/snapshots` (~2.3s) and `/portfolio` (~1.4s) fetched live Kraken ticker+orderbook on every request (ccxt `enableRateLimit` serialized the calls). The SQLite `historical_candles.db` is NOT touched on page load.

@@ -173,6 +173,23 @@ body {
     animation: flashDown 0.8s ease-out;
 }
 
+/* Instagram-style page swipe transitions (bottom-nav tabs) */
+@keyframes pageInRight {
+    0% { transform: translateX(7%); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes pageInLeft {
+    0% { transform: translateX(-7%); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+.page-enter-right {
+    animation: pageInRight 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.page-enter-left {
+    animation: pageInLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+
 /* tab style override */
 .atlas-tabs [data-state="active"] {
     background: transparent !important;
