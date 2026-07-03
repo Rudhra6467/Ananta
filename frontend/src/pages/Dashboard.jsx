@@ -45,7 +45,7 @@ export default function Dashboard() {
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
             <AnalyticsGroup summary={summary} trades={trades} />
-            <ConsolidatedPositions portfolio={portfolio} trades={trades} onDone={refresh} />
+            <ConsolidatedPositions portfolio={portfolio} onDone={refresh} />
         </div>
     );
 }
@@ -386,19 +386,15 @@ function LeaderboardAnalytics({ trades }) {
     );
 }
 
-/* ---------------- Consolidated positions + today's executions (bottom) ---------------- */
-function ConsolidatedPositions({ portfolio, trades, onDone }) {
+/* ---------------- Consolidated positions (bottom) ---------------- */
+function ConsolidatedPositions({ portfolio, onDone }) {
     const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
-    const executions = [...(trades || [])]
-        .filter((t) => t.timestamp)
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 30);
 
     return (
         <div className="panel overflow-hidden" data-testid="consolidated-positions">
             <div className="px-6 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
                 <div className="label-tag">POSITION TRACKER</div>
-                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open · {executions.length} executions</span>
+                <span className="font-mono text-[10px] text-atlas-textTertiary">{positions.length} open</span>
             </div>
 
             {positions.length === 0 ? (
@@ -430,43 +426,6 @@ function ConsolidatedPositions({ portfolio, trades, onDone }) {
                     })}
                 </div>
             )}
-
-            {/* Executions detail — folded into the single tracker (no separate block) */}
-            <div className="border-t border-atlas-border" data-testid="tracker-executions">
-                <div className="px-6 py-2.5 label-tag border-b border-atlas-border">EXECUTIONS</div>
-                {executions.length === 0 ? (
-                    <div className="p-6 text-center font-mono text-xs text-atlas-textSecondary">No executions yet. Tracking zones...</div>
-                ) : (
-                    <div className="overflow-x-auto atlas-scroll">
-                        <table className="w-full text-[12px] font-mono whitespace-nowrap">
-                            <thead>
-                                <tr className="border-b border-atlas-border text-atlas-textSecondary text-[10px] uppercase tracking-widest">
-                                    <th className="text-left px-4 py-3">Time</th>
-                                    <th className="text-left px-4 py-3">Symbol</th>
-                                    <th className="text-left px-4 py-3">Side</th>
-                                    <th className="text-right px-4 py-3">Price</th>
-                                    <th className="text-right px-4 py-3">Total</th>
-                                    <th className="text-right px-4 py-3">Net P&L</th>
-                                    <th className="text-left px-4 py-3">Exit</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {executions.map((t) => (
-                                    <tr key={t.id} className="border-b border-atlas-border last:border-b-0" data-testid={`exec-trade-${t.id}`}>
-                                        <td className="px-4 py-2 text-atlas-textSecondary">{new Date(t.timestamp).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-                                        <td className="px-4 py-2 text-atlas-text font-bold">{t.symbol}</td>
-                                        <td className={`px-4 py-2 font-bold ${t.side === "BUY" ? "text-atlas-positive" : "text-atlas-negative"}`}>{t.side}</td>
-                                        <td className="px-4 py-2 text-right tabular-nums">${(t.price || 0).toFixed(2)}</td>
-                                        <td className="px-4 py-2 text-right tabular-nums">${(t.notional || 0).toFixed(2)}</td>
-                                        <td className={`px-4 py-2 text-right tabular-nums font-bold ${(t.pnl || 0) > 0 ? "text-atlas-positive" : (t.pnl || 0) < 0 ? "text-atlas-negative" : "text-atlas-textSecondary"}`}>{t.pnl ? `${t.pnl > 0 ? "+" : ""}$${t.pnl.toFixed(4)}` : "—"}</td>
-                                        <td className="px-4 py-2 text-[10px] text-atlas-textSecondary">{t.exit_reason || "—"}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
         </div>
     );
 }
