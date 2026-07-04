@@ -82,10 +82,12 @@ def _multi_tf_block(s, multi_tf: dict):
                       "live-execution baseline. Compare trade frequency vs. return/drawdown to judge "
                       "which candle size the strategy's edge actually favours.", s["subtitle"]),
             Spacer(1, 8)]
-    for sym, tfs in multi_tf.items():
+    for sym, entry in multi_tf.items():
+        by_tf = entry.get("by_tf") or {}
+        verdict = entry.get("verdict") or {}
         rows = []
         for tf in order:
-            m = tfs.get(tf) or {}
+            m = by_tf.get(tf) or {}
             if "error" in m:
                 rows.append([tf, "—", m["error"], "—", "—", "—", "—"])
                 continue
@@ -97,8 +99,11 @@ def _multi_tf_block(s, multi_tf: dict):
             ])
         flow += [Paragraph(sym, s["h3"]),
                  _kv_table(s, ["TF", "Trades", "Return", "Win%", "MaxDD", "Avg MFE", "Avg MAE"], rows,
-                           [0.8 * inch, 0.8 * inch, 0.9 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch]),
-                 Spacer(1, 10)]
+                           [0.8 * inch, 0.8 * inch, 0.9 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch])]
+        if verdict.get("reason"):
+            best = verdict.get("best_tf") or "—"
+            flow.append(Paragraph(f"Best timeframe: <b>{best}</b> — {verdict['reason']}", s["italic"]))
+        flow.append(Spacer(1, 10))
     return flow
 
 

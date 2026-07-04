@@ -8,7 +8,8 @@ Not about "guaranteed profits" - about robustness and capital preservation.
 
 
 ### 2026-07-04 — Execution timeframe switched 4h → 1h (all strategies + exits)
-All signal + exit paths (Hunter, Volatility Squeeze, Strategy Sandbox, Regime, HTF filter, Exit engine, Backtester) now process **1h candles** with 1h-native parameters; S/R levels use daily + 1h. Backfilled 420 days of 1h for all 10 assets. Live + backtest kept in parity. 342 tests pass + real 1h backtest validated. See CHANGELOG for detail.
+All signal + exit paths (Hunter, Volatility Squeeze, Strategy Sandbox, Regime, HTF filter, Exit engine, Backtester) now process **1h candles** with 1h-native parameters; S/R levels use daily + 1h. Backfilled 420 days of 1h for all 10 assets. Live + backtest kept in parity. 342 tests pass + real 1h backtest validated.
+Lab backtest PDF now includes a **multi-timeframe comparison (15m / 30m / 1h)** with a best-timeframe verdict (return-over-drawdown); 15m+30m history (420d) backfilled for all assets. See CHANGELOG for detail.
 
 
 ### 2026-07-04 — WS1 Entry-Side upgrades (Hunter) SHIPPED (backend, live + backtest parity)

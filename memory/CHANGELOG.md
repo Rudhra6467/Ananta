@@ -5,8 +5,8 @@
 Backtest Lab reports now include a **MULTI-TIMEFRAME COMPARISON** section: the same window, settings and exit rules are replayed on **15m, 30m and the 1h live baseline**, per symbol, so the operator can see which candle size the edge favours (trades, return, win%, max DD, avg MFE/MAE).
 
 - `lab/backtest.run_backtest(..., timeframe="1h")` — now timeframe-parametrized (loads that TF's candles; result tagged with `timeframe`).
-- `lab/runner._run_job` (backtest kind): runs the 1h baseline + `COMPARE_TIMEFRAMES=["30m","15m"]` per symbol, storing headline metrics under `result["multi_timeframe"][symbol][tf]`. Progress bar accounts for all TF runs.
-- `lab/lab_report._multi_tf_block`: renders the per-symbol comparison table (15m/30m/1h).
+- `lab/runner._run_job` (backtest kind): runs the 1h baseline + `COMPARE_TIMEFRAMES=["30m","15m"]` per symbol, storing headline metrics under `result["multi_timeframe"][symbol]["by_tf"][tf]` plus a `["verdict"]` (best timeframe by return-over-drawdown). Progress bar accounts for all TF runs.
+- `lab/lab_report._multi_tf_block`: renders the per-symbol comparison table (15m/30m/1h) with a **"Best timeframe" verdict** headline underneath.
 - Nightly `LabDataAppender` now refreshes `15m/30m` too.
 - **Data:** backfilled **420 days of 15m (~40,320 bars) + 30m (~20,160 bars)** for all 10 assets via `scripts/backfill_tf.py`.
 - Validated end-to-end: 90-day BTC/SOL multi-TF run + PDF build. Example insight — lower TFs trade more but showed lower win-rate/return on the sample window (exactly what the comparison surfaces). Lab runner/backtest/PDF tests pass.

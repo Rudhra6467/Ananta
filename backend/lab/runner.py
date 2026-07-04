@@ -40,6 +40,26 @@ def _tf_metrics(r: dict) -> dict:
         "avg_return_pct", "avg_mfe_pct", "avg_mae_pct", "avg_trade_quality", "net_pnl")}
 
 
+def _tf_verdict(by_tf: dict) -> dict:
+    """Pick the timeframe with the best return-over-drawdown (min 1 trade). Ties broken
+    by higher return. Returns {best_tf, score, reason} for the Lab report headline."""
+    best = None
+    for tf, m in by_tf.items():
+        if not m or "error" in m or not m.get("trades"):
+            continue
+        ret = m.get("total_return_pct") or 0.0
+        dd = max(abs(m.get("max_drawdown_pct") or 0.0), 0.1)
+        score = ret / dd
+        if best is None or (score, ret) > (best["score"], best["ret"]):
+            best = {"best_tf": tf, "score": round(score, 3), "ret": ret,
+                    "win": m.get("win_rate_pct"), "trades": m.get("trades")}
+    if best is None:
+        return {"best_tf": None, "reason": "no timeframe produced trades in this window"}
+    return {"best_tf": best["best_tf"], "score": best["score"],
+            "reason": (f'{best["best_tf"]} led on return-over-drawdown '
+                       f'({best["ret"]:+.2f}% over {best["trades"]} trades, {best["win"]}% win)')}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -136,7 +156,7 @@ def _run_job(run: dict, cb) -> dict:
                 tf_metrics[tf] = _tf_metrics(r)
                 step += 1
                 cb(step / n)
-            multi_tf[sym] = tf_metrics
+            multi_tf[sym] = {"by_tf": tf_metrics, "verdict": _tf_verdict(tf_metrics)}
         return {"per_symbol": out, "multi_timeframe": multi_tf}
     if kind == "grid_search":
         return optimize.grid_search(symbols, start, end, run["grid"], metric, min_trades, progress_cb=cb)
