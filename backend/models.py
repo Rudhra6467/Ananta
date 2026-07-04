@@ -273,8 +273,18 @@ class RiskSettings(BaseModel):
     catastrophe_veto_confidence: float = 0.80  # macro BEARISH at/above this conf is the only macro block
     # --- Phase 2: Primary technical layer gates ---
     rsi_reset_max: float = 35.0  # 4H RSI(14) must be <= this (momentum reset / oversold)
+    rsi_reset_min: float = 30.0  # WS1: 4H RSI(14) must be >= this — strict 30-35 band (avoid falling knives)
     volume_exhaustion_window: int = 6  # last N 4H bars whose volume linreg slope must be negative
     pullback_max_green_body_pct: float = 1.5  # reject entry candle if green body exceeds this % (anti-chase)
+    # --- WS1 Entry-side upgrades (Hunter): ATR zones, VCP base, volume exhaustion ratio ---
+    atr_zone_below_mult: float = 0.3  # entry band extends this x ATR BELOW the support-zone low
+    atr_zone_above_mult: float = 0.5  # entry band extends this x ATR ABOVE the support-zone high (0.3-0.5 ATR zone)
+    vcp_enabled: bool = True  # require a volatility-contraction base (tightening ranges + higher low) before entry
+    vcp_min_candles: int = 2  # base must span at least this many 4H candles
+    vcp_max_candles: int = 4  # ...and at most this many (2-4 candle stabilization)
+    vol_exhaustion_ratio_max: float = 0.6  # current 4H volume must be <= this x the recent selling-climax volume (>=40% lower)
+    # --- WS1 Volatility Squeeze: breakout volume expansion confirmation ---
+    squeeze_vol_expansion_min: float = 1.5  # squeeze breakout volume must be >= this x trailing average (1.5-1.8x)
     strong_min_confidence: float = 0.80   # confidence gate for STRONG (strict AND with trend + volatility)
     strong_min_atr_percentile: float = 60.0  # ATR pct rank floor for STRONG
     strong_min_adx: float = 20.0  # 1h ADX floor for STRONG

@@ -7,6 +7,11 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+### 2026-07-04 — WS1 Entry-Side upgrades (Hunter) SHIPPED (backend, live + backtest parity)
+Hunter entries moved from rigid rules to structure/ATR-based logic. `evaluate_primary` (sole entry driver) now enforces, for STABILIZED_REVERSAL: ATR-scaled demand zone (0.3–0.5×ATR band), a 2–4 candle VCP stabilization base (contracting range + higher low), a strict 30–35 RSI band (falling knives rejected), a volume-exhaustion ratio gate (current ≤ 0.6× selling-climax), and a HARD multi-timeframe 4h EMA50>EMA200 trend filter. Volatility Squeeze now requires ≥1.5× volume-expansion on breakout. All thresholds live in `RiskSettings` for Lab tuning. 73/73 relevant tests pass.
+**REMAINING:** WS3 (Research Lab validation redesign — 3/6/12-mo ranges, Modes A/B/C, full metrics + auto-recommendations) → P1. WS2 (Hunter Continuation trend-pullback strategy) → P2.
+
+
 ### 2026-06-25 — Phase 0 (stability) + Phase 1 (UI) of the platform overhaul
 **Phase 0 — Backend stability (fixes the "platform freezes"):** offloaded all heavy SYNC compute off the
 single-worker event loop via `asyncio.to_thread`: `compute_levels()` (levels.py), all 3 PDF builds

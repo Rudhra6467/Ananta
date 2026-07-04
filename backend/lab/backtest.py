@@ -27,6 +27,7 @@ from levels import compute_levels, nearest_support
 from models import Position, Portfolio, RiskSettings
 from primary_layer import evaluate_primary
 from regime import classify_regime
+from setup_classifier import ema
 from router import hunter_allowed, squeeze_allowed
 from squeeze import evaluate_squeeze
 from lab import data_store
@@ -174,7 +175,17 @@ def run_backtest(
             strategy = entry_profile = struct_stop = None
             if hunter_allowed(regime.regime):
                 zones = _zones_at(bar[0], window)
-                sig = evaluate_primary(symbol, px, window, zones, s, regime=regime)
+                # WS1 parity: multi-timeframe trend filter (4h EMA50 > EMA200) — same gate as live.
+                _htf = None
+                if s.htf_trend_enabled:
+                    _wc = [b[_C] for b in window]
+                    if len(_wc) >= 200:
+                        _e50 = ema(_wc, 50)[-1]
+                        _e200 = ema(_wc, 200)[-1]
+                        _htf = (_wc[-1] > _e50 > _e200)
+                    else:
+                        _htf = False
+                sig = evaluate_primary(symbol, px, window, zones, s, regime=regime, htf_trend_aligned=_htf)
                 if sig.triggered:
                     strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
             if strategy is None and squeeze_allowed(regime.regime):

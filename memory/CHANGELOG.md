@@ -1,5 +1,21 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-04 — WS1 entry-side upgrades (Hunter) — LIVE + backtest parity
+
+**`primary_layer.py` (`evaluate_primary`, the sole entry driver) — new gates (STABILIZED_REVERSAL):**
+- **ATR-based demand zone:** entry band now = `[zone_low − 0.3×ATR, zone_high + 0.5×ATR]` (replaces flat %-proximity as the acceptance test). New code `REJECTED_OUTSIDE_ATR_ZONE`. Applied to AGGRESSIVE_PULLBACK too.
+- **VCP stabilization base:** requires a 2–4 candle contracting base with a higher low (`vcp_contraction` + `vcp_higher_low`). New code `REJECTED_NO_VCP_BASE`.
+- **Strict 30–35 RSI band:** RSI must be `>= rsi_reset_min (30)` AND `<= rsi_reset_max (35)`. Falling knives now rejected via `REJECTED_RSI_TOO_DEEP` (in addition to the existing `REJECTED_RSI_NOT_RESET` when hot).
+- **Volume exhaustion ratio:** current 4H volume must be `<= 0.6×` the recent selling-climax (>=40% below), in addition to the negative volume slope.
+- **Multi-timeframe trend filter:** 4h EMA50 > EMA200 now a HARD gate for reversals (`REJECTED_HTF_TREND_MISALIGNED`); fail-open when the signal is unknown (`None`). Wired into live (`trading_engine.evaluate_symbol`) and backtest (`lab/backtest.py`).
+
+**`strategies.py` — Volatility Squeeze:** breakout now requires volume expansion `>= 1.5×` trailing avg (`SQUEEZE_VOL_EXPANSION_MIN`) to qualify.
+
+**`models.py`:** all thresholds added to `RiskSettings` (`atr_zone_below_mult`, `atr_zone_above_mult`, `vcp_enabled/min/max_candles`, `vol_exhaustion_ratio_max`, `rsi_reset_min`, `squeeze_vol_expansion_min`) so the Research Lab can tune them.
+
+- Tests: 73/73 pass across `test_layered_architecture` (6 new WS1 tests), `test_phase_e`, `test_backtest`, `test_lab_backtest`, `test_technical_first`. Backend-only change; no web/mobile UI impact.
+
+
 ## 2026-07-03 — WS1 exit-side trade management (LIVE) + Lab record delete
 
 **Exit engine (`exit_engine.py`) — shared by live + backtester (parity preserved):**

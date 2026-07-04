@@ -25,6 +25,9 @@ STRATEGY_DEFS = [
 ]
 STRATEGY_IDS = [d["id"] for d in STRATEGY_DEFS]
 
+# WS1: minimum volume expansion (x trailing avg) required to qualify a squeeze breakout.
+SQUEEZE_VOL_EXPANSION_MIN = 1.5
+
 
 def _vol_slope(vols: list[float], window: int = 6) -> float:
     seg = vols[-window:]
@@ -87,6 +90,10 @@ def scan_strategies(
         bbw = _bbwidth_series(closes)
         bbw_pct = percentile_rank(bbw, bbw[-1]) if len(bbw) > 5 else 100.0  # low = squeeze
         vslope = _vol_slope(vols)
+        # WS1: squeeze breakout must show real volume expansion (1.5-1.8x trailing avg).
+        _prior_vol = vols[-7:-1]
+        _avg_prior_vol = (sum(_prior_vol) / len(_prior_vol)) if _prior_vol else 0.0
+        vol_expansion = (vols[-1] / _avg_prior_vol) if _avg_prior_vol > 0 else 0.0
         rs = relative_strength_btc or 0.0
         sup_low = (support_zone or {}).get("low")
         touches = (support_zone or {}).get("touches") or 0
@@ -98,9 +105,9 @@ def scan_strategies(
     hunter_detected = support_zone is not None
     hunter_qualified = bool(hunter_triggered)
 
-    # --- Volatility Squeeze / VCP: ATR/BBWidth compression (detect) + tight squeeze + early volume expansion (qualify) ---
+    # --- Volatility Squeeze / VCP: ATR/BBWidth compression (detect) + tight squeeze + volume-expansion breakout (qualify) ---
     vcp_detected = atr_pct <= 40.0 or bbw_pct <= 40.0
-    vcp_qualified = bool(atr_pct <= 25.0 and bbw_pct <= 25.0 and vslope > 0)
+    vcp_qualified = bool(atr_pct <= 25.0 and bbw_pct <= 25.0 and vslope > 0 and vol_expansion >= SQUEEZE_VOL_EXPANSION_MIN)
 
     # --- Relative Strength: outperforming BTC (detect) + positive trend structure + sector-beat proxy (qualify) ---
     rs_detected = rs > 0
@@ -124,7 +131,7 @@ def scan_strategies(
         "vcp": {
             "detected": vcp_detected, "qualified": vcp_qualified,
             "evidence": {"atr_percentile": round(atr_pct, 1), "bbwidth_percentile": round(bbw_pct, 1),
-                         "volume_slope": round(vslope, 4)},
+                         "volume_slope": round(vslope, 4), "vol_expansion": round(vol_expansion, 2)},
         },
         "trend_rider": {
             "detected": rs_detected, "qualified": rs_qualified,

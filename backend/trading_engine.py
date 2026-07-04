@@ -709,7 +709,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     if getattr(settings, "level_entry_enabled", True):
         try:
             zones = zones_cache if zones_cache is not None else await get_levels(symbol, settings)
-            primary = evaluate_primary(symbol, snapshot.price, bars_4h, zones, settings, regime=asset_regime)
+            primary = evaluate_primary(symbol, snapshot.price, bars_4h, zones, settings, regime=asset_regime, htf_trend_aligned=htf_trend_aligned)
             support_zone = primary.support_zone
             at_support = support_zone is not None
             structural_stop = primary.structural_stop
