@@ -123,7 +123,7 @@ def sensitivity(symbols, start_ms, end_ms, target: str, values: list,
             "coeff_variation": round(cv, 3) if cv is not None else None, "verdict": verdict}
 
 
-def _usable_window(symbols: list[str], timeframe: str = "4h") -> tuple[int, int] | None:
+def _usable_window(symbols: list[str], timeframe: str = "1h") -> tuple[int, int] | None:
     """Intersection of available history across symbols, past the warmup buffer."""
     lo, hi = None, None
     for sym in symbols:

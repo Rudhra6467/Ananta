@@ -36,7 +36,7 @@ logger = logging.getLogger("ananta.lab.backtest")
 
 _O, _H, _L, _C, _V = 1, 2, 3, 4, 5
 WARMUP_BARS = 200          # EMA200 / regime need deep history before the test window
-ANALYSIS_LOOKBACK = 540    # trailing bars fed to strategy fns — MATCHES live (fetch limit ~540)
+ANALYSIS_LOOKBACK = 750    # trailing 1h bars fed to strategy fns — MATCHES live (EXEC_BARS_LIMIT=750)
 SLIPPAGE_PCT = 0.05        # per-leg synthetic slippage (%)
 
 
@@ -78,10 +78,10 @@ def run_backtest(
             if hasattr(s, k):
                 setattr(s, k, v)
 
-    bars = data_store.load_candles(symbol, "4h")
+    bars = data_store.load_candles(symbol, "1h")
     daily = data_store.load_candles(symbol, "1d")
     if len(bars) < WARMUP_BARS + 5:
-        return {"error": "insufficient_4h_history", "symbol": symbol, "have": len(bars)}
+        return {"error": "insufficient_1h_history", "symbol": symbol, "have": len(bars)}
 
     start_idx = next((i for i, b in enumerate(bars) if b[0] >= start_ms), None)
     end_idx = next((i for i, b in enumerate(bars) if b[0] > end_ms), len(bars))

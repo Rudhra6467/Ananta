@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from live_execution import LiveExecutor, get_default_executor, get_dry_run_executor
-from market_data import fetch_ohlcv_4h, fetch_snapshot
+from market_data import fetch_ohlcv_1h, fetch_snapshot
 from models import AIReasoning, MarketSnapshot, Position, RiskSettings, TradeLog, compute_return_and_hold
 from asset_profiles import eff_setting
 from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, evaluate_exit_engine, profile_for
@@ -321,14 +321,14 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
             pos.mfe_pct = round((pos.peak_price - pos.avg_cost) / pos.avg_cost * 100, 4)
             pos.mae_pct = round((pos.trough_price - pos.avg_cost) / pos.avg_cost * 100, 4)
 
-        # 4h bars feed the technical exit modules (B/C/D). Cached fetch — pure compute.
-        bars_4h = None
+        # 1h bars feed the technical exit modules (B/C/D/S). Cached fetch — pure compute.
+        bars_1h = None
         try:
-            bars_4h = await fetch_ohlcv_4h(pos.symbol)
+            bars_1h = await fetch_ohlcv_1h(pos.symbol)
         except Exception:
-            bars_4h = None
+            bars_1h = None
 
-        decision = evaluate_exit_engine(pos, snap.price, bars_4h, settings, emergency=emergency,
+        decision = evaluate_exit_engine(pos, snap.price, bars_1h, settings, emergency=emergency,
                                          profile_override=profile_for(pos.strategy, settings))
         if decision.action == ACT_NONE:
             continue

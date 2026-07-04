@@ -18,7 +18,7 @@ from asset_profiles import asset_class as get_asset_class
 from asset_profiles import scan_interval
 from breakout_classifier import detect_breakout
 from live_execution import ExecutionResult, LiveExecutor, get_default_executor, get_dry_run_executor
-from market_data import fetch_ohlcv_1h, fetch_ohlcv_4h, fetch_snapshot
+from market_data import fetch_ohlcv_1h, fetch_snapshot
 from models import (
     AIReasoning,
     PendingOrder,
@@ -43,6 +43,11 @@ from squeeze import evaluate_squeeze
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
+
+# EXECUTION TIMEFRAME = 1h. All strategy + exit signals process 1h candles.
+# 750 bars ≈ 31 days — enough for EMA200 (200h ≈ 8d) + ATR/regime lookbacks.
+EXEC_BARS_LIMIT = 750
+
 
 
 def _market_regime(btc_closes: list[float]) -> str:
@@ -588,14 +593,19 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     # the dormant Circuit Breaker + soft sizing and can never turn a HOLD into a BUY. So
     # evaluate the Hunter FIRST and only spend an LLM call when a real setup triggers. On
     # idle scans (the vast majority) Gemini is skipped entirely -> ~99% credit reduction.
-    bars_4h: list[list[float]] = []
+    # EXECUTION TIMEFRAME = 1h: all strategy + exit signals now process 1h candles.
+    bars_1h: list[list[float]] = []
+    try:
+        bars_1h = await fetch_ohlcv_1h(symbol, limit=EXEC_BARS_LIMIT)
+    except Exception as e:
+        logger.warning("1h OHLCV fetch failed for %s: %s", symbol, e)
+        bars_1h = []
     zones_cache: list[dict] | None = None
     hunter_triggered = False
     if not _hard_killed and getattr(settings, "level_entry_enabled", True):
         try:
-            bars_4h = await fetch_ohlcv_4h(symbol, limit=300)
             zones_cache = await get_levels(symbol, settings)
-            _pp = evaluate_primary(symbol, snapshot.price, bars_4h, zones_cache, settings)
+            _pp = evaluate_primary(symbol, snapshot.price, bars_1h, zones_cache, settings)
             hunter_triggered = bool(_pp.triggered)
         except Exception as e:
             logger.warning("Early Hunter pre-check failed for %s: %s", symbol, e)
@@ -623,13 +633,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     # --- adaptive setup classification (Layer 5b) ---
     setup_strength = "NONE"
     setup_evidence: dict = {}
-    bars_1h: list[list[float]] = []
     if settings.adaptive_sizing_enabled:
-        try:
-            bars_1h = await fetch_ohlcv_1h(symbol, limit=750)
-        except Exception as e:  # never let a missing OHLCV stall the cycle
-            logger.warning("OHLCV fetch failed for %s: %s", symbol, e)
-            bars_1h = []
         setup_strength, setup_evidence = classify_setup(
             bars_1h,
             macro.confidence,
@@ -640,11 +644,6 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         )
 
     # --- Systemic Breakout filter (Layer 5c) ---
-    if not bars_1h:
-        try:
-            bars_1h = await fetch_ohlcv_1h(symbol, limit=750)
-        except Exception:
-            bars_1h = []
     is_breakout, breakout_evidence = detect_breakout(
         bars_1h,
         macro_bias=macro.bias,
@@ -655,47 +654,34 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         max_spread_pct=settings.breakout_max_spread_pct,
     )
 
-    # --- Higher-timeframe swing trend filter (4h EMA stack) ---
+    # --- Higher-timeframe swing trend filter (1h EMA stack) ---
     htf_trend_aligned: bool | None = None
     htf_evidence: dict = {}
-    entry_extension_pct: float | None = None  # how far above 4h EMA50 price sits at entry (chase-risk)
+    entry_extension_pct: float | None = None  # how far above 1h EMA50 price sits at entry (chase-risk)
     if settings.htf_trend_enabled:
-        try:
-            if not bars_4h:
-                bars_4h = await fetch_ohlcv_4h(symbol, limit=300)
-        except Exception as e:
-            logger.warning("4h OHLCV fetch failed for %s: %s", symbol, e)
-            bars_4h = []
-        closes_4h = [b[4] for b in bars_4h]
-        if len(closes_4h) >= 200:
-            ema50 = ema(closes_4h, 50)[-1]
-            ema200 = ema(closes_4h, 200)[-1]
-            last_close = closes_4h[-1]
+        closes_1h = [b[4] for b in bars_1h]
+        if len(closes_1h) >= 200:
+            ema50 = ema(closes_1h, 50)[-1]
+            ema200 = ema(closes_1h, 200)[-1]
+            last_close = closes_1h[-1]
             htf_trend_aligned = (last_close > ema50 > ema200)
             if ema50 > 0:
                 entry_extension_pct = round((snapshot.price - ema50) / ema50 * 100.0, 3)
             htf_evidence = {
-                "last_close_4h": round(last_close, 6),
-                "ema50_4h": round(ema50, 6),
-                "ema200_4h": round(ema200, 6),
+                "last_close_1h": round(last_close, 6),
+                "ema50_1h": round(ema50, 6),
+                "ema200_1h": round(ema200, 6),
                 "aligned": htf_trend_aligned,
                 "entry_extension_pct": entry_extension_pct,
             }
         else:
-            htf_evidence = {"reason": f"need >= 200 4h bars (have {len(closes_4h)})"}
+            htf_evidence = {"reason": f"need >= 200 1h bars (have {len(closes_1h)})"}
             htf_trend_aligned = False  # safer: no trade without confirmation
 
     kill = compute_kill_switches(snapshot, portfolio, settings, macro.confidence)
     has_position = any(p.symbol == symbol and p.quantity > 0 for p in portfolio.positions)
 
     # --- PRIMARY + SECONDARY layered architecture (Phase 2) ---
-    # Ensure 4h bars are available for the level engine + primary technical layer.
-    if not bars_4h:
-        try:
-            bars_4h = await fetch_ohlcv_4h(symbol, limit=300)
-        except Exception:
-            bars_4h = []
-
     support_zone: dict | None = None
     resistance_zone: dict | None = None
     at_support = False
@@ -705,11 +691,11 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     rr_estimate: float | None = None
     level_evidence: dict = {}
     primary = None
-    asset_regime = classify_regime(bars_4h) if bars_4h else None
+    asset_regime = classify_regime(bars_1h) if bars_1h else None
     if getattr(settings, "level_entry_enabled", True):
         try:
             zones = zones_cache if zones_cache is not None else await get_levels(symbol, settings)
-            primary = evaluate_primary(symbol, snapshot.price, bars_4h, zones, settings, regime=asset_regime, htf_trend_aligned=htf_trend_aligned)
+            primary = evaluate_primary(symbol, snapshot.price, bars_1h, zones, settings, regime=asset_regime, htf_trend_aligned=htf_trend_aligned)
             support_zone = primary.support_zone
             at_support = support_zone is not None
             structural_stop = primary.structural_stop
@@ -737,10 +723,10 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     market_regime = "NEUTRAL"
     relative_strength_btc: float | None = None
     try:
-        btc_bars = await fetch_ohlcv_4h("BTC/USD", limit=300)
+        btc_bars = await fetch_ohlcv_1h("BTC/USD", limit=EXEC_BARS_LIMIT)
         btc_closes = [b[4] for b in btc_bars] if btc_bars else []
         market_regime = _market_regime(btc_closes)
-        asset_closes = [b[4] for b in bars_4h] if bars_4h else []
+        asset_closes = [b[4] for b in bars_1h] if bars_1h else []
         relative_strength_btc = 0.0 if symbol == "BTC/USD" else _rel_strength(asset_closes, btc_closes)
     except Exception:
         pass
@@ -750,7 +736,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     breaker_state, breaker_reason = evaluate_breaker(macro.bias, macro.confidence, news_sentiment=None)
 
     # --- Phase B: 50% Rule / Fair-Value midpoint metric (DIAGNOSTIC only — never gates) ---
-    fifty = fifty_pct_metric(bars_4h, snapshot.price)
+    fifty = fifty_pct_metric(bars_1h, snapshot.price)
     # Entry-feature snapshot carried onto any resulting position/trade (winner/loser analytics).
     entry_attribution = {
         "rsi_at_entry": rsi_4h,
@@ -771,7 +757,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
 
     # --- Phase B Strategy Sandbox: 5 regime classifiers (pure compute; SHADOW except Hunter) ---
     strategy_signals = scan_strategies(
-        snapshot.price, bars_4h, relative_strength_btc,
+        snapshot.price, bars_1h, relative_strength_btc,
         bool(primary.triggered) if primary is not None else False, support_zone,
     )
     entry_attribution["support_low"] = (support_zone or {}).get("low")
@@ -785,7 +771,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         "routing": routing,
         "market_state_snapshot": [
             {"t": b[0], "o": b[1], "h": b[2], "l": b[3], "c": b[4], "v": b[5]}
-            for b in (bars_4h[-12:] if bars_4h else [])
+            for b in (bars_1h[-12:] if bars_1h else [])
         ],
         "indicator_values": {
             "rsi_4h": rsi_4h,
@@ -1222,7 +1208,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and squeeze_allowed(getattr(asset_regime, "regime", None))
         )
         if squeeze_eligible:
-            sq = evaluate_squeeze(bars_4h)
+            sq = evaluate_squeeze(bars_1h)
             if sq.triggered and sq.stop_20ma and snapshot.price > sq.stop_20ma:
                 open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
                 pending_count = await db.pending_orders.count_documents({})

@@ -16,17 +16,17 @@ def seeded_db(monkeypatch):
     monkeypatch.setattr(ds, "DB_PATH", path)
     ds.init_db()
     # deterministic wavy series with periodic dips (enough structure + trades)
-    n = 700
+    n = 1600
     start = 1_600_000_000_000
     bars4 = []
     for i in range(n):
         drift = math.sin(i / 10.0) * 3.0
         dip = -14.0 if (i % 60) in (0, 1, 2) else 0.0
         c = max(1.0, 100 + drift + dip + i * 0.03)
-        bars4.append([start + i * ds.TF_MS["4h"], c - 0.4, c + 1.4, c - 1.4, c,
+        bars4.append([start + i * ds.TF_MS["1h"], c - 0.4, c + 1.4, c - 1.4, c,
                       1000 + (i % 5) * 60 + (350 if dip else 0)])
-    daily = [bars4[i][:1] + bars4[i][1:] for i in range(0, n, 6)]
-    ds.upsert_candles("BTC/USD", "4h", bars4)
+    daily = [bars4[i][:1] + bars4[i][1:] for i in range(0, n, 24)]
+    ds.upsert_candles("BTC/USD", "1h", bars4)
     ds.upsert_candles("BTC/USD", "1d", daily)
     yield path
     for p in (path, path + "-wal", path + "-shm"):
@@ -49,7 +49,7 @@ def test_expand_grid_cartesian():
 
 
 def test_grid_search_structure(seeded_db):
-    bars = ds.load_candles("BTC/USD", "4h")
+    bars = ds.load_candles("BTC/USD", "1h")
     start, end = bars[210][0], bars[-1][0]
     grid = {"prof:hunter:profit_arm_pct": [4.0, 5.0], "set:stop_loss_pct": [8.0, 12.0]}
     res = optimize.grid_search("BTC/USD", start, end, grid, metric="total_return_pct", min_trades=1)
@@ -62,7 +62,7 @@ def test_grid_search_structure(seeded_db):
 
 
 def test_sensitivity_verdict(seeded_db):
-    bars = ds.load_candles("BTC/USD", "4h")
+    bars = ds.load_candles("BTC/USD", "1h")
     start, end = bars[210][0], bars[-1][0]
     res = optimize.sensitivity("BTC/USD", start, end, "prof:hunter:trail_atr_mult",
                                [1.6, 1.8, 2.0, 2.2, 2.4], metric="total_return_pct", min_trades=1)

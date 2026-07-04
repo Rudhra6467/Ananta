@@ -1333,10 +1333,11 @@ async def lab_data_coverage():
     syms = watch or default
     out = []
     for s in syms:
+        c1h = data_store.coverage(s, "1h")
         c4 = data_store.coverage(s, "4h")
         c1 = data_store.coverage(s, "1d")
-        out.append({"symbol": s, "bars_4h": c4["count"], "bars_1d": c1["count"],
-                    "from": c4["min_ts"], "to": c4["max_ts"]})
+        out.append({"symbol": s, "bars_1h": c1h["count"], "bars_4h": c4["count"], "bars_1d": c1["count"],
+                    "from": c1h["min_ts"] or c4["min_ts"], "to": c1h["max_ts"] or c4["max_ts"]})
     return {"symbols": out, "periods": list(_PERIOD_MONTHS.keys()) + ["custom"]}
 
 

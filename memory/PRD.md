@@ -7,6 +7,10 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+### 2026-07-04 — Execution timeframe switched 4h → 1h (all strategies + exits)
+All signal + exit paths (Hunter, Volatility Squeeze, Strategy Sandbox, Regime, HTF filter, Exit engine, Backtester) now process **1h candles** with 1h-native parameters; S/R levels use daily + 1h. Backfilled 420 days of 1h for all 10 assets. Live + backtest kept in parity. 342 tests pass + real 1h backtest validated. See CHANGELOG for detail.
+
+
 ### 2026-07-04 — WS1 Entry-Side upgrades (Hunter) SHIPPED (backend, live + backtest parity)
 Hunter entries moved from rigid rules to structure/ATR-based logic. `evaluate_primary` (sole entry driver) now enforces, for STABILIZED_REVERSAL: ATR-scaled demand zone (0.3–0.5×ATR band), a 2–4 candle VCP stabilization base (contracting range + higher low), a strict 30–35 RSI band (falling knives rejected), a volume-exhaustion ratio gate (current ≤ 0.6× selling-climax), and a HARD multi-timeframe 4h EMA50>EMA200 trend filter. Volatility Squeeze now requires ≥1.5× volume-expansion on breakout. All thresholds live in `RiskSettings` for Lab tuning. 73/73 relevant tests pass.
 **REMAINING:** WS3 (Research Lab validation redesign — 3/6/12-mo ranges, Modes A/B/C, full metrics + auto-recommendations) → P1. WS2 (Hunter Continuation trend-pullback strategy) → P2.

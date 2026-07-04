@@ -22,9 +22,9 @@ def seeded_db(monkeypatch):
     bars4 = []
     for i in range(n):
         c = max(1.0, 100 + math.sin(i / 10.0) * 3 + (-12 if i % 50 < 2 else 0) + i * 0.03)
-        bars4.append([start + i * ds.TF_MS["4h"], c - 0.4, c + 1.4, c - 1.4, c, 1000 + (i % 5) * 60])
-    ds.upsert_candles("BTC/USD", "4h", bars4)
-    ds.upsert_candles("BTC/USD", "1d", [bars4[i] for i in range(0, n, 6)])
+        bars4.append([start + i * ds.TF_MS["1h"], c - 0.4, c + 1.4, c - 1.4, c, 1000 + (i % 5) * 60])
+    ds.upsert_candles("BTC/USD", "1h", bars4)
+    ds.upsert_candles("BTC/USD", "1d", [bars4[i] for i in range(0, n, 24)])
     yield path
     for p in (path, path + "-wal", path + "-shm"):
         if os.path.exists(p):
@@ -76,7 +76,7 @@ def test_create_run_validation():
 
 
 def test_run_job_dispatch_backtest(seeded_db):
-    bars = ds.load_candles("BTC/USD", "4h")
+    bars = ds.load_candles("BTC/USD", "1h")
     run = {"kind": "backtest", "symbols": ["BTC/USD"],
            "start_ms": bars[210][0], "end_ms": bars[-1][0]}
     seen = []
@@ -86,7 +86,7 @@ def test_run_job_dispatch_backtest(seeded_db):
 
 
 def test_run_job_dispatch_sensitivity(seeded_db):
-    bars = ds.load_candles("BTC/USD", "4h")
+    bars = ds.load_candles("BTC/USD", "1h")
     run = {"kind": "sensitivity", "symbols": ["BTC/USD"], "start_ms": bars[210][0],
            "end_ms": bars[-1][0], "target": "prof:hunter:trail_atr_mult",
            "values": [1.8, 2.0, 2.2], "metric": "total_return_pct", "min_trades": 1}

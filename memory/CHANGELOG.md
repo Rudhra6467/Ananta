@@ -1,5 +1,25 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-04 — Execution timeframe migration: 4h → 1h (all strategies + exits)
+
+Per owner request, moved every execution + exit signal path from 4h to **1h candles**, with 1h-native parameters ("change things to suit 1h across all").
+
+**Timeframe audit (before):** Hunter, Volatility Squeeze, Strategy Sandbox, Regime classifier, HTF trend filter, Exit engine, Backtester all ran on **4h**; S/R levels on daily+4h; sizing/breakout/entry-vol already on 1h.
+
+**Changes (live + backtester in parity):**
+- `trading_engine.evaluate_symbol`: now fetches `bars_1h` once (`EXEC_BARS_LIMIT=750`, ~31d) and feeds it to Hunter (`evaluate_primary`), `classify_regime`, `scan_strategies`, `evaluate_squeeze`, `fifty_pct_metric`, BTC regime/relative-strength, and the reason-chain snapshot. HTF trend filter now uses the **1h EMA50>EMA200** stack. Removed all `fetch_ohlcv_4h` calls + import.
+- `position_watcher`: exit engine (Modules B/C/D/S) now fed **1h** bars.
+- `levels.py`: intraday pivot leg switched 4h → **1h** (`DEFAULT_1H_LOOKBACK=720`), daily structural anchor retained.
+- `lab/backtest.py`: replays **1h** candles (`ANALYSIS_LOOKBACK=750`, matches live); `lab/runner.resolve_window`, nightly appender, and `lab/optimize._usable_window` all keyed to 1h.
+- `server.py /api/lab/data/coverage`: now reports `bars_1h`.
+
+**Data:** backfilled **420 days of 1h** for all 10 assets (`scripts/backfill_1h.py`, via Binance US pagination — Kraken ignores `since`), ~10,080 bars/symbol.
+
+**Note:** on 1h, EMA200 ≈ 8 days (vs 33 days on 4h) — the trend filter and all indicators are intentionally shorter-term/faster now. Indicator period counts unchanged (standard on 1h); WS1 gates react ~4× faster.
+
+- Tests: 342 pass (lab/backtest fixtures reseeded to 1h; adaptive-sizing 4h mock removed). Real 90-day 1h backtest on BTC/USD: 22 trades, clean. Live cycle not run to preserve LLM credits. 15 remaining suite failures are PRE-EXISTING/unrelated (lot-size defaults, HTTP live-server, news-cascade LLM).
+
+
 ## 2026-07-04 — WS1 entry-side upgrades (Hunter) — LIVE + backtest parity
 
 **`primary_layer.py` (`evaluate_primary`, the sole entry driver) — new gates (STABILIZED_REVERSAL):**

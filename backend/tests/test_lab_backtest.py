@@ -92,7 +92,7 @@ def _synth_series(n=320, start_ms=1_600_000_000_000, seed_price=100.0):
         h = c + 1.2
         low = c - 1.2
         v = 1000 + (i % 7) * 50 + (400 if 150 <= i <= 160 else 0)
-        bars.append([start_ms + i * ds.TF_MS["4h"], o, h, low, c, v])
+        bars.append([start_ms + i * ds.TF_MS["1h"], o, h, low, c, v])
     return bars
 
 
@@ -101,8 +101,8 @@ def test_backtest_runs_and_reports(temp_db):
     bars4 = _synth_series(340)
     # daily bars (coarse) so compute_levels has structure
     daily = [[bars4[i][0], bars4[i][1], bars4[i][2], bars4[i][3], bars4[i][4], bars4[i][5]]
-             for i in range(0, len(bars4), 6)]
-    ds.upsert_candles("BTC/USD", "4h", bars4)
+             for i in range(0, len(bars4), 24)]
+    ds.upsert_candles("BTC/USD", "1h", bars4)
     ds.upsert_candles("BTC/USD", "1d", daily)
     start = bars4[210][0]
     end = bars4[-1][0]

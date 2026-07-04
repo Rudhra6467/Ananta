@@ -26,7 +26,7 @@ import asyncio
 import logging
 import time
 
-from market_data import fetch_ohlcv_1d, fetch_ohlcv_4h
+from market_data import fetch_ohlcv_1d, fetch_ohlcv_1h
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,10 @@ _TTL_SECONDS = 6 * 3600
 DEFAULT_TOL_PCT = 0.75       # cluster band width: pivots within 0.75% merge into one zone
 DEFAULT_MIN_TOUCHES = 2      # a zone must be tested at least twice to count
 DEFAULT_DAILY_LOOKBACK = 540  # ~18 months of daily bars
-DEFAULT_4H_LOOKBACK = 540     # ~90 days of 4h bars
+DEFAULT_1H_LOOKBACK = 720     # ~30 days of 1h bars (execution-timeframe intraday leg)
 PIVOT_K = 3                   # fractal half-window: extreme vs ±3 neighbours
 DAILY_WEIGHT = 2.0
-H4_WEIGHT = 1.0
+INTRADAY_WEIGHT = 1.0
 
 
 def clear_level_cache() -> None:
@@ -118,7 +118,7 @@ def compute_levels(
     for ts, price in _pivots(daily_bars or [], pivot_k):
         points.append((ts, price, DAILY_WEIGHT))
     for ts, price in _pivots(h4_bars or [], pivot_k):
-        points.append((ts, price, H4_WEIGHT))
+        points.append((ts, price, INTRADAY_WEIGHT))
 
     zones: list[dict] = []
     for c in _cluster(points, tol_pct):
@@ -181,10 +181,10 @@ async def get_levels(symbol: str, settings=None) -> list[dict]:
     min_touches = int(getattr(settings, "level_min_touches", DEFAULT_MIN_TOUCHES)) if settings else DEFAULT_MIN_TOUCHES
 
     daily = await fetch_ohlcv_1d(symbol, limit=daily_limit)
-    h4 = await fetch_ohlcv_4h(symbol, limit=DEFAULT_4H_LOOKBACK)
-    # compute_levels is CPU-heavy clustering over ~1000 bars — run it off the event
+    intraday = await fetch_ohlcv_1h(symbol, limit=DEFAULT_1H_LOOKBACK)
+    # compute_levels is CPU-heavy clustering over ~1000+ bars — run it off the event
     # loop so the single uvicorn worker never freezes on a cold cache (all 10 symbols).
-    zones = await asyncio.to_thread(compute_levels, daily, h4, tol_pct=tol, min_touches=min_touches)
+    zones = await asyncio.to_thread(compute_levels, daily, intraday, tol_pct=tol, min_touches=min_touches)
     _LEVEL_CACHE[symbol] = (now, zones)
-    logger.info("Levels computed for %s: %d zones (daily=%d 4h=%d bars)", symbol, len(zones), len(daily), len(h4))
+    logger.info("Levels computed for %s: %d zones (daily=%d 1h=%d bars)", symbol, len(zones), len(daily), len(intraday))
     return zones

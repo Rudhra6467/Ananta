@@ -46,7 +46,7 @@ def resolve_window(symbols: list[str], period: str,
     """Map a period dropdown to a [start_ms, end_ms] window off the latest seeded candle."""
     if period == "custom" and start_ms and end_ms:
         return int(start_ms), int(end_ms)
-    maxes = [data_store.coverage(s, "4h")["max_ts"] for s in symbols]
+    maxes = [data_store.coverage(s, "1h")["max_ts"] for s in symbols]
     maxes = [m for m in maxes if m]
     if not maxes:
         return None, None
@@ -220,7 +220,7 @@ class LabDataAppender:
     def _append_all(self, symbols: list[str]) -> dict:
         summary = {}
         for sym in symbols:
-            for tf in ("4h", "1d"):
+            for tf in ("1h", "4h", "1d"):
                 try:
                     summary[f"{sym}/{tf}"] = data_store.append_latest(sym, tf)["inserted"]
                 except Exception as e:
