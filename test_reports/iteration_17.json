@@ -1,0 +1,35 @@
+{
+  "summary": "Verified 4 UI fixes on Ananta.AI web preview (public read-only view). PASS: (1) Datalogs tab has only ONE 'DataLogs / Reports' header — the AppShell top header; no in-page h2 duplicate. (2) Research Lab tab has only ONE 'Research Lab' header (AppShell); [data-testid=research-lab-header] does NOT exist; StrategyValidationPanel is the first content block inside [data-testid=settings-page]. (3) Trade Life Cycle drill-down works — first open position (SOL) renders as [data-testid=lifecycle-row-SOL] always expanded; the other 6 positions (BTC/ETH/XRP/LINK/ARB/AVAX) render as collapsed [data-testid=lifecycle-toggle-<BASE>] rows; clicking lifecycle-toggle-BTC expands the LifecycleRow (DOM delta ~9.6KB). (4) Position Tracker drill-down works — default 1 row + 'Show 6 more positions'; click → 7 rows + 'Show less'; click again → back to 1 row. (5) Research Lab caching — PARTIAL: the StrategyValidationPanel module-level cache (_labCache) is effective (settings-page inner-content ratio 1.00 on re-entry, runs/assets/presets appear immediately), BUT the outer Settings.jsx wrapper shows [data-testid=settings-loading] briefly (~400ms) on every tab re-entry because Settings.jsx re-fetches api.settings() on each mount and gates rendering behind s !== null. So there IS a short loading blip before the (cached) Research Lab appears. Not blocking, but the 'instant' expectation is imperfect.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "Settings.jsx (SettingsPage)", "issue": "Every re-entry to Research Lab tab shows a brief [data-testid=settings-loading] spinner (~400ms) because SettingsPage always fetches api.settings() on mount and returns null-guarded 'LOADING SETTINGS' until it resolves. This hides the already-cached StrategyValidationPanel underneath. To make re-entry truly instant, cache the settings response (module-level or via AppDataContext) similar to _labCache and render the panel immediately with cached data while refresh happens in the background.", "selector": "[data-testid='settings-loading']", "priority": "LOW"}
+      ],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Bottom nav", "issues": ["'Made with Emergent' preview badge overlays the bottom-right Research Lab bottom-nav button at viewport widths <= 1280px, intercepting clicks. Testing had to use 1600x1000 viewport. Not app code (preview badge), but worth flagging so real mobile widths don't accidentally block the Lab tab."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "(Optional / LOW) Add a module-level or context cache for api.settings() in Settings.jsx so re-entering the Research Lab tab does NOT flash the 'LOADING SETTINGS' state — mirror the _labCache pattern in StrategyValidationPanel. Otherwise re-entry has a ~400ms blank blip before the cached Lab appears.",
+    "(Preview env, not code) Be aware the 'Made with Emergent' badge covers the bottom-right nav button (Research Lab) at <=1280px viewports."
+  ],
+  "critical_code_review_comments": [
+    "Dashboard.jsx: TradeLifecyclePanel and ConsolidatedPositions drill-down logic is clean, testable, and matches the spec exactly (first row auto-expanded via `isFirst`, others gated by `expanded[symbol]`; tracker gated by `showAll` with 'Show N more' / 'Show less' label swap).",
+    "StrategyValidationPanel: module-level `_labCache` is a solid, minimal-blast-radius cache. Consider also caching `api.settings()` at the same layer (or via AppDataContext) to eliminate the parent-level settings-loading flash on tab re-entry.",
+    "Reports.jsx / Settings.jsx: in-page duplicate headers are cleanly removed; AppShell TopHeader → ContextInfo now owns the single source of truth for tab titles."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% for headers + drill-downs (4/4 fixes); caching effective at panel level but wrapper still flashes"},
+  "seed_data_creation": "None. Test ran against existing 7 open paper positions (SOL/BTC/ETH/XRP/LINK/ARB/AVAX).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "For future UI tests on this app, use viewport >= 1600px width OR click bottom-nav-* via page.evaluate JS click — the preview's 'Made with Emergent' badge overlays the 4th nav slot (Research Lab) at <=1280px and blocks Playwright pointer clicks. The four fixes tested here (duplicate-header removal on Reports+Settings, lifecycle drill-down, tracker show-more, and StrategyValidationPanel module cache) are verified working via public read-only view; owner login was not required.",
+  "rca of the issue": "Root of the caching caveat: SettingsPage in /app/frontend/src/pages/Settings.jsx L26-33 fetches api.settings() on every mount and blocks render behind `if (!s) return <settings-loading>` at L107-113. Because the AppShell (AppShell.jsx L82-96) mounts only the active tab's component and remounts on switch, Settings unmounts on leave and remounts on re-entry, triggering a fresh settings fetch and the brief loading gate. The StrategyValidationPanel's _labCache at /app/frontend/src/components/StrategyValidationPanel.jsx L31 does the right thing internally, but it lives beneath the settings-loading gate so users still see a flash. Fix: cache the settings response the same way (module-level ref or via AppDataContext) and initialize state from cache."
+}

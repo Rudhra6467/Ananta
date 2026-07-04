@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, RefreshCw } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import {
     Cell as RCell,
     Pie,
@@ -213,6 +213,8 @@ function LifecycleRow({ p }) {
 
 function TradeLifecyclePanel({ portfolio }) {
     const open = (portfolio?.positions || []).filter((p) => p.quantity > 0);
+    const [expanded, setExpanded] = useState({});
+    const toggle = (sym) => setExpanded((e) => ({ ...e, [sym]: !e[sym] }));
     return (
         <div className="panel p-6" data-testid="trade-lifecycle">
             <div className="flex items-center justify-between mb-4">
@@ -224,8 +226,32 @@ function TradeLifecyclePanel({ portfolio }) {
                     No live trades. The Hunter is evaluating support zones.
                 </div>
             ) : (
-                <div className="space-y-6">
-                    {open.map((p) => <LifecycleRow key={p.symbol} p={p} />)}
+                <div className="space-y-3">
+                    {open.map((p, idx) => {
+                        const isFirst = idx === 0;
+                        const base = p.symbol.split("/")[0];
+                        const isOpen = isFirst || !!expanded[p.symbol];
+                        const pnl = p.unrealized_pnl || 0;
+                        const gainPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
+                        const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
+                        return (
+                            <div key={p.symbol} className={isFirst ? "" : "border-t border-atlas-border pt-3"}>
+                                {!isFirst && (
+                                    <button data-testid={`lifecycle-toggle-${base}`} onClick={() => toggle(p.symbol)}
+                                        className="w-full flex items-center justify-between gap-3 py-1 group">
+                                        <span className="flex items-center gap-2">
+                                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-atlas-textTertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-atlas-textTertiary group-hover:text-atlas-cyan" />}
+                                            <span className="font-mono font-bold text-sm text-atlas-text">{base}</span>
+                                        </span>
+                                        <span className={`font-mono text-sm font-bold tabular-nums ${pnlCls}`}>
+                                            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({gainPct >= 0 ? "+" : ""}{gainPct.toFixed(2)}%)</span>
+                                        </span>
+                                    </button>
+                                )}
+                                {isOpen && <div className={isFirst ? "" : "mt-3"}><LifecycleRow p={p} /></div>}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -389,6 +415,8 @@ function LeaderboardAnalytics({ trades }) {
 /* ---------------- Consolidated positions (bottom) ---------------- */
 function ConsolidatedPositions({ portfolio, onDone }) {
     const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
+    const [showAll, setShowAll] = useState(false);
+    const visible = showAll ? positions : positions.slice(0, 1);
 
     return (
         <div className="panel overflow-hidden" data-testid="consolidated-positions">
@@ -402,29 +430,38 @@ function ConsolidatedPositions({ portfolio, onDone }) {
                     No open positions. The Hunter is evaluating support zones.
                 </div>
             ) : (
-                <div className="divide-y divide-atlas-border">
-                    {positions.map((p) => {
-                        const base = p.symbol.split("/")[0];
-                        const pnl = p.unrealized_pnl || 0;
-                        const pnlPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
-                        const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
-                        return (
-                            <div key={p.symbol} className="flex items-center justify-between gap-4 px-6 py-3.5" data-testid={`tracker-row-${base}`}>
-                                <div className="flex items-center gap-4 min-w-0">
-                                    <span className="font-mono font-bold text-sm text-atlas-text w-14">{base}</span>
-                                    <span className="font-mono text-xs tabular-nums text-atlas-textSecondary">${(p.market_value || 0).toFixed(2)}</span>
-                                    <span className="font-mono text-[11px] tabular-nums text-atlas-textTertiary hidden sm:inline">@ ${(p.avg_cost || 0).toFixed(p.avg_cost < 10 ? 4 : 2)}</span>
+                <>
+                    <div className="divide-y divide-atlas-border">
+                        {visible.map((p) => {
+                            const base = p.symbol.split("/")[0];
+                            const pnl = p.unrealized_pnl || 0;
+                            const pnlPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
+                            const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
+                            return (
+                                <div key={p.symbol} className="flex items-center justify-between gap-4 px-6 py-3.5" data-testid={`tracker-row-${base}`}>
+                                    <div className="flex items-center gap-4 min-w-0">
+                                        <span className="font-mono font-bold text-sm text-atlas-text w-14">{base}</span>
+                                        <span className="font-mono text-xs tabular-nums text-atlas-textSecondary">${(p.market_value || 0).toFixed(2)}</span>
+                                        <span className="font-mono text-[11px] tabular-nums text-atlas-textTertiary hidden sm:inline">@ ${(p.avg_cost || 0).toFixed(p.avg_cost < 10 ? 4 : 2)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <span className={`font-mono text-sm font-bold tabular-nums text-right ${pnlCls}`}>
+                                            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+                                        </span>
+                                        <ManualExitButton symbol={p.symbol} onDone={onDone} compact />
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <span className={`font-mono text-sm font-bold tabular-nums text-right ${pnlCls}`}>
-                                        {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
-                                    </span>
-                                    <ManualExitButton symbol={p.symbol} onDone={onDone} compact />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                    {positions.length > 1 && (
+                        <button data-testid="tracker-show-more" onClick={() => setShowAll((v) => !v)}
+                            className="w-full flex items-center justify-center gap-1.5 px-6 py-2.5 border-t border-atlas-border font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan hover:bg-atlas-panelHover transition-colors">
+                            {showAll ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            {showAll ? "Show less" : `Show ${positions.length - 1} more position${positions.length - 1 > 1 ? "s" : ""}`}
+                        </button>
+                    )}
+                </>
             )}
         </div>
     );

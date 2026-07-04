@@ -24,11 +24,17 @@ const STATUS_CLS = {
     DONE: "text-atlas-positive", FAILED: "text-atlas-negative",
 };
 
+// Module-level cache: coverage/presets are effectively static for a session and runs
+// rarely change — caching them means re-opening the Research Lab tab is INSTANT and never
+// "loads afresh" or gets stuck when the user hasn't changed anything. Runs still refresh
+// silently in the background (and while a job is active).
+const _labCache = { cov: null, presets: null, runs: null, assets: null, period: null };
+
 export default function StrategyValidationPanel() {
-    const [cov, setCov] = useState(null);
-    const [assets, setAssets] = useState([]);
-    const [period, setPeriod] = useState("3m");
-    const [runs, setRuns] = useState([]);
+    const [cov, setCov] = useState(_labCache.cov);
+    const [assets, setAssets] = useState(_labCache.assets || []);
+    const [period, setPeriod] = useState(_labCache.period || "3m");
+    const [runs, setRuns] = useState(_labCache.runs || []);
     const [open, setOpen] = useState(false);
     const [track, setTrack] = useState("current");
     const [param, setParam] = useState(PARAMS[0].key);
@@ -39,15 +45,19 @@ export default function StrategyValidationPanel() {
     const [proposal, setProposal] = useState(null);
     const [promoteBusy, setPromoteBusy] = useState(false);
     const [deleting, setDeleting] = useState(null);
-    const [presets, setPresets] = useState([]);
-    const [presetId, setPresetId] = useState("");
+    const [presets, setPresets] = useState(_labCache.presets || []);
+    const [presetId, setPresetId] = useState(_labCache.presets?.[0]?.id || "");
 
-    const loadRuns = () => api.labRuns(12).then((d) => setRuns(d.runs || [])).catch(() => {});
+    const loadRuns = () => api.labRuns(12).then((d) => {
+        _labCache.runs = d.runs || [];
+        setRuns(_labCache.runs);
+    }).catch(() => {});
 
     const deleteRun = async (id) => {
         setDeleting(id);
         try {
             await api.deleteLabRun(id);
+            _labCache.runs = (_labCache.runs || []).filter((r) => r.id !== id);
             setRuns((prev) => prev.filter((r) => r.id !== id));
             toast.success("RECORD DELETED", { description: `Run ${id.slice(0, 8)} removed` });
         } catch (_) {
@@ -58,17 +68,33 @@ export default function StrategyValidationPanel() {
     };
 
     useEffect(() => {
-        api.labCoverage().then((c) => {
-            setCov(c);
-            const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
-            setAssets(avail.slice(0, 3));
-        }).catch(() => {});
-        api.labPresets().then((d) => {
-            setPresets(d.presets || []);
-            if (d.presets?.length) setPresetId(d.presets[0].id);
-        }).catch(() => {});
+        // coverage — fetch only once per session; reuse cache on subsequent tab visits
+        if (!_labCache.cov) {
+            api.labCoverage().then((c) => {
+                _labCache.cov = c;
+                setCov(c);
+                if (!_labCache.assets) {
+                    const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol).slice(0, 3);
+                    _labCache.assets = avail;
+                    setAssets(avail);
+                }
+            }).catch(() => {});
+        }
+        // presets — static, fetch once
+        if (!_labCache.presets) {
+            api.labPresets().then((d) => {
+                _labCache.presets = d.presets || [];
+                setPresets(_labCache.presets);
+                if (_labCache.presets.length) setPresetId(_labCache.presets[0].id);
+            }).catch(() => {});
+        }
+        // runs — silent background refresh (no spinner, cached list shows instantly)
         loadRuns();
     }, []);
+
+    // keep the user's asset/period selection across tab switches
+    const chooseAssets = (next) => { _labCache.assets = next; setAssets(next); };
+    const choosePeriod = (next) => { _labCache.period = next; setPeriod(next); };
 
     // poll while any run is active
     useEffect(() => {
@@ -82,7 +108,7 @@ export default function StrategyValidationPanel() {
     const periods = cov?.periods || ["1m", "2m", "3m", "quarter", "6m", "1y", "2y", "custom"];
 
     const toggleAsset = (sym) =>
-        setAssets((cur) => (cur.includes(sym) ? cur.filter((x) => x !== sym) : [...cur, sym]));
+        chooseAssets(assets.includes(sym) ? assets.filter((x) => x !== sym) : [...assets, sym]);
 
     const onPickParam = (k) => {
         setParam(k);
@@ -286,7 +312,7 @@ export default function StrategyValidationPanel() {
                 </div>
                 <div>
                     <Label className="label-tag text-[10px]">HISTORICAL PERIOD</Label>
-                    <select data-testid="period-select" value={period} onChange={(e) => setPeriod(e.target.value)}
+                    <select data-testid="period-select" value={period} onChange={(e) => choosePeriod(e.target.value)}
                         className="w-full mt-2 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
                         {periods.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>

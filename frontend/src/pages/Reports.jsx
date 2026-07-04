@@ -91,11 +91,7 @@ export default function Reports() {
 
     return (
         <div className="space-y-6" data-testid="reports-page">
-            <div className="flex items-end justify-between flex-wrap gap-3">
-                <div>
-                    <div className="label-tag">VALIDATION · DATALOGS / REPORTS</div>
-                    <h2 className="font-heading font-light text-3xl tracking-tight mt-1 text-atlas-text">DataLogs / Reports</h2>
-                </div>
+            <div className="flex items-center justify-end flex-wrap gap-3">
                 <div className="flex items-center gap-2">
                     {isOwner && (
                         <button data-testid="reports-fresh-start" onClick={freshStart}

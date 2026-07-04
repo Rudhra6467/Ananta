@@ -115,14 +115,6 @@ export default function SettingsPage() {
     return (
         <TooltipProvider delayDuration={120}>
         <div className="space-y-6" data-testid="settings-page">
-            {/* RESEARCH LAB HEADER */}
-            <div data-testid="research-lab-header">
-                <h1 className="font-heading text-2xl md:text-3xl font-light tracking-tight text-atlas-text">Research Lab</h1>
-                <p className="font-mono text-[11px] text-atlas-textTertiary mt-1 uppercase tracking-wider">
-                    Strategy Validation · Optimization Sandbox · Risk &amp; Engine Configuration
-                </p>
-            </div>
-
             {/* STRATEGY VALIDATION — control panel comes first */}
             <StrategyValidationPanel />
 
