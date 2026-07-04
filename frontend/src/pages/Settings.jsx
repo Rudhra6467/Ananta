@@ -13,8 +13,12 @@ import AnalyticsPanel from "@/components/AnalyticsPanel";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import { useAuth } from "@/context/AuthContext";
 
+// Cache the settings payload so re-opening the Research Lab tab renders instantly from
+// cache (no ~400ms loading gate) while a silent background refresh keeps it fresh.
+let _settingsCache = null;
+
 export default function SettingsPage() {
-    const [s, setS] = useState(null);
+    const [s, setS] = useState(_settingsCache);
     const [saving, setSaving] = useState(false);
     const [risk, setRisk] = useState(null);
     const [running, setRunning] = useState(false);
@@ -23,8 +27,10 @@ export default function SettingsPage() {
     const [excludeSynthetic, setExcludeSynthetic] = useState(false);
     const { isOwner } = useAuth();
 
+    const applyS = (v) => { _settingsCache = v; setS(v); };
+
     useEffect(() => {
-        api.settings().then(setS).catch(() => setS(null));
+        api.settings().then(applyS).catch(() => { if (!_settingsCache) setS(null); });
         api.riskStatus().then(setRisk).catch(() => {});
         const t = setInterval(() => {
             api.riskStatus().then(setRisk).catch(() => {});
@@ -68,7 +74,7 @@ export default function SettingsPage() {
                 if (payload[k] && /^•+$/.test(payload[k])) delete payload[k];
             });
             const next = await api.updateSettings(payload);
-            setS(next);
+            applyS(next);
             toast.success("SETTINGS SAVED", { description: "Risk engine and exchange config updated." });
         } catch (e) {
             toast.error("SAVE FAILED", { description: String(e?.message || e) });
@@ -80,7 +86,7 @@ export default function SettingsPage() {
     const toggleKill = async (val) => {
         try {
             const next = await api.updateSettings({ manual_kill_switch: val });
-            setS(next);
+            applyS(next);
             toast[val ? "error" : "success"](val ? "MANUAL KILL ENGAGED" : "MANUAL KILL RELEASED", {
                 description: val ? "All new trades blocked until released." : "Trading resumes on next cycle.",
             });

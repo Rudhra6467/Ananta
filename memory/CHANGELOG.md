@@ -1,5 +1,14 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-04 — UI polish: duplicate headers, drill-downs, Research Lab caching
+
+- **Duplicate header fix:** removed the in-page headers from `Reports.jsx` (Datalogs) and `Settings.jsx` (Research Lab) — the AppShell dynamic header is now the single source. Cockpit/Portfolio were already correct. (verified by testing agent iter 17)
+- **Trade Life Cycle drill-down** (`Dashboard.jsx`): only the first open position renders its full lifecycle stepper; the rest are collapsed clickable rows (`lifecycle-toggle-<BASE>`) that expand on click.
+- **Position Tracker drill-down**: shows 1 position by default + a `tracker-show-more` toggle ("Show N more positions" / "Show less").
+- **Research Lab reload fix (caching):** module-level `_labCache` in `StrategyValidationPanel` (coverage/presets/runs/asset+period selection) and `_settingsCache` in `Settings.jsx` — re-opening the Research Lab tab now renders INSTANTLY from cache with a silent background refresh, instead of a full re-fetch/loading gate on every visit. Fixes coverage filter to `bars_1h`.
+- Validation "QUEUE FAILED / stuck download": traced to a transient Cloudflare edge 502 (endpoints verified healthy in iter 16); the 30s client timeout prevents infinite hangs and the caching removes the redundant heavy re-fetches that made it feel stuck.
+
+
 ## 2026-07-04 — WS2 Hunter Continuation + WS3 Research Lab redesign
 
 ### WS2 — Hunter Continuation strategy (new independent executor)
