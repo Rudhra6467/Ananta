@@ -74,6 +74,13 @@ from trading_engine import (
 app = FastAPI(title="Ananta AI Trading Dashboard")
 api_router = APIRouter(prefix="/api")
 
+
+# Kubernetes liveness/readiness probe — must be top-level (no /api prefix),
+# must respond instantly and never touch the DB or any external service.
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 # background trading loop + faster position watcher
 trading_loop = TradingLoop(db, interval_seconds=90)
 position_watcher = PositionWatcher(db, default_interval=15)
