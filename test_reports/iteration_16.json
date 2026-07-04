@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 16 — WS2 (Hunter Continuation) + WS3 (Research Lab redesign: Mode A/B/C, presets, Sharpe/profit-factor metrics, 15m/30m/1h multi-TF + verdict + recommendations) end-to-end verification against the shared owner-gated backend. Backend: 4/4 pytest cases PASS in test_ws3_lab_research.py — /api/lab/presets returns 4 presets (conservative, aggressive, high_volatility, reversal_purist), /api/lab/data/coverage returns bars_1h>0 for every seeded symbol (BTC/ETH/SOL/AVAX/XRP/... all ~10 000 1h bars), /api/lab/runs?limit=20 lists many DONE backtests (picked 83271278-df63-4005-86bf-abbbc2dee8c6 'Preset: Aggressive Momentum' on BTC/USD 3m), /api/lab/runs/{id} returns result.per_symbol[BTC/USD] with every required key present (sharpe=-0.02, sortino, profit_factor=0.18, recommendation string, strategy_breakdown {hunter,continuation,squeeze}), result.multi_timeframe[BTC/USD].by_tf has all three of 15m/30m/1h with metrics + verdict{best_tf='1h',score,reason}, /api/lab/runs/{id}/pdf returns 200 with content-type application/pdf (6 341 bytes, %PDF magic bytes). Web UI: owner login via 'OWNER LOGIN' header modal succeeds (readonly-banner disappears, OWNER badge + LOGOUT visible). Bottom-nav 'RESEARCH LAB' button navigates to /research-lab with strategy-validation-panel rendered. RUN VALIDATION button is enabled (with 3 default assets selected: BTC/ETH/SOL). Clicking it opens validation-dialog with all three mode cards present: track-current, track-fresh, track-presets. Clicking track-presets renders preset-select (4 options matching backend presets) + preset-desc (matches backend description text for currently-selected preset). runs-list shows 12 rows including the target DONE backtest run-row-83271278; expand-run-83271278 is present, clicking it lazy-loads via /api/lab/runs/{id} and renders run-detail-83271278 with all sub-testIDs: detail-sym-BTC, detail-mtf-BTC (15m/30m/1h table populated), detail-verdict-BTC ('Best TF: 1h — 1h led on return-over-drawdown (-2.10% over 39 trades, 23.1% win)'), detail-reco-BTC ('UNDERPERFORMING — -2.1% at 23.1% win rate; the edge is weak in this window...'), detail-strats-BTC (hunter 16t/12.5%, continuation 17t/23.5%, squeeze 6t/50%). All 6 metric tiles visible: Return, Win%, Sharpe, Prof.Factor, Max DD, Trades. Zero JS pageerrors during the flow.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_ws3_lab_research.py",
+    "/app/test_reports/pytest/pytest_iter16_ws3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StrategyValidationPanel.jsx is 515 lines and mixes 3 dialogs (validation/promote) + 4 sub-components (RunRow, RunDetails, Metric, helpers). Consider splitting into StrategyValidationPanel/{index,RunRow,RunDetails,helpers}.jsx to keep files under 300 lines and make focused testing easier.",
+    "RunRow expand fetches /api/lab/runs/{id} every time it is expanded then collapsed then re-expanded because it caches on the row-instance's useState but the row is unmounted/remounted as the outer runs list refreshes every 2.5 s while any run is QUEUED/RUNNING (see the polling loop at StrategyValidationPanel.jsx:74-79). Any 'RUNNING' sibling forces the polling on and blows the detail cache. Consider hoisting detail cache to the parent (dict of run.id -> detail) or memoizing the run list by id so already-fetched rows keep their local state.",
+    "Bottom-nav 'RESEARCH LAB' tab no longer exposes a data-testid=nav-tab-* attribute (iteration 15 documented nav-tab-settings). Selection now only works via role=button + text 'RESEARCH LAB'. Add data-testid='nav-tab-research-lab' (and equivalents for cockpit/portfolio/datalogs) for deterministic Playwright selection.",
+    "OwnerAuthControl dialog inputs (email + password) still lack explicit data-testids (owner-login-email/owner-login-password/owner-login-submit). Iter 15 already flagged this — repeating because it still bites automation.",
+    "The 'preset-desc' <div> derives from `presets.find(p => p.id === presetId)?.description`. When switching presets the value updates correctly, but there is no accessibility linkage (aria-describedby) between preset-select and preset-desc — minor a11y nit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ws3_lab_research.py",
+    "/app/test_reports/pytest/pytest_iter16_ws3.xml",
+    "/app/test_reports/iteration_16.json"
+  ],
+  "success_rate": {"backend": "100% (4/4 pytest cases)", "frontend": "100% (5/5 review scenarios PASS)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (preview .env)",
+  "seed_data_creation": "None. Reused an existing DONE backtest run id 83271278-df63-4005-86bf-abbbc2dee8c6 ('Preset: Aggressive Momentum', BTC/USD, 3m) already in the DB — no new lab jobs were queued (per review guidance). A pre-existing RUNNING backtest 5d50406a on BTC/ETH/SOL 6m was observed but untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Stable review DONE backtest for regression: run id 83271278-df63-4005-86bf-abbbc2dee8c6 (label 'Preset: Aggressive Momentum', BTC/USD, DONE, has full per_symbol + multi_timeframe + strategy_breakdown + recommendation payload). Backend pytest suite at /app/backend/tests/test_ws3_lab_research.py runs in <10 s — reuse it as smoke. Login modal inputs still have no explicit testIDs — use page.locator('input').nth(0) for email and page.locator('input[type=\"password\"]').first for password, then page.get_by_role('button', name='LOG IN'). Bottom-nav Research Lab tab has NO data-testid=nav-tab-*; use page.get_by_role('button', name='RESEARCH LAB').last (there is a duplicate 'RESEARCH LAB' text in the page header, hence .last). During the review a WS3 backtest (5d50406a…) was RUNNING which turns on the 2.5 s polling — that is expected. One transient Cloudflare 502 was observed for ~60 s at 15:22 UTC then self-recovered; not reproducible now.",
+  "rca of the issue": "N/A — no bugs. WS2 Hunter Continuation strategy_breakdown is populated on the target DONE backtest (hunter 16 trades / continuation 17 trades / squeeze 6 trades, all P&L reported). WS3 Research Lab redesign is fully wired: Mode A/B/C dialog, 4 presets from backend, Sharpe + profit_factor metrics, 15m/30m/1h multi-TF comparison with best-TF verdict, and auto-recommendation string all render correctly on the DONE backtest detail view. Backend pytest + browser flow both confirm end-to-end behavior."
+}

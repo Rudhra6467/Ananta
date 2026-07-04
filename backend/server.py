@@ -1317,6 +1317,7 @@ class LabRunCreate(BaseModel):
     grid: dict | None = None
     setting_overrides: dict | None = None
     profile_overrides: dict | None = None
+    preset: str | None = None  # WS3 Mode C: named preset id (expands to setting_overrides)
     target: str | None = None
     values: list | None = None
     label: str | None = None
@@ -1341,10 +1342,27 @@ async def lab_data_coverage():
     return {"symbols": out, "periods": list(_PERIOD_MONTHS.keys()) + ["custom"]}
 
 
+@api_router.get("/lab/presets", dependencies=[Depends(require_owner)])
+async def lab_presets():
+    """WS3 Mode C: named parameter presets the operator can validate in one click."""
+    from lab.presets import PRESETS
+    return {"presets": PRESETS}
+
+
 @api_router.post("/lab/runs", dependencies=[Depends(require_owner)])
 async def lab_create_run(body: LabRunCreate):
     try:
-        doc = await create_run(db, body.model_dump())
+        payload = body.model_dump()
+        # Mode C: expand a named preset into concrete setting_overrides.
+        if payload.get("preset"):
+            from lab.presets import get_preset
+            preset = get_preset(payload["preset"])
+            if not preset:
+                raise HTTPException(status_code=400, detail=f"unknown preset '{payload['preset']}'")
+            payload["setting_overrides"] = {**(preset.get("setting_overrides") or {}), **(payload.get("setting_overrides") or {})}
+            payload["kind"] = "backtest"
+            payload["label"] = payload.get("label") or f"Preset: {preset['label']}"
+        doc = await create_run(db, payload)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"id": doc["id"], "status": doc["status"], "kind": doc["kind"]}

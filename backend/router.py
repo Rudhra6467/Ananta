@@ -14,24 +14,24 @@ from __future__ import annotations
 # Active executors per regime (independent traders).
 # Hunter = "buys fear" (reversals/pullbacks). Squeeze = "buys expansion".
 _REGIME_MAP: dict[str, list[str]] = {
-    "TREND_UP": ["hunter"],            # aggressive pullback into trend support
+    "TREND_UP": ["hunter", "continuation"],   # pullbacks into trend support (reversal + continuation)
     "REVERSAL": ["hunter"],            # stabilized / deep-discount reversal
     "COMPRESSION": ["squeeze"],        # volatility coil -> expansion
     "RANGE": ["squeeze"],              # range edges can still coil & expand
-    "NEUTRAL": ["hunter", "squeeze"],  # fallback: let both look
+    "NEUTRAL": ["hunter", "squeeze", "continuation"],  # fallback: let all look
     "TREND_DOWN": [],                  # no long executors in a confirmed downtrend
 }
 
 _RATIONALE: dict[str, str] = {
-    "TREND_UP": "Strong uptrend — Hunter hunts pullbacks into support.",
+    "TREND_UP": "Strong uptrend — Hunter hunts deep pullbacks; Continuation buys shallow dips to the 20-EMA.",
     "REVERSAL": "Oversold/panic — Hunter buys fear after acceptance.",
     "COMPRESSION": "Volatility coiled — Squeeze waits for a confirmed expansion.",
     "RANGE": "Low-trend range — Squeeze watches the edges for a break.",
-    "NEUTRAL": "Mixed — both models may evaluate.",
+    "NEUTRAL": "Mixed — all models may evaluate.",
     "TREND_DOWN": "Confirmed downtrend — no long executors active.",
 }
 
-ACTIVE_EXECUTORS = ("hunter", "squeeze")
+ACTIVE_EXECUTORS = ("hunter", "squeeze", "continuation")
 
 
 def route(regime_label: str | None) -> dict:
@@ -51,3 +51,7 @@ def hunter_allowed(regime_label: str | None) -> bool:
 
 def squeeze_allowed(regime_label: str | None) -> bool:
     return "squeeze" in route(regime_label)["eligible_models"]
+
+
+def continuation_allowed(regime_label: str | None) -> bool:
+    return "continuation" in route(regime_label)["eligible_models"]

@@ -97,6 +97,7 @@ export const api = {
     researchStagedExit: () => cget("/research/staged_exit"),
     // --- Research Lab (offline strategy validation) ---
     labCoverage: () => client.get("/lab/data/coverage").then((r) => r.data),
+    labPresets: () => client.get("/lab/presets").then((r) => r.data),
     labCreateRun: (spec) => client.post("/lab/runs", spec).then((r) => r.data),
     labRuns: (limit = 20) => client.get(`/lab/runs?limit=${limit}`).then((r) => r.data),
     labRun: (id) => client.get(`/lab/runs/${id}`).then((r) => r.data),

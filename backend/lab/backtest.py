@@ -28,8 +28,9 @@ from models import Position, Portfolio, RiskSettings
 from primary_layer import evaluate_primary
 from regime import classify_regime
 from setup_classifier import ema
-from router import hunter_allowed, squeeze_allowed
+from router import continuation_allowed, hunter_allowed, squeeze_allowed
 from squeeze import evaluate_squeeze
+from continuation import evaluate_continuation
 from lab import data_store
 
 logger = logging.getLogger("ananta.lab.backtest")
@@ -195,6 +196,10 @@ def run_backtest(
                 sq = evaluate_squeeze(window)
                 if sq.triggered:
                     strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
+            if strategy is None and s.continuation_enabled and continuation_allowed(regime.regime):
+                ct = evaluate_continuation(window, s, regime=regime)
+                if ct.triggered:
+                    strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
             if strategy is not None:
                 fill = bars[i + 1][_O] * (1.0 + SLIPPAGE_PCT / 100.0)
                 qty = lot / fill
@@ -242,21 +247,64 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         return {k: {"n": v["n"], "win_pct": round(v["wins"] / v["n"] * 100, 1),
                     "net_pnl": round(v["net"], 4)} for k, v in out.items()}
 
+    # Sharpe / Sortino computed on per-trade returns (annualisation-free, comparable
+    # across timeframes since it's per-trade risk-adjusted return).
+    sharpe = sortino = None
+    if len(rets) >= 2:
+        mean_r = sum(rets) / len(rets)
+        var = sum((r - mean_r) ** 2 for r in rets) / (len(rets) - 1)
+        sd = var ** 0.5
+        sharpe = round(mean_r / sd, 3) if sd > 0 else None
+        downside = [r for r in rets if r < 0]
+        if downside:
+            dvar = sum(r ** 2 for r in downside) / len(downside)
+            dsd = dvar ** 0.5
+            sortino = round(mean_r / dsd, 3) if dsd > 0 else None
+    win_rate = round(len(wins) / n * 100, 1) if n else 0.0
+    total_ret = round(net / start_cap * 100, 3) if start_cap else 0.0
+    profit_factor = None
+    gross_win = sum(t["pnl"] for t in trades if t["pnl"] > 0)
+    gross_loss = -sum(t["pnl"] for t in trades if t["pnl"] < 0)
+    if gross_loss > 0:
+        profit_factor = round(gross_win / gross_loss, 2)
+
     return {
         "symbol": symbol, "start_ms": start_ms, "end_ms": end_ms,
         "timeframe": timeframe,
         "starting_capital": start_cap,
         "ending_capital": round(equity_curve[-1], 2) if equity_curve else start_cap,
-        "total_return_pct": round(net / start_cap * 100, 3) if start_cap else 0.0,
+        "total_return_pct": total_ret,
         "net_pnl": round(net, 4),
         "trades": n,
-        "win_rate_pct": round(len(wins) / n * 100, 1) if n else 0.0,
+        "win_rate_pct": win_rate,
         "max_drawdown_pct": round(max_dd, 2),
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "profit_factor": profit_factor,
         "avg_return_pct": round(sum(rets) / len(rets), 3) if rets else 0.0,
         "avg_mfe_pct": round(sum(mfes) / len(mfes), 3) if mfes else None,
         "avg_mae_pct": round(sum(maes) / len(maes), 3) if maes else None,
         "avg_trade_quality": round(sum(t["trade_quality_score"] for t in trades) / n, 1) if n else None,
         "exit_module_breakdown": _bucket("exit_module"),
         "regime_breakdown": _bucket("regime_at_entry"),
+        "strategy_breakdown": _bucket("strategy"),
+        "recommendation": _recommend(total_ret, win_rate, max_dd, sharpe, profit_factor, n),
         "trade_log": trades,
     }
+
+
+def _recommend(total_ret, win_rate, max_dd, sharpe, profit_factor, n) -> str:
+    """Plain-English verdict for the report — institutional-style auto-recommendation."""
+    if n < 5:
+        return "INSUFFICIENT SAMPLE — fewer than 5 trades; widen the window or add assets before judging."
+    if total_ret > 0 and (sharpe or 0) >= 0.3 and (profit_factor or 0) >= 1.3 and max_dd <= 25:
+        return (f"DEPLOY-READY — {total_ret:+.1f}% with a {win_rate}% win rate, Sharpe {sharpe}, "
+                f"profit factor {profit_factor} and a contained {max_dd:.1f}% drawdown.")
+    if total_ret > 0 and (profit_factor or 0) >= 1.0:
+        return (f"PROMISING — profitable ({total_ret:+.1f}%) but Sharpe {sharpe}/PF {profit_factor} are thin; "
+                f"optimise risk params (stop/trail) before promoting.")
+    if max_dd > 30:
+        return (f"TOO RISKY — {max_dd:.1f}% drawdown is excessive; tighten stops or reduce size regardless "
+                f"of the {total_ret:+.1f}% return.")
+    return (f"UNDERPERFORMING — {total_ret:+.1f}% at {win_rate}% win rate; the edge is weak in this window. "
+            f"Re-test other timeframes or parameter presets.")

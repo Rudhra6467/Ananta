@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2 } from "lucide-react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,8 @@ export default function StrategyValidationPanel() {
     const [proposal, setProposal] = useState(null);
     const [promoteBusy, setPromoteBusy] = useState(false);
     const [deleting, setDeleting] = useState(null);
+    const [presets, setPresets] = useState([]);
+    const [presetId, setPresetId] = useState("");
 
     const loadRuns = () => api.labRuns(12).then((d) => setRuns(d.runs || [])).catch(() => {});
 
@@ -58,8 +60,12 @@ export default function StrategyValidationPanel() {
     useEffect(() => {
         api.labCoverage().then((c) => {
             setCov(c);
-            const avail = (c.symbols || []).filter((s) => s.bars_4h > 0).map((s) => s.symbol);
+            const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
             setAssets(avail.slice(0, 3));
+        }).catch(() => {});
+        api.labPresets().then((d) => {
+            setPresets(d.presets || []);
+            if (d.presets?.length) setPresetId(d.presets[0].id);
         }).catch(() => {});
         loadRuns();
     }, []);
@@ -72,7 +78,7 @@ export default function StrategyValidationPanel() {
         return () => clearInterval(t);
     }, [runs]);
 
-    const symbols = useMemo(() => (cov?.symbols || []).filter((s) => s.bars_4h > 0), [cov]);
+    const symbols = useMemo(() => (cov?.symbols || []).filter((s) => s.bars_1h > 0), [cov]);
     const periods = cov?.periods || ["1m", "2m", "3m", "quarter", "6m", "1y", "2y", "custom"];
 
     const toggleAsset = (sym) =>
@@ -90,6 +96,9 @@ export default function StrategyValidationPanel() {
             let spec;
             if (track === "current") {
                 spec = { kind: "backtest", symbols: assets, period };
+            } else if (track === "presets") {
+                if (!presetId) { toast.error("Pick a preset"); setBusy(false); return; }
+                spec = { kind: "backtest", symbols: assets, period, preset: presetId };
             } else {
                 const vals = values.split(",").map((v) => parseFloat(v.trim())).filter((v) => !Number.isNaN(v));
                 if (vals.length < 2) { toast.error("Enter at least 2 comma-separated values"); setBusy(false); return; }
@@ -183,22 +192,44 @@ export default function StrategyValidationPanel() {
                         <DialogHeader>
                             <DialogTitle className="font-heading tracking-wide">CHOOSE VALIDATION TRACK</DialogTitle>
                         </DialogHeader>
-                        <div className="grid grid-cols-2 gap-3 mt-2">
+                        <div className="grid grid-cols-3 gap-3 mt-2">
                             <button data-testid="track-current"
                                 onClick={() => setTrack("current")}
                                 className={`text-left p-4 rounded-lg border-2 transition-all ${track === "current" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
                                 <Sparkles className="w-4 h-4 text-atlas-cyan mb-2" />
-                                <div className="font-mono text-sm font-bold text-atlas-text">A · Current Scenario</div>
+                                <div className="font-mono text-sm font-bold text-atlas-text">A · Current Prod</div>
                                 <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">Live production parameters vs past regimes.</div>
                             </button>
                             <button data-testid="track-fresh"
                                 onClick={() => setTrack("fresh")}
                                 className={`text-left p-4 rounded-lg border-2 transition-all ${track === "fresh" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
                                 <SlidersHorizontal className="w-4 h-4 text-atlas-cyan mb-2" />
-                                <div className="font-mono text-sm font-bold text-atlas-text">B · Fresh Values</div>
+                                <div className="font-mono text-sm font-bold text-atlas-text">B · Param Opt</div>
                                 <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">Sweep a param · rolling In-Sample→Out-of-Sample.</div>
                             </button>
+                            <button data-testid="track-presets"
+                                onClick={() => setTrack("presets")}
+                                className={`text-left p-4 rounded-lg border-2 transition-all ${track === "presets" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                <FlaskConical className="w-4 h-4 text-atlas-cyan mb-2" />
+                                <div className="font-mono text-sm font-bold text-atlas-text">C · Presets</div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">Test a canned strategy personality in one click.</div>
+                            </button>
                         </div>
+
+                        {track === "presets" && (
+                            <div className="space-y-3 mt-2 pt-3 border-t border-atlas-border" data-testid="presets-config">
+                                <div>
+                                    <Label className="label-tag text-[10px]">PRESET</Label>
+                                    <select data-testid="preset-select" value={presetId} onChange={(e) => setPresetId(e.target.value)}
+                                        className="w-full mt-1 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
+                                        {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                                    </select>
+                                </div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary leading-relaxed" data-testid="preset-desc">
+                                    {presets.find((p) => p.id === presetId)?.description || ""}
+                                </div>
+                            </div>
+                        )}
 
                         {track === "fresh" && (
                             <div className="space-y-3 mt-2 pt-3 border-t border-atlas-border" data-testid="fresh-values-config">
@@ -227,7 +258,9 @@ export default function StrategyValidationPanel() {
 
                         <Button data-testid="submit-validation-btn" onClick={submit} disabled={busy} className="w-full mt-3 gap-2">
                             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                            {track === "current" ? "RUN CURRENT-SCENARIO BACKTEST" : "RUN WALK-FORWARD VALIDATION"}
+                            {track === "current" ? "RUN CURRENT-PROD BACKTEST"
+                                : track === "presets" ? "RUN PRESET BACKTEST"
+                                    : "RUN WALK-FORWARD VALIDATION"}
                         </Button>
                     </DialogContent>
                 </Dialog>
@@ -245,7 +278,7 @@ export default function StrategyValidationPanel() {
                             return (
                                 <button key={s.symbol} data-testid={`asset-chip-${base}`} onClick={() => toggleAsset(s.symbol)}
                                     className={`px-3 py-1.5 rounded-full border font-mono text-xs transition-all ${on ? "border-atlas-cyan bg-atlas-panelHover text-atlas-text" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
-                                    {base} <span className="text-[9px] text-atlas-textTertiary">{s.bars_4h}</span>
+                                    {base} <span className="text-[9px] text-atlas-textTertiary">{s.bars_1h}</span>
                                 </button>
                             );
                         })}
@@ -318,10 +351,30 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
     const isTerminal = isDone || run.status === "FAILED";
     const canPromote = isDone && run.kind !== "backtest";
     const summary = runSummary(run);
+    const [expanded, setExpanded] = useState(false);
+    const [detail, setDetail] = useState(null);
+    const [loadingDetail, setLoadingDetail] = useState(false);
+
+    const toggle = async () => {
+        const next = !expanded;
+        setExpanded(next);
+        if (next && !detail) {
+            setLoadingDetail(true);
+            try { setDetail(await api.labRun(run.id)); } catch (_) { /* noop */ }
+            finally { setLoadingDetail(false); }
+        }
+    };
+
     return (
         <div className="border border-atlas-border rounded-lg p-4 bg-atlas-panel" data-testid={`run-row-${run.id.slice(0, 8)}`}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3 min-w-0">
+                    {isDone && run.kind === "backtest" && (
+                        <button data-testid={`expand-run-${run.id.slice(0, 8)}`} onClick={toggle}
+                            className="text-atlas-textTertiary hover:text-atlas-cyan">
+                            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                    )}
                     <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-atlas-border text-atlas-textSecondary">{run.kind}</span>
                     <span className="font-mono text-xs text-atlas-textSecondary truncate">{run.label || (run.symbols || []).join(", ")}</span>
                 </div>
@@ -357,8 +410,95 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
             )}
             {summary && <div className="mt-2 font-mono text-[11px] text-atlas-textSecondary" data-testid={`run-summary-${run.id.slice(0, 8)}`}>{summary}</div>}
             {run.status === "FAILED" && <div className="mt-2 font-mono text-[11px] text-atlas-negative">{run.error}</div>}
+            {expanded && (
+                <div className="mt-3 pt-3 border-t border-atlas-border" data-testid={`run-detail-${run.id.slice(0, 8)}`}>
+                    {loadingDetail ? <Loader2 className="w-4 h-4 animate-spin text-atlas-cyan" /> : <RunDetails run={detail} />}
+                </div>
+            )}
         </div>
     );
+}
+
+function RunDetails({ run }) {
+    if (!run?.result) return <div className="font-mono text-[11px] text-atlas-textSecondary">No detail available.</div>;
+    const per = run.result.per_symbol || {};
+    const mtf = run.result.multi_timeframe || {};
+    return (
+        <div className="space-y-4">
+            {Object.entries(per).map(([sym, m]) => {
+                if (m.error) return <div key={sym} className="font-mono text-[11px] text-atlas-negative">{sym}: {m.error}</div>;
+                const verdict = mtf[sym]?.verdict;
+                const byTf = mtf[sym]?.by_tf || {};
+                return (
+                    <div key={sym} data-testid={`detail-sym-${sym.split("/")[0]}`}>
+                        <div className="font-mono text-xs font-bold text-atlas-text mb-1.5">{sym.split("/")[0]}</div>
+                        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                            <Metric label="Return" value={fmtPct(m.total_return_pct)} good={m.total_return_pct > 0} />
+                            <Metric label="Win%" value={fmtPct(m.win_rate_pct)} />
+                            <Metric label="Sharpe" value={m.sharpe ?? "—"} good={m.sharpe > 0} />
+                            <Metric label="Prof.Factor" value={m.profit_factor ?? "—"} good={m.profit_factor >= 1} />
+                            <Metric label="Max DD" value={fmtPct(m.max_drawdown_pct)} />
+                            <Metric label="Trades" value={m.trades ?? 0} />
+                        </div>
+                        {m.strategy_breakdown && Object.keys(m.strategy_breakdown).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2" data-testid={`detail-strats-${sym.split("/")[0]}`}>
+                                {Object.entries(m.strategy_breakdown).map(([st, v]) => (
+                                    <span key={st} className="font-mono text-[10px] px-2 py-0.5 rounded border border-atlas-border text-atlas-textSecondary">
+                                        {st}: {v.n}t · {v.win_pct}% · {v.net_pnl >= 0 ? "+" : ""}{v.net_pnl}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {Object.keys(byTf).length > 0 && (
+                            <div className="mt-2 overflow-x-auto">
+                                <table className="w-full font-mono text-[10px]" data-testid={`detail-mtf-${sym.split("/")[0]}`}>
+                                    <thead><tr className="text-atlas-textTertiary text-left">
+                                        <th className="pr-3 py-0.5">TF</th><th className="pr-3">Trades</th><th className="pr-3">Return</th><th className="pr-3">Win%</th><th className="pr-3">Max DD</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {["15m", "30m", "1h"].map((tf) => {
+                                            const t = byTf[tf]; if (!t) return null;
+                                            if (t.error) return <tr key={tf}><td className="pr-3 py-0.5">{tf}</td><td colSpan={4} className="text-atlas-textTertiary">{t.error}</td></tr>;
+                                            return (
+                                                <tr key={tf} className="text-atlas-textSecondary">
+                                                    <td className="pr-3 py-0.5">{tf}</td><td className="pr-3">{t.trades}</td>
+                                                    <td className={`pr-3 ${t.total_return_pct > 0 ? "text-atlas-positive" : "text-atlas-negative"}`}>{fmtPct(t.total_return_pct)}</td>
+                                                    <td className="pr-3">{fmtPct(t.win_rate_pct)}</td><td className="pr-3">{fmtPct(t.max_drawdown_pct)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        {verdict?.reason && (
+                            <div className="mt-1.5 font-mono text-[10px] text-atlas-cyan" data-testid={`detail-verdict-${sym.split("/")[0]}`}>
+                                Best TF: <b>{verdict.best_tf || "—"}</b> — {verdict.reason}
+                            </div>
+                        )}
+                        {m.recommendation && (
+                            <div className="mt-1.5 font-mono text-[10px] text-atlas-textSecondary italic" data-testid={`detail-reco-${sym.split("/")[0]}`}>
+                                {m.recommendation}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function Metric({ label, value, good }) {
+    return (
+        <div className="px-2 py-1.5 rounded border border-atlas-border">
+            <div className="font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">{label}</div>
+            <div className={`font-mono text-xs font-bold ${good === undefined ? "text-atlas-text" : good ? "text-atlas-positive" : "text-atlas-negative"}`}>{value}</div>
+        </div>
+    );
+}
+
+function fmtPct(v) {
+    return v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${v}%`;
 }
 
 function runSummary(run) {

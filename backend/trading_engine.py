@@ -38,8 +38,9 @@ from strategies import scan_strategies, STRATEGY_DEFS, ema
 from levels import get_levels, nearest_resistance, nearest_support
 from primary_layer import evaluate_primary, fifty_pct_metric
 from regime import classify_regime
-from router import route, squeeze_allowed
+from router import continuation_allowed, route, squeeze_allowed
 from squeeze import evaluate_squeeze
+from continuation import evaluate_continuation
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
@@ -1279,6 +1280,71 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                                 )
                             except Exception:
                                 pass
+
+    # --- WS2 Hunter Continuation (independent trend-pullback executor) ---
+    # Fires only when neither Hunter nor Squeeze took the symbol, the book has room,
+    # the regime is a trend, and a controlled pullback-to-20-EMA setup is confirmed.
+    with contextlib.suppress(Exception):
+        cont_eligible = (
+            decision != "BUY"
+            and not has_position
+            and trade_doc is None
+            and not _hard_killed
+            and breaker_state != "VETO"
+            and settings.trading_mode in ("PAPER", "DRY_RUN")
+            and getattr(settings, "continuation_enabled", True)
+            and continuation_allowed(getattr(asset_regime, "regime", None))
+        )
+        if cont_eligible:
+            ct = evaluate_continuation(bars_1h, settings, regime=asset_regime)
+            if ct.triggered and ct.structural_stop and snapshot.price > ct.structural_stop:
+                open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
+                pending_count = await db.pending_orders.count_documents({})
+                cooldown = await get_symbol_cooldown(db, symbol)
+                spread_ok = bid_spread_pct <= settings.max_spread_pct
+                if open_count + pending_count < settings.max_concurrent_positions and not cooldown and spread_ok:
+                    qty_ct = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=settings.normal_lot_usd)
+                    if qty_ct > 0:
+                        slip_pct = settings.breakout_paper_slippage_pct / 100.0
+                        fill_price = snapshot.ask * (1.0 + slip_pct)
+                        ct_slip = (fill_price - snapshot.ask) * qty_ct
+                        notional, fee = _execute_buy(portfolio, symbol, qty_ct, fill_price, settings.taker_fee_pct)
+                        if notional > 0:
+                            ct_attr = {
+                                **entry_attribution,
+                                "strategy": "continuation",
+                                "entry_profile": ct.entry_profile,
+                                "continuation_evidence": ct.evidence,
+                                "asset_regime": getattr(asset_regime, "regime", None),
+                            }
+                            new_pos = next((p for p in portfolio.positions if p.symbol == symbol), None)
+                            if new_pos is not None:
+                                new_pos.strategy = "continuation"
+                                new_pos.entry_profile = ct.entry_profile
+                                new_pos.regime_at_entry = getattr(asset_regime, "regime", None)
+                                new_pos.structural_stop = ct.structural_stop
+                                new_pos.sector = entry_sector
+                                new_pos.atr_at_entry = entry_atr
+                                new_pos.atr_percentile_at_entry = entry_atr_pct
+                                new_pos.volatility_regime = entry_regime
+                                new_pos.entry_attribution = ct_attr
+                            ct_trade = TradeLog(
+                                symbol=symbol, side="BUY", quantity=qty_ct, price=fill_price,
+                                notional=notional, mode="PAPER", confidence=0.0,
+                                reasoning_id=reasoning.id, fee_usd=fee, slippage_usd=ct_slip,
+                                note=f"[CONTINUATION {ct.entry_profile} | pullback {ct.evidence.get('pullback_pct')}% | stop {ct.structural_stop}]",
+                                sector=entry_sector, atr_at_entry=entry_atr,
+                                atr_percentile_at_entry=entry_atr_pct, volatility_regime=entry_regime,
+                                entry_attribution=ct_attr,
+                            )
+                            await db.trades.insert_one(ct_trade.model_dump())
+                            trade_doc = ct_trade.model_dump()
+                            await save_portfolio(db, portfolio)
+                            await log_friction_tally(db, settings)
+                            logger.info(
+                                "CONTINUATION entry %s qty=%.8f @ %.6f stop=%.6f pullback=%s%%",
+                                symbol, qty_ct, fill_price, ct.structural_stop, ct.evidence.get("pullback_pct"),
+                            )
 
     return {
         "symbol": symbol,

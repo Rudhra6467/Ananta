@@ -285,6 +285,19 @@ class RiskSettings(BaseModel):
     vol_exhaustion_ratio_max: float = 0.6  # current 4H volume must be <= this x the recent selling-climax volume (>=40% lower)
     # --- WS1 Volatility Squeeze: breakout volume expansion confirmation ---
     squeeze_vol_expansion_min: float = 1.5  # squeeze breakout volume must be >= this x trailing average (1.5-1.8x)
+    # --- WS2 Hunter Continuation: trend-pullback entries (50 EMA rising, 20>50, dip to support w/ volume dry-up) ---
+    continuation_enabled: bool = True
+    cont_ema_fast: int = 20
+    cont_ema_slow: int = 50
+    cont_trend_rising_lookback: int = 10   # EMA50 must be higher than this many bars ago (rising trend)
+    cont_swing_lookback: int = 12          # window for the recent swing high the price pulls back from
+    cont_pullback_min_pct: float = 1.0     # min dip from the swing high to qualify as a pullback
+    cont_pullback_max_pct: float = 12.0    # max dip — deeper than this is a reversal, not a continuation
+    cont_rsi_min: float = 40.0             # healthy-pullback RSI band (NOT oversold 30-35 reversal territory)
+    cont_rsi_max: float = 62.0
+    cont_vol_dryup_ratio: float = 0.9      # recent 3-bar avg volume <= this x the prior 7-bar avg (dry-up)
+    cont_max_green_body_pct: float = 2.0   # anti-chase on the entry candle
+    cont_support_atr_mult: float = 0.6     # price must sit within this x ATR of the 20-EMA dynamic support
     strong_min_confidence: float = 0.80   # confidence gate for STRONG (strict AND with trend + volatility)
     strong_min_atr_percentile: float = 60.0  # ATR pct rank floor for STRONG
     strong_min_adx: float = 20.0  # 1h ADX floor for STRONG

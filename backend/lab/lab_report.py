@@ -49,12 +49,17 @@ def _summary_metrics(s, title, summ: dict):
         ["Trades", str(summ.get("trades", 0))],
         ["Win rate", _fmt(summ.get("win_rate_pct"), "%")],
         ["Max drawdown", _fmt(summ.get("max_drawdown_pct"), "%")],
+        ["Sharpe (per-trade)", _fmt(summ.get("sharpe"))],
+        ["Sortino (per-trade)", _fmt(summ.get("sortino"))],
+        ["Profit factor", _fmt(summ.get("profit_factor"))],
         ["Avg MFE", _fmt(summ.get("avg_mfe_pct"), "%")],
         ["Avg MAE", _fmt(summ.get("avg_mae_pct"), "%")],
         ["Avg trade quality", _fmt(summ.get("avg_trade_quality"))],
     ]
     flow = [Paragraph(title, s["h3"]),
-            _kv_table(s, ["Metric", "Value"], rows, [2.6 * inch, 2.0 * inch]), Spacer(1, 8)]
+            _kv_table(s, ["Metric", "Value"], rows, [2.6 * inch, 2.0 * inch]), Spacer(1, 6)]
+    if summ.get("recommendation"):
+        flow += [Paragraph(f"<b>Recommendation:</b> {summ['recommendation']}", s["italic"]), Spacer(1, 8)]
     emb = summ.get("exit_module_breakdown") or {}
     if emb:
         er = [[k, v["n"], f'{v["win_pct"]}%', round(v["net_pnl"], 2)] for k, v in sorted(emb.items())]
