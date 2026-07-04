@@ -1,5 +1,20 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-03 — WS1 exit-side trade management (LIVE) + Lab record delete
+
+**Exit engine (`exit_engine.py`) — shared by live + backtester (parity preserved):**
+- **R-based staged profit protection (Module F):** now locks stop to **breakeven at +1R** (Stage 1), then the existing **+1% floor at profit_arm_pct** (Stage 2); highest floor wins, upgrade-only. New `_risk_per_unit()` = entry − initial structural stop (falls back to %-stop).
+- **ATR trail arms at +2R (Module C):** trailing stop now arms on EITHER +2R (`trail_arm_r`) OR the legacy %-arm, whichever comes first.
+- **Structure-failure exit (new Module S, P5):** exits full when the higher-low structure breaks (fresh lower-low) AND momentum dies (RSI<50 + close below 20-EMA), guarded to protect gains/breakeven — "don't wait for the stop." Enabled by default.
+- New `StrategyProfile` fields: `breakeven_r=1.0`, `trail_arm_r=2.0`, `structure_exit=True` (defaults apply to all strategies; live behavior updated per owner's go-live decision). Telemetry context extended.
+- Tests: 17/17 exit-engine (incl. new breakeven-at-1R) + 6/6 backtest-parity pass.
+
+**Research Lab — delete run record:**
+- Backend `DELETE /api/lab/runs/{id}` (owner-gated) removes a single validation-run record.
+- Frontend: a trash button at the right end of each **terminal (DONE/FAILED)** run record → optimistic remove + toast, so records can be cleared after download to save space.
+
+*Pending (per agreed plan): WS1 entry-side (ATR S/R zones, VCP confirm, volume gate, MTF filter) → WS3 Research Lab validation redesign → WS2 Hunter Continuation strategy.*
+
 ## 2026-07-02 (d) — Cockpit density pass (web)
 
 - **Side-by-side analytics slider**: Leaderboard & Analytics + Counterfactual Engine now sit in a horizontal snap-scroll slider (`analytics-slider`) — side-by-side on desktop, swipe-between on mobile. Touch events are isolated (stopPropagation) so sliding never triggers a tab change.

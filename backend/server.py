@@ -1363,6 +1363,15 @@ async def lab_get_run(run_id: str):
     return run
 
 
+@api_router.delete("/lab/runs/{run_id}", dependencies=[Depends(require_owner)])
+async def lab_delete_run(run_id: str):
+    """Remove a single validation-run record (frees storage after the user downloads it)."""
+    res = await db.lab_runs.delete_one({"id": run_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"ok": True, "deleted": run_id}
+
+
 @api_router.get("/lab/runs/{run_id}/pdf", dependencies=[Depends(require_owner)])
 async def lab_run_pdf(run_id: str):
     run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})

@@ -19,10 +19,11 @@ Modules
 -------
   A  Structural Failure   (P1)  -> EXIT_FULL    (hard stop: structural / pct / locked floor)
   -  Kill Switch / Emerg.  (P2)  -> EXIT_FULL    (injected by the caller)
-  F  Profit Protection     (P3)  -> TIGHTEN      (lock a +1% profit floor once MFE >= arm)
+  F  Profit Protection     (P3)  -> TIGHTEN      (breakeven @ +1R, then lock a +1% profit floor)
   B  Momentum Exhaustion   (P4)  -> EXIT_PARTIAL (50%: overbought ZONE + volume climax + exhaustion candle)
+  S  Structure Failure     (P5)  -> EXIT_FULL    (lower-low + momentum dead: exit, don't wait for stop)
   D  EMA Trend Loss        (P5)  -> EXIT_FULL    (close below 20-EMA / dead-cross)
-  C  ATR Trail             (P6)  -> EXIT_FULL    (armed trailing stop = peak - X*ATR)
+  C  ATR Trail             (P6)  -> EXIT_FULL    (armed trailing stop = peak - X*ATR, arms @ +2R)
   E  Time Exit             (P7)  -> EXIT_FULL    (capital-efficiency watchdog)
 
 Telemetry (MFE/MAE, exit module, best/worst exit prices) is captured by the
@@ -60,6 +61,9 @@ class StrategyProfile:
     time_exit_hours: float | None  # hard time cap (None = no fixed limit while trend intact)
     ema_priority: bool = False     # Squeeze prioritises EMA-loss exits
     ema_settle_hours: float = 6.0  # min age before EMA-loss (D) can fire (avoid entry noise)
+    breakeven_r: float = 1.0       # lock stop to breakeven once MFE >= this many R (Module F)
+    trail_arm_r: float = 2.0       # arm the ATR trail once MFE >= this many R (Module C)
+    structure_exit: bool = True    # enable structure-failure exit (Module S)
 
 
 PROFILES: dict[str, StrategyProfile] = {
@@ -199,21 +203,71 @@ def _module_A_structural(pos, last: float, settings) -> ExitSignal | None:
                       confidence=1.0, stop_price=lvl)
 
 
-def _module_F_profit_protection(pos, last: float, prof: StrategyProfile) -> ExitSignal | None:
-    """P3: once MFE >= profile arm, lock a +1% profit floor (upgrade-only)."""
+def _risk_per_unit(pos, settings) -> float:
+    """Initial risk (R) per unit = entry − initial stop. Falls back to the %-stop
+    distance when no structural stop is set. Used for R-multiple trade management."""
+    if getattr(pos, "structural_stop", None) and pos.structural_stop < pos.avg_cost:
+        return pos.avg_cost - pos.structural_stop
+    sl_pct = eff_setting(settings, pos.symbol, "stop_loss_pct")
+    return max(1e-9, pos.avg_cost * sl_pct / 100.0)
+
+
+def _module_F_profit_protection(pos, last: float, prof: StrategyProfile, settings) -> ExitSignal | None:
+    """P3: staged profit protection (upgrade-only floor).
+      Stage 1 — MFE >= breakeven_r (R) -> lock stop to breakeven (entry).
+      Stage 2 — MFE >= profit_arm_pct  -> lock a +1% profit floor.
+    The highest applicable floor wins; only tightens (never loosens)."""
     if pos.avg_cost <= 0:
         return None
     peak = max(pos.peak_price or pos.avg_cost, last)
     mfe_pct = (peak - pos.avg_cost) / pos.avg_cost * 100.0
-    if mfe_pct < prof.profit_arm_pct:
+    R = _risk_per_unit(pos, settings)
+    mfe_r = (peak - pos.avg_cost) / R if R > 0 else 0.0
+
+    candidates: list[tuple[float, str]] = []
+    if mfe_r >= prof.breakeven_r:
+        candidates.append((pos.avg_cost, f"breakeven @ +{prof.breakeven_r:.2g}R"))
+    if mfe_pct >= prof.profit_arm_pct:
+        candidates.append((pos.avg_cost * (1.0 + PROFIT_FLOOR_PCT / 100.0), f"+{PROFIT_FLOOR_PCT}% floor @ +{prof.profit_arm_pct:.1f}%"))
+    if not candidates:
         return None
-    desired_floor = pos.avg_cost * (1.0 + PROFIT_FLOOR_PCT / 100.0)
+    desired_floor, why = max(candidates, key=lambda x: x[0])
     cur = getattr(pos, "locked_profit_floor", None)
     if cur is not None and cur >= desired_floor - 1e-12:
         return None  # already locked at/above target -> let lower modules manage
     return ExitSignal(3, "F", ACT_TIGHTEN, "PROFIT_PROTECT",
-                      f"MFE {mfe_pct:.2f}% >= {prof.profit_arm_pct:.1f}% — lock +{PROFIT_FLOOR_PCT}% floor",
+                      f"MFE {mfe_pct:.2f}% ({mfe_r:.2f}R) — lock {why}",
                       confidence=1.0, new_floor=round(desired_floor, 8))
+
+
+def _module_S_structure(pos, last: float, ind: dict, bars_4h, prof: StrategyProfile, age_h: float) -> ExitSignal | None:
+    """P5: structure-failure exit — leave when the *reason* for the trade dies rather
+    than waiting for the hard stop. Fires when the higher-low structure breaks (a fresh
+    lower-low) AND momentum has died (RSI < 50 and close below the 20-EMA). Guarded so it
+    protects gains/breakeven, not fresh or deeply-underwater entries (Module A owns those)."""
+    if not prof.structure_exit or not ind or not bars_4h:
+        return None
+    if age_h < prof.ema_settle_hours:
+        return None
+    lows = [b[_L] for b in bars_4h]
+    if len(lows) < 12:
+        return None
+    rsi_val = ind.get("rsi")
+    ema20 = ind.get("ema20")
+    close = ind.get("last_close", last)
+    if rsi_val is None or ema20 is None:
+        return None
+    momentum_dead = rsi_val < 50.0 and close < ema20
+    prior_swing_low = min(lows[-12:-3])
+    recent_low = min(lows[-3:])
+    structure_broken = recent_low < prior_swing_low
+    pnl_pct = (last - pos.avg_cost) / pos.avg_cost * 100.0
+    if structure_broken and momentum_dead and pnl_pct > -1.0:
+        return ExitSignal(5, "S", ACT_EXIT_FULL, "STRUCTURE_FAILURE",
+                          f"Structure failed: lower-low {recent_low:.6f} < {prior_swing_low:.6f}, "
+                          f"momentum dead (RSI {rsi_val:.1f}, below 20-EMA) — exit, don't wait for stop",
+                          confidence=0.8)
+    return None
 
 
 def _module_B_momentum(pos, ind: dict) -> ExitSignal | None:
@@ -270,7 +324,10 @@ def _module_C_atr_trail(pos, last: float, ind: dict, prof: StrategyProfile, sett
     peak = max(pos.peak_price or pos.avg_cost, last)
     arm_pct = eff_setting(settings, pos.symbol, "trail_arm_pct")
     run_up_pct = (peak - pos.avg_cost) / pos.avg_cost * 100.0
-    if run_up_pct < arm_pct:
+    R = _risk_per_unit(pos, settings)
+    run_up_r = (peak - pos.avg_cost) / R if R > 0 else 0.0
+    # Arm on EITHER the R-multiple trigger (e.g. +2R) OR the legacy %-arm, whichever first.
+    if run_up_r < prof.trail_arm_r and run_up_pct < arm_pct:
         return None  # not armed yet
     atr_val = ind.get("atr") if ind else None
     if atr_val and atr_val > 0:
@@ -337,10 +394,13 @@ def evaluate_exit_engine(
         signals.append(ExitSignal(2, "KILL", ACT_EXIT_FULL, "EMERGENCY_STOP",
                                   "Kill-switch / emergency stop active", confidence=1.0))
     # P3 — Profit Protection
-    if (s := _module_F_profit_protection(pos, last_price, prof)):
+    if (s := _module_F_profit_protection(pos, last_price, prof, settings)):
         signals.append(s)
     # P4 — Momentum Exhaustion (partial)
     if (s := _module_B_momentum(pos, ind)):
+        signals.append(s)
+    # P5 — Structure Failure (exit when the trade thesis dies; don't wait for the stop)
+    if (s := _module_S_structure(pos, last_price, ind, bars_4h, prof, age_h)):
         signals.append(s)
     # P5 — EMA Trend Loss
     if (s := _module_D_ema_loss(pos, last_price, ind, prof, age_h)):
@@ -359,6 +419,9 @@ def evaluate_exit_engine(
             "trail_atr_mult": prof.trail_atr_mult,
             "time_exit_hours": prof.time_exit_hours,
             "ema_priority": prof.ema_priority,
+            "breakeven_r": prof.breakeven_r,
+            "trail_arm_r": prof.trail_arm_r,
+            "structure_exit": prof.structure_exit,
         },
         "age_hours": round(age_h, 2),
         "indicators": {k: ind.get(k) for k in ("rsi", "vol_climax", "exhaustion_candle")} if ind else {},

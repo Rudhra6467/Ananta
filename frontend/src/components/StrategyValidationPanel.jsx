@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X } from "lucide-react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -38,8 +38,22 @@ export default function StrategyValidationPanel() {
     const [dl, setDl] = useState(null);
     const [proposal, setProposal] = useState(null);
     const [promoteBusy, setPromoteBusy] = useState(false);
+    const [deleting, setDeleting] = useState(null);
 
     const loadRuns = () => api.labRuns(12).then((d) => setRuns(d.runs || [])).catch(() => {});
+
+    const deleteRun = async (id) => {
+        setDeleting(id);
+        try {
+            await api.deleteLabRun(id);
+            setRuns((prev) => prev.filter((r) => r.id !== id));
+            toast.success("RECORD DELETED", { description: `Run ${id.slice(0, 8)} removed` });
+        } catch (_) {
+            toast.error("DELETE FAILED", { description: "Could not remove the record" });
+        } finally {
+            setDeleting(null);
+        }
+    };
 
     useEffect(() => {
         api.labCoverage().then((c) => {
@@ -256,7 +270,7 @@ export default function StrategyValidationPanel() {
                 ) : (
                     <div className="space-y-2" data-testid="runs-list">
                         {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id}
-                            onPromote={promote} promoting={promoteBusy} />)}
+                            onPromote={promote} promoting={promoteBusy} onDelete={deleteRun} deleting={deleting === r.id} />)}
                     </div>
                 )}
             </div>
@@ -299,8 +313,9 @@ export default function StrategyValidationPanel() {
     );
 }
 
-function RunRow({ run, onDownload, downloading, onPromote, promoting }) {
+function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, deleting }) {
     const isDone = run.status === "DONE";
+    const isTerminal = isDone || run.status === "FAILED";
     const canPromote = isDone && run.kind !== "backtest";
     const summary = runSummary(run);
     return (
@@ -324,6 +339,13 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting }) {
                         <Button size="sm" data-testid={`promote-${run.id.slice(0, 8)}`}
                             onClick={() => onPromote(run.id)} disabled={promoting} className="gap-1.5 h-7">
                             <Rocket className="w-3.5 h-3.5" /> PROMOTE
+                        </Button>
+                    )}
+                    {isTerminal && (
+                        <Button size="sm" variant="ghost" data-testid={`delete-run-${run.id.slice(0, 8)}`}
+                            onClick={() => onDelete(run.id)} disabled={deleting} title="Delete this record (free up space)"
+                            className="h-7 w-7 p-0 text-atlas-textTertiary hover:text-atlas-negative hover:bg-atlas-negative/10">
+                            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                         </Button>
                     )}
                 </div>

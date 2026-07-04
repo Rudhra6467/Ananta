@@ -59,17 +59,29 @@ def test_module_A_profit_floor_breach():
 
 # ---------- Module F: profit protection ----------
 def test_module_F_arms_floor():
+    s = RiskSettings()
     prof = get_profile("hunter")  # arm at +5%
     pos = _pos(peak_price=106.0)   # MFE 6%
-    sig = _module_F_profit_protection(pos, last=105.0, prof=prof)
+    sig = _module_F_profit_protection(pos, last=105.0, prof=prof, settings=s)
     assert sig is not None and sig.action == ACT_TIGHTEN
     assert round(sig.new_floor, 4) == 101.0  # +1% floor
 
 
 def test_module_F_no_rearm_when_already_locked():
+    s = RiskSettings()
     prof = get_profile("hunter")
     pos = _pos(peak_price=106.0, locked_profit_floor=101.0)
-    assert _module_F_profit_protection(pos, last=105.0, prof=prof) is None
+    assert _module_F_profit_protection(pos, last=105.0, prof=prof, settings=s) is None
+
+
+def test_module_F_breakeven_at_1R():
+    """With a structural stop 3% below entry, R=3. Peak +3% => +1R => lock breakeven."""
+    s = RiskSettings()
+    prof = get_profile("hunter")
+    pos = _pos(structural_stop=97.0, peak_price=103.0)  # R=3, MFE=+3% = 1R, below +5% arm
+    sig = _module_F_profit_protection(pos, last=102.0, prof=prof, settings=s)
+    assert sig is not None and sig.action == ACT_TIGHTEN
+    assert round(sig.new_floor, 4) == 100.0  # breakeven = entry
 
 
 # ---------- Module B: momentum exhaustion (overbought zone) ----------
