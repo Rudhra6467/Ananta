@@ -1,5 +1,12 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-04 — Deployment fix (/health probe) + Trade Life Cycle "Show N more"
+
+- **Deployment blocker RESOLVED:** production deploy was failing because the K8s liveness/readiness probe hits top-level `GET /health` but the backend only exposed `/api/*` routes → 404 → container marked unhealthy (nginx `upstream timed out` / `connection refused`). Added a lightweight top-level `@app.get("/health")` in `server.py` returning `{"status":"ok"}` instantly (no DB/external calls). Verified 200 locally. `deployment_agent` re-scan → PASS.
+- **.gitignore fix:** removed rules ignoring `backend/.env`, `frontend/.env`, `.env`, `.env.*` so required env files are committable for deployment (only `.env.local` / `.env.*.local` stay ignored).
+- **Trade Life Cycle "Show N more" (Dashboard.jsx):** replaced the accordion drill-down with the Position Tracker pattern — only the first live trade's full lifecycle stepper renders; a `lifecycle-show-more` button ("Show N more trades" / "Show less") expands the rest. Verified via screenshot.
+
+
 ## 2026-07-04 — UI polish: duplicate headers, drill-downs, Research Lab caching
 
 - **Duplicate header fix:** removed the in-page headers from `Reports.jsx` (Datalogs) and `Settings.jsx` (Research Lab) — the AppShell dynamic header is now the single source. Cockpit/Portfolio were already correct. (verified by testing agent iter 17)
