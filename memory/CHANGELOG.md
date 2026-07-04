@@ -1,5 +1,23 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-04 — WS2 Hunter Continuation + WS3 Research Lab redesign
+
+### WS2 — Hunter Continuation strategy (new independent executor)
+Buys shallow pullbacks in an ESTABLISHED uptrend (distinct from Hunter reversals + Squeeze expansion).
+- `continuation.py` `evaluate_continuation()` — gates: 50-EMA rising + 20-EMA>50-EMA + price above 50-EMA; controlled pullback (1–12%) from a recent swing high; price at the 20-EMA dynamic support; volume dry-up (recent 3-bar avg ≤ 0.9× prior 7-bar); healthy 40–62 RSI band (NOT the 30–35 reversal zone); anti-chase + turning-up candle. Structural stop below the pullback low / 50-EMA − 0.4×ATR.
+- Routed via `router.py` — eligible in TREND_UP + NEUTRAL; added `continuation_allowed()`; ACTIVE_EXECUTORS now (hunter, squeeze, continuation).
+- Wired LIVE (`trading_engine` — PAPER/DRY_RUN executor, fires when Hunter+Squeeze didn't take the symbol) and in the BACKTESTER (`lab/backtest.py`) for full parity. All thresholds in `RiskSettings` (`cont_*`).
+- Tests: `tests/test_continuation.py` (6 cases) pass. Continuation now shows in backtest `strategy_breakdown`.
+
+### WS3 — Research Lab validation redesign (Modes A/B/C + institutional metrics)
+- **Modes:** A = Current Prod backtest, B = Parameter Opt (walk-forward sweep), **C = Presets** (new). `lab/presets.py` ships 4 named presets (conservative, aggressive, high_volatility, reversal_purist); `GET /api/lab/presets`; `POST /api/lab/runs` expands `preset` → `setting_overrides` and runs as a backtest.
+- **Ranges:** 3/6/12-month (existing 3m/6m/1y) now backed by real 1h data.
+- **Metrics:** added **Sharpe, Sortino, profit factor** (per-trade) + `strategy_breakdown` to backtest results; **auto-recommendation** verdict (DEPLOY-READY / PROMISING / TOO RISKY / UNDERPERFORMING / INSUFFICIENT SAMPLE) via `_recommend()`.
+- **Multi-TF:** 15m/30m/1h comparison + best-TF verdict (from prior work) surfaced in PDF and UI.
+- **Frontend** (`StrategyValidationPanel.jsx`): 3-mode chooser (track-current/fresh/presets), Mode C preset picker + description, coverage filter fixed to `bars_1h`, and an **expandable run-detail** per row that lazy-loads full metrics grid, strategy-breakdown chips, the 15m/30m/1h table, best-TF verdict and recommendation. `api.labPresets()` added.
+- Verified end-to-end by the testing agent (web + backend, iteration 16): all 5 UI scenarios + 4 backend pytest cases pass; PDF builds with the new sections.
+
+
 ## 2026-07-04 — Lab PDF: multi-timeframe comparison (15m / 30m / 1h)
 
 Backtest Lab reports now include a **MULTI-TIMEFRAME COMPARISON** section: the same window, settings and exit rules are replayed on **15m, 30m and the 1h live baseline**, per symbol, so the operator can see which candle size the edge favours (trades, return, win%, max DD, avg MFE/MAE).

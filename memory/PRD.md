@@ -7,6 +7,11 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+### 2026-07-04 — WS2 Hunter Continuation + WS3 Research Lab redesign SHIPPED (backend + web, tested)
+**WS2:** new independent `continuation` executor — buys shallow pullbacks in an established uptrend (50-EMA rising, 20>50, dip to 20-EMA support with volume dry-up, 40-62 RSI). Routed (TREND_UP/NEUTRAL), wired live + backtest, 6 tests pass.
+**WS3:** Research Lab now has Mode A (Current Prod) / B (Param Opt) / C (Presets — 4 canned strategies); Sharpe/Sortino/profit-factor metrics; auto-recommendation verdicts; 15m/30m/1h multi-TF comparison + best-TF verdict; expandable per-run detail in the UI. Verified by testing agent (web+backend) iteration 16.
+**ALL THREE WORKSTREAMS (WS1/WS2/WS3) COMPLETE.** Backlog: strategy parameter tuning via the Lab (continuation win-rate was thin on sample windows — expected, tune with presets/optimize).
+
 ### 2026-07-04 — Execution timeframe switched 4h → 1h (all strategies + exits)
 All signal + exit paths (Hunter, Volatility Squeeze, Strategy Sandbox, Regime, HTF filter, Exit engine, Backtester) now process **1h candles** with 1h-native parameters; S/R levels use daily + 1h. Backfilled 420 days of 1h for all 10 assets. Live + backtest kept in parity. 342 tests pass + real 1h backtest validated.
 Lab backtest PDF now includes a **multi-timeframe comparison (15m / 30m / 1h)** with a best-timeframe verdict (return-over-drawdown); 15m+30m history (420d) backfilled for all assets. See CHANGELOG for detail.
