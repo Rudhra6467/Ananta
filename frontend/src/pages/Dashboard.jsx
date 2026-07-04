@@ -213,8 +213,8 @@ function LifecycleRow({ p }) {
 
 function TradeLifecyclePanel({ portfolio }) {
     const open = (portfolio?.positions || []).filter((p) => p.quantity > 0);
-    const [expanded, setExpanded] = useState({});
-    const toggle = (sym) => setExpanded((e) => ({ ...e, [sym]: !e[sym] }));
+    const [showAll, setShowAll] = useState(false);
+    const visible = showAll ? open : open.slice(0, 1);
     return (
         <div className="panel p-6" data-testid="trade-lifecycle">
             <div className="flex items-center justify-between mb-4">
@@ -226,33 +226,22 @@ function TradeLifecyclePanel({ portfolio }) {
                     No live trades. The Hunter is evaluating support zones.
                 </div>
             ) : (
-                <div className="space-y-3">
-                    {open.map((p, idx) => {
-                        const isFirst = idx === 0;
-                        const base = p.symbol.split("/")[0];
-                        const isOpen = isFirst || !!expanded[p.symbol];
-                        const pnl = p.unrealized_pnl || 0;
-                        const gainPct = p.avg_cost > 0 ? ((p.last_price - p.avg_cost) / p.avg_cost) * 100 : 0;
-                        const pnlCls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary";
-                        return (
-                            <div key={p.symbol} className={isFirst ? "" : "border-t border-atlas-border pt-3"}>
-                                {!isFirst && (
-                                    <button data-testid={`lifecycle-toggle-${base}`} onClick={() => toggle(p.symbol)}
-                                        className="w-full flex items-center justify-between gap-3 py-1 group">
-                                        <span className="flex items-center gap-2">
-                                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-atlas-textTertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-atlas-textTertiary group-hover:text-atlas-cyan" />}
-                                            <span className="font-mono font-bold text-sm text-atlas-text">{base}</span>
-                                        </span>
-                                        <span className={`font-mono text-sm font-bold tabular-nums ${pnlCls}`}>
-                                            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} <span className="text-[10px] font-normal opacity-80">({gainPct >= 0 ? "+" : ""}{gainPct.toFixed(2)}%)</span>
-                                        </span>
-                                    </button>
-                                )}
-                                {isOpen && <div className={isFirst ? "" : "mt-3"}><LifecycleRow p={p} /></div>}
+                <>
+                    <div className="space-y-3">
+                        {visible.map((p, idx) => (
+                            <div key={p.symbol} className={idx === 0 ? "" : "border-t border-atlas-border pt-3"}>
+                                <LifecycleRow p={p} />
                             </div>
-                        );
-                    })}
-                </div>
+                        ))}
+                    </div>
+                    {open.length > 1 && (
+                        <button data-testid="lifecycle-show-more" onClick={() => setShowAll((v) => !v)}
+                            className="mt-3 w-full flex items-center justify-center gap-1.5 pt-3 border-t border-atlas-border font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                            {showAll ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            {showAll ? "Show less" : `Show ${open.length - 1} more trade${open.length - 1 > 1 ? "s" : ""}`}
+                        </button>
+                    )}
+                </>
             )}
         </div>
     );

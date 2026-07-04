@@ -1,13 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Secrets — never commit real env files (templates *.env.example are kept)
-.env
-.env.*
-backend/.env
-frontend/.env
-!.env.example
-!backend/.env.example
-!frontend/.env.example
+# NOTE: backend/.env and frontend/.env are REQUIRED for Emergent deployment and
+# are intentionally NOT ignored. Only ignore local/system secret files.
+.env.local
+.env.*.local
 
 
 # IDE and editors
