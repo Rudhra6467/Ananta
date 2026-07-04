@@ -70,6 +70,38 @@ def _summary_metrics(s, title, summ: dict):
     return flow
 
 
+def _multi_tf_block(s, multi_tf: dict):
+    """Per-symbol execution-timeframe comparison (15m / 30m / 1h) — same window & params
+    replayed on each candle size so the operator can see which timeframe the edge favours."""
+    if not multi_tf:
+        return []
+    order = ["15m", "30m", "1h"]
+    flow = [PageBreak(),
+            Paragraph("MULTI-TIMEFRAME COMPARISON", s["h2"]),
+            Paragraph("Identical window, settings and exit rules replayed on 15m, 30m and the 1h "
+                      "live-execution baseline. Compare trade frequency vs. return/drawdown to judge "
+                      "which candle size the strategy's edge actually favours.", s["subtitle"]),
+            Spacer(1, 8)]
+    for sym, tfs in multi_tf.items():
+        rows = []
+        for tf in order:
+            m = tfs.get(tf) or {}
+            if "error" in m:
+                rows.append([tf, "—", m["error"], "—", "—", "—", "—"])
+                continue
+            rows.append([
+                tf, str(m.get("trades", 0)),
+                _fmt(m.get("total_return_pct"), "%"), _fmt(m.get("win_rate_pct"), "%"),
+                _fmt(m.get("max_drawdown_pct"), "%"), _fmt(m.get("avg_mfe_pct"), "%"),
+                _fmt(m.get("avg_mae_pct"), "%"),
+            ])
+        flow += [Paragraph(sym, s["h3"]),
+                 _kv_table(s, ["TF", "Trades", "Return", "Win%", "MaxDD", "Avg MFE", "Avg MAE"], rows,
+                           [0.8 * inch, 0.8 * inch, 0.9 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch]),
+                 Spacer(1, 10)]
+    return flow
+
+
 def _result_block(s, run: dict):
     kind = run.get("kind")
     res = run.get("result") or {}
@@ -83,6 +115,7 @@ def _result_block(s, run: dict):
                 flow.append(Paragraph(f"{sym}: {summ['error']}", s["italic"]))
             else:
                 flow += _summary_metrics(s, sym, summ)
+        flow += _multi_tf_block(s, res.get("multi_timeframe") or {})
         return flow
 
     if kind == "grid_search":

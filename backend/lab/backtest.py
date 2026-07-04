@@ -63,9 +63,12 @@ def run_backtest(
     settings: RiskSettings | None = None,
     setting_overrides: dict | None = None,
     profile_overrides: dict | None = None,
+    timeframe: str = "1h",
 ) -> dict:
-    """Replay one symbol over [start_ms, end_ms]. Returns trades + aggregate metrics.
+    """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
+    `timeframe` selects the execution candle series (1h = live parity; 15m/30m used
+    for the multi-timeframe comparison in the Lab report).
     `setting_overrides` patches RiskSettings fields (stop_loss_pct, trail_arm_pct,
     rsi_reset_max, ... — Option B / sweeps on entry & risk params).
     `profile_overrides` = {strategy: {field: value}} patches the exit StrategyProfile
@@ -78,10 +81,10 @@ def run_backtest(
             if hasattr(s, k):
                 setattr(s, k, v)
 
-    bars = data_store.load_candles(symbol, "1h")
+    bars = data_store.load_candles(symbol, timeframe)
     daily = data_store.load_candles(symbol, "1d")
     if len(bars) < WARMUP_BARS + 5:
-        return {"error": "insufficient_1h_history", "symbol": symbol, "have": len(bars)}
+        return {"error": f"insufficient_{timeframe}_history", "symbol": symbol, "have": len(bars)}
 
     start_idx = next((i for i, b in enumerate(bars) if b[0] >= start_ms), None)
     end_idx = next((i for i, b in enumerate(bars) if b[0] > end_ms), len(bars))
@@ -217,10 +220,10 @@ def run_backtest(
         _close(bars[end_idx - 1][_C], "EOD", "END_OF_WINDOW", bars[end_idx - 1][0], 1.0)
         pos = None
 
-    return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd)
+    return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe)
 
 
-def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd) -> dict:
+def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h") -> dict:
     closed = [t for t in trades if not t["partial"]] or trades
     n = len(trades)
     wins = [t for t in trades if t["pnl"] > 0]
@@ -241,6 +244,7 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd) -> dic
 
     return {
         "symbol": symbol, "start_ms": start_ms, "end_ms": end_ms,
+        "timeframe": timeframe,
         "starting_capital": start_cap,
         "ending_capital": round(equity_curve[-1], 2) if equity_curve else start_cap,
         "total_return_pct": round(net / start_cap * 100, 3) if start_cap else 0.0,

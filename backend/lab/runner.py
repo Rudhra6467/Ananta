@@ -27,6 +27,17 @@ logger = logging.getLogger("ananta.lab.runner")
 
 VALID_KINDS = {"backtest", "grid_search", "sensitivity", "walk_forward"}
 _PERIOD_MONTHS = {"1m": 1, "2m": 2, "3m": 3, "quarter": 3, "6m": 6, "1y": 12, "2y": 24}
+# Extra execution timeframes reported alongside the 1h live-parity baseline (Lab PDF).
+COMPARE_TIMEFRAMES = ["30m", "15m"]
+
+
+def _tf_metrics(r: dict) -> dict:
+    """Trim a full backtest result to the headline metrics stored per timeframe."""
+    if not r or "error" in r:
+        return {"error": (r or {}).get("error", "no_result")}
+    return {k: r.get(k) for k in (
+        "timeframe", "trades", "total_return_pct", "win_rate_pct", "max_drawdown_pct",
+        "avg_return_pct", "avg_mfe_pct", "avg_mae_pct", "avg_trade_quality", "net_pnl")}
 
 
 def _now() -> str:
@@ -100,15 +111,33 @@ def _run_job(run: dict, cb) -> dict:
 
     if kind == "backtest":
         out = {}
-        n = len(symbols) or 1
-        for i, sym in enumerate(symbols):
-            out[sym] = backtest.run_backtest(
+        multi_tf = {}
+        n = (len(symbols) or 1) * (1 + len(COMPARE_TIMEFRAMES))
+        step = 0
+        for sym in symbols:
+            base = backtest.run_backtest(
                 sym, start, end,
                 setting_overrides=run.get("setting_overrides"),
                 profile_overrides=run.get("profile_overrides"),
+                timeframe="1h",
             )
-            cb((i + 1) / n)
-        return {"per_symbol": out}
+            out[sym] = base
+            step += 1
+            cb(step / n)
+            # Multi-timeframe comparison: replay the SAME window/params on 30m + 15m.
+            tf_metrics = {"1h": _tf_metrics(base)}
+            for tf in COMPARE_TIMEFRAMES:
+                r = backtest.run_backtest(
+                    sym, start, end,
+                    setting_overrides=run.get("setting_overrides"),
+                    profile_overrides=run.get("profile_overrides"),
+                    timeframe=tf,
+                )
+                tf_metrics[tf] = _tf_metrics(r)
+                step += 1
+                cb(step / n)
+            multi_tf[sym] = tf_metrics
+        return {"per_symbol": out, "multi_timeframe": multi_tf}
     if kind == "grid_search":
         return optimize.grid_search(symbols, start, end, run["grid"], metric, min_trades, progress_cb=cb)
     if kind == "sensitivity":
@@ -220,7 +249,7 @@ class LabDataAppender:
     def _append_all(self, symbols: list[str]) -> dict:
         summary = {}
         for sym in symbols:
-            for tf in ("1h", "4h", "1d"):
+            for tf in ("15m", "30m", "1h", "4h", "1d"):
                 try:
                     summary[f"{sym}/{tf}"] = data_store.append_latest(sym, tf)["inserted"]
                 except Exception as e:
