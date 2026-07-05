@@ -1,5 +1,12 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-05 — Mobile: Account overlay (App Store privacy workaround) + parity pack
+
+- **New feature (mobile `/app/mobile`):** tapping the Ananta logo in the Cockpit header (now `Pressable`, testID `account-logo-btn`) opens an **Account overlay** modal route `app/account.tsx`, registered in `app/_layout.tsx` with `presentation:"modal"`. Mirrors the reference layout — **Profile header** (avatar initials + real email), a **Login Credentials** card (real email + masked password `••••••••` + "Secure token (JWT)"), an **invite banner**, a **Features** section (Exchange/Referrals/Offers/Earn/Tax — placeholders, "Soon" pills), a **Settings** section (Payment methods/Notifications/Security — placeholders), and a real **Log out** action. Only real login credentials populated this sprint (dynamic profile fields deferred). Built with theme tokens so it inherits the app theme. Verified by mobile testing agent (iteration_19, 10/10 PASS).
+- **Mobile dependency/connection check:** deps installed (Expo SDK 54, expo-font present), Metro RUNNING, backend reachable via `EXPO_PUBLIC_BACKEND_URL` (`/health`, `/api/public/snapshot`, `/api/auth/login` all 200). Only gap = feature-coverage (new `/lab/*` endpoints), documented in the parity pack.
+- **Created `/app/memory/MOBILE_PARITY_PACK.md`:** canonical web design tokens (matte-black/matte-silver, Chivo/IBM Plex/JetBrains Mono), full backend endpoint contract incl. new `POST /lab/runs` fields (`strategies[]`, `compare_timeframes`), and a ready-to-run prompt for the external mobile workspace.
+
+
 ## 2026-07-05 — HOTFIX: production crash-loop on MongoDB Atlas timeout
 
 - **Symptom (production):** `pymongo NetworkTimeout` to Atlas + repeated `/health` `connection refused`/`upstream timed out` → total outage (no login, no data). K8s was crash-looping the backend container.
