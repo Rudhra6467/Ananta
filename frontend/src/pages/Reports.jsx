@@ -3,6 +3,7 @@ import { Check, Download, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import api, { API, TOKEN_KEY } from "@/lib/api";
 import ReasoningTimeline from "@/components/ReasoningTimeline";
+import CollapsibleSection from "@/components/CollapsibleSection";
 
 const GATES = [
     { code: "REJECTED_NO_SUPPORT_ZONE", label: "Support Zone" },
@@ -100,7 +101,7 @@ export default function Reports() {
     };
 
     return (
-        <div className="space-y-6" data-testid="reports-page">
+        <div className="space-y-4" data-testid="reports-page">
             <div className="flex items-center justify-end flex-wrap gap-3">
                 <div className="flex items-center gap-2">
                     {isOwner && (
@@ -120,46 +121,44 @@ export default function Reports() {
                 </div>
             </div>
 
-            <StrategyLab data={sandbox} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2"><StrategyFunnel data={sandbox} /></div>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-lab" label="RESEARCH" title="Strategy Research Laboratory">
+                <StrategyLab data={sandbox} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-funnel" label="RESEARCH" title="Signal Attrition Funnel">
+                <StrategyFunnel data={sandbox} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-staged-exit" label="RESEARCH" title="33/66/99 Stop Simulation">
                 <StagedExitCard data={staged} />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6">
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-why-no-trade" label="DIAGNOSTIC" title="Why No Trade?">
                 <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-breaker" label="DIAGNOSTIC" title="Circuit Breaker Accuracy">
                 <BreakerAccuracy breaker={funnel?.breaker_accuracy} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-rejection" label="DIAGNOSTIC" title="Rejection Leaderboard">
                 <RejectionLeaderboard rejections={rejections} />
-            </div>
-
-            <div className="space-y-2">
-                <div className="label-tag">PHASE B · RESEARCH-FIRST ANALYTICS · DIAGNOSTIC ONLY (NO ENTRY-LOGIC CHANGE)</div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <WinnerProfile data={winners} />
-                    <RsiDistribution data={rsiDist} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-winner" label="PHASE B · DIAGNOSTIC ONLY" title="Winning Trade Profile">
+                <WinnerProfile data={winners} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-rsi" label="PHASE B · DIAGNOSTIC ONLY" title="RSI Distribution Study">
+                <RsiDistribution data={rsiDist} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-missed" label="PHASE B · DIAGNOSTIC ONLY" title="Missed-Opportunity Analysis">
+                <MissedOpportunities data={missed} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-zone" label="PHASE B · DIAGNOSTIC ONLY" title="Support-Zone Effectiveness">
+                <ZoneEffectiveness data={zones} />
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-reasoning" label="LOG" title="AI Reasoning Log · Latest 15">
+                <div className="max-h-[70vh] overflow-y-auto p-6 pt-4 atlas-scroll" data-testid="reasoning-scroll-container">
+                    <ReasoningTimeline items={items} />
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <MissedOpportunities data={missed} />
-                    <ZoneEffectiveness data={zones} />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                    <div className="label-tag mb-3">AI REASONING LOG · LATEST 15</div>
-                    <div className="max-h-[70vh] overflow-y-auto pr-2 atlas-scroll" data-testid="reasoning-scroll-container">
-                        <ReasoningTimeline items={items} />
-                    </div>
-                </div>
-                <div>
-                    <div className="label-tag mb-3">CONFIDENCE DISTRIBUTION</div>
-                    <ConfidenceDistribution summary={summary} />
-                </div>
-            </div>
+            </CollapsibleSection>
+            <CollapsibleSection groupName="datalogs-accordion" testId="dl-confidence" label="LOG" title="Confidence Distribution">
+                <ConfidenceDistribution summary={summary} />
+            </CollapsibleSection>
         </div>
     );
 }
@@ -170,8 +169,7 @@ function ConfidenceDistribution({ summary }) {
     const max = Math.max(1, ...buckets.map((b) => b.count || 0));
     const empty = buckets.length === 0 || buckets.every((b) => !b.count);
     return (
-        <div className="panel p-6" data-testid="confidence-distribution">
-            <div className="font-heading font-medium text-lg text-atlas-text">Confidence Distribution</div>
+        <div className="p-6" data-testid="confidence-distribution">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-0.5 mb-4">Setups logged per LLM confidence bucket</div>
             {empty ? (
                 <div className="py-10 text-center font-mono text-xs text-atlas-textSecondary">No setups logged yet for this sprint.</div>
@@ -201,9 +199,8 @@ function WhyNoTrade({ symbols, selected, onSelect, row }) {
     const insufficient = codes.includes("REJECTED_INSUFFICIENT_DATA");
 
     return (
-        <div className="panel p-6" data-testid="why-no-trade">
-            <div className="flex items-center justify-between mb-4">
-                <div className="font-heading font-medium text-lg text-atlas-text">Why No Trade?</div>
+        <div className="p-6" data-testid="why-no-trade">
+            <div className="flex items-center justify-end mb-4">
                 <div className="flex gap-1 flex-wrap justify-end">
                     {symbols.map((s) => {
                         const base = s.split("/")[0];
@@ -261,9 +258,8 @@ function StrategyLab({ data }) {
     const strategies = data?.strategies || [];
     const promote = data?.promote_threshold ?? 20;
     return (
-        <div className="panel p-6" data-testid="strategy-lab">
-            <div className="flex items-baseline justify-between flex-wrap gap-2">
-                <div className="font-heading font-medium text-lg text-atlas-text">Strategy Research Laboratory</div>
+        <div className="p-6" data-testid="strategy-lab">
+            <div className="flex items-baseline justify-end flex-wrap gap-2">
                 <div className="font-mono text-[10px] text-atlas-textTertiary">Sorted by Expected Value · Hunter = benchmark · {data?.window_days ?? 30}d window</div>
             </div>
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Evidence-based promotion: a strategy must BEAT Hunter on Win% · AvgRet · EV · PF</div>
@@ -336,8 +332,7 @@ function StrategyFunnel({ data }) {
         { key: "wins", label: "Wins", color: "bg-atlas-positive" },
     ];
     return (
-        <div className="panel p-6" data-testid="strategy-funnel">
-            <div className="font-heading font-medium text-lg text-atlas-text">Signal Attrition Funnel</div>
+        <div className="p-6" data-testid="strategy-funnel">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Where opportunities die: Detected → Qualified → Breaker → Resolved → Wins</div>
             {strategies.length === 0 ? <ResearchEmpty testid="strategy-funnel-empty" label="awaiting detections." /> : (
                 <div className="space-y-4">
@@ -379,8 +374,7 @@ function StrategyFunnel({ data }) {
 function StagedExitCard({ data }) {
     const hasData = data && data.sample > 0;
     return (
-        <div className="panel p-6 flex flex-col" data-testid="staged-exit-card">
-            <div className="font-heading font-medium text-lg text-atlas-text">33/66/99 Stop Simulation</div>
+        <div className="p-6 flex flex-col" data-testid="staged-exit-card">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Structure-staged exit vs current hard stop</div>
             {!hasData ? <ResearchEmpty testid="staged-exit-empty" label="needs closed positions." /> : (
                 <div className="space-y-4 font-mono">
@@ -425,10 +419,9 @@ function WinnerProfile({ data }) {
     ];
     const hasData = data && data.sample > 0;
     return (
-        <div className="panel p-6" data-testid="winner-profile">
-            <div className="font-heading font-medium text-lg text-atlas-text">Winning Trade Profile</div>
+        <div className="p-6" data-testid="winner-profile">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">
-                Measure, don't assume — what's actually present in winners vs losers{hasData ? ` · win rate ${data.win_rate_pct}% · N=${data.sample}` : ""}
+                Measure, don&apos;t assume — what&apos;s actually present in winners vs losers{hasData ? ` · win rate ${data.win_rate_pct}% · N=${data.sample}` : ""}
             </div>
             {!hasData ? <ResearchEmpty testid="winner-profile-empty" label="needs closed trades to populate." /> : (
                 <table className="w-full font-mono text-sm">
@@ -454,8 +447,7 @@ function RsiDistribution({ data }) {
     const buckets = data?.buckets || [];
     const hasData = buckets.some((b) => b.count > 0);
     return (
-        <div className="panel p-6" data-testid="rsi-distribution">
-            <div className="font-heading font-medium text-lg text-atlas-text">RSI Distribution Study</div>
+        <div className="p-6" data-testid="rsi-distribution">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Forward outcomes per RSI band — is RSI≤35 optimal? (no threshold change)</div>
             {!hasData ? <ResearchEmpty testid="rsi-distribution-empty" label="needs resolved counterfactuals." /> : (
                 <table className="w-full font-mono text-sm">
@@ -483,8 +475,7 @@ function MissedOpportunities({ data }) {
     const buckets = data?.buckets || [];
     const hasData = buckets.some((b) => b.rejected_resolved > 0);
     return (
-        <div className="panel p-6" data-testid="missed-opportunities">
-            <div className="font-heading font-medium text-lg text-atlas-text">Missed-Opportunity Analysis</div>
+        <div className="p-6" data-testid="missed-opportunities">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Which filters protect capital vs which are over-restrictive</div>
             {!hasData ? <ResearchEmpty testid="missed-opportunities-empty" label="needs resolved rejections." /> : (
                 <table className="w-full font-mono text-sm">
@@ -513,8 +504,7 @@ function ZoneEffectiveness({ data }) {
     const o = data?.overall;
     const hasData = rows.length > 0;
     return (
-        <div className="panel p-6" data-testid="zone-effectiveness">
-            <div className="font-heading font-medium text-lg text-atlas-text">Support-Zone Effectiveness</div>
+        <div className="p-6" data-testid="zone-effectiveness">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Does the support engine have predictive value? Bounces vs failures{o?.touches ? ` · ${o.touches} touches` : ""}</div>
             {!hasData ? <ResearchEmpty testid="zone-effectiveness-empty" label="needs zone interactions with resolved returns." /> : (
                 <table className="w-full font-mono text-sm">
@@ -543,8 +533,7 @@ function BreakerAccuracy({ breaker }) {
     const states = ["PASS", "CAUTION", "VETO"];
     const hasData = breaker && states.some((s) => (breaker[s]?.count || 0) > 0);
     return (
-        <div className="panel p-6" data-testid="breaker-accuracy">
-            <div className="font-heading font-medium text-lg text-atlas-text">Circuit Breaker Accuracy</div>
+        <div className="p-6" data-testid="breaker-accuracy">
             <div className="text-atlas-textTertiary font-mono text-[10px] uppercase tracking-wider mt-1 mb-4">Resolved 7d outcomes per state · was it protective or over-restrictive?</div>
             {!hasData ? (
                 <div className="font-mono text-xs text-atlas-textSecondary py-6 text-center">No breaker evaluations logged yet.</div>
@@ -623,9 +612,8 @@ function RejectionLeaderboard({ rejections }) {
     const board = rejections?.rejection_leaderboard || [];
     const max = Math.max(1, ...board.map((b) => b.count));
     return (
-        <div className="panel p-6" data-testid="rejection-leaderboard">
-            <div className="flex items-baseline justify-between mb-4">
-                <div className="font-heading font-medium text-lg text-atlas-text">Rejection Leaderboard</div>
+        <div className="p-6" data-testid="rejection-leaderboard">
+            <div className="flex items-baseline justify-end mb-4">
                 <div className="font-mono text-[10px] text-atlas-textTertiary">
                     Greenlit rate: <span className="text-atlas-positive font-bold">{rejections?.greenlit_rate_pct ?? 0}%</span>
                 </div>

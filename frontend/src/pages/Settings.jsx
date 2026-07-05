@@ -11,6 +11,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import KillSwitchPanel from "@/components/KillSwitchPanel";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
+import CollapsibleSection from "@/components/CollapsibleSection";
 import { useAuth } from "@/context/AuthContext";
 
 // Cache the settings payload so re-opening the Research Lab tab renders instantly from
@@ -95,20 +96,7 @@ export default function SettingsPage() {
         }
     };
 
-    const clearHistory = async (alsoResetPortfolio) => {
-        const msg = alsoResetPortfolio
-            ? "Wipe ALL trades, reasoning logs AND reset portfolio cash to $300? This cannot be undone."
-            : "Wipe ALL trades and reasoning logs? Portfolio cash & open positions stay untouched.";
-        if (!window.confirm(msg)) return;
-        try {
-            const out = await api.clearHistory(alsoResetPortfolio);
-            toast.success("HISTORY CLEARED", {
-                description: `${out.trades_deleted} trades, ${out.reasoning_deleted} reasoning rows removed.`,
-            });
-        } catch (e) {
-            toast.error("CLEAR FAILED", { description: String(e?.message || e) });
-        }
-    };
+    // clearHistory removed with the Housekeeping section.
 
     if (!s) {
         return (
@@ -120,46 +108,46 @@ export default function SettingsPage() {
 
     return (
         <TooltipProvider delayDuration={120}>
-        <div className="space-y-6" data-testid="settings-page">
+        <div className="space-y-4" data-testid="settings-page">
             {/* STRATEGY VALIDATION — control panel comes first */}
-            <StrategyValidationPanel />
+            <CollapsibleSection testId="settings-validation" label="RESEARCH LAB" title="Strategy Validation">
+                <div className="group-open:border-t border-atlas-border"><StrategyValidationPanel /></div>
+            </CollapsibleSection>
 
             {/* MANUAL KILL HERO */}
-            <section className="panel" data-testid="settings-manual-kill">
-                <div className="px-5 pt-4 pb-3 border-b border-atlas-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <ShieldOff className="w-4 h-4 text-atlas-negative" />
+            <CollapsibleSection testId="settings-manual-kill" label="EMERGENCY · MANUAL KILL-SWITCH" title="Operator Override">
+                <div className="px-5 py-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-[12px] font-mono text-atlas-textSecondary">
+                            <ShieldOff className="w-4 h-4 text-atlas-negative" />
+                            {s.manual_kill_switch ? "Override ENGAGED" : "Override released"}
+                        </div>
+                        <Switch
+                            data-testid="manual-kill-switch"
+                            checked={s.manual_kill_switch}
+                            onCheckedChange={toggleKill}
+                            className="data-[state=checked]:bg-atlas-negative data-[state=unchecked]:bg-atlas-border"
+                        />
+                    </div>
+                    <div className="flex items-start gap-3 text-[12px] text-atlas-textSecondary">
+                        <AlertTriangle className={`w-4 h-4 mt-0.5 ${s.manual_kill_switch ? "text-atlas-negative" : "text-atlas-textTertiary"}`} />
                         <div>
-                            <div className="label-tag">EMERGENCY · MANUAL KILL-SWITCH</div>
-                            <h3 className="font-heading text-xl font-bold mt-1">Operator Override</h3>
+                            {s.manual_kill_switch ? (
+                                <span className="text-atlas-negative font-mono">
+                                    ENGAGED · all new orders blocked. Existing simulated positions remain. Release the switch to resume.
+                                </span>
+                            ) : (
+                                <span className="font-mono">
+                                    Released. Engine will trade when conviction + microstructure align and kill-switches are clear.
+                                </span>
+                            )}
                         </div>
                     </div>
-                    <Switch
-                        data-testid="manual-kill-switch"
-                        checked={s.manual_kill_switch}
-                        onCheckedChange={toggleKill}
-                        className="data-[state=checked]:bg-atlas-negative data-[state=unchecked]:bg-atlas-border"
-                    />
                 </div>
-                <div className="px-5 py-4 flex items-start gap-3 text-[12px] text-atlas-textSecondary">
-                    <AlertTriangle className={`w-4 h-4 mt-0.5 ${s.manual_kill_switch ? "text-atlas-negative" : "text-atlas-textTertiary"}`} />
-                    <div>
-                        {s.manual_kill_switch ? (
-                            <span className="text-atlas-negative font-mono">
-                                ENGAGED · all new orders blocked. Existing simulated positions remain. Release the switch to resume.
-                            </span>
-                        ) : (
-                            <span className="font-mono">
-                                Released. Engine will trade when conviction + microstructure align and kill-switches are clear.
-                            </span>
-                        )}
-                    </div>
-                </div>
-            </section>
+            </CollapsibleSection>
 
             {/* RISK MONITOR + RUN CYCLE (migrated from Dashboard) */}
-            <section className="panel" data-testid="settings-risk-monitor">
-                <SectionHeader label="EXECUTION CONTROLS" title="Risk Monitor & Manual Cycle" />
+            <CollapsibleSection testId="settings-risk-monitor" label="EXECUTION CONTROLS" title="Risk Monitor & Manual Cycle">
                 <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <div className="lg:col-span-2">
                         <KillSwitchPanel risk={risk} />
@@ -198,21 +186,22 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </div>
-            </section>
+            </CollapsibleSection>
 
             {/* PERFORMANCE ANALYTICS (relocated from the home dashboard) */}
-            <div data-testid="settings-analytics">
-                <AnalyticsPanel
-                    analytics={analytics}
-                    excludeSynthetic={excludeSynthetic}
-                    onToggleSynthetic={setExcludeSynthetic}
-                />
-            </div>
+            <CollapsibleSection testId="settings-analytics" label="PERFORMANCE" title="Analytics">
+                <div className="group-open:border-t border-atlas-border">
+                    <AnalyticsPanel
+                        analytics={analytics}
+                        excludeSynthetic={excludeSynthetic}
+                        onToggleSynthetic={setExcludeSynthetic}
+                    />
+                </div>
+            </CollapsibleSection>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
                 {/* RISK THRESHOLDS */}
-                <section className="panel" data-testid="settings-risk-thresholds">
-                    <SectionHeader label="RISK ENGINE · LAYER 6" title="Risk Thresholds" />
+                <CollapsibleSection testId="settings-risk-thresholds" label="RISK ENGINE · LAYER 6" title="Risk Thresholds">
                     <div className="p-5 space-y-6">
                         <SliderField
                             id="spread"
@@ -283,11 +272,10 @@ export default function SettingsPage() {
                             />
                         </div>
                     </div>
-                </section>
+                </CollapsibleSection>
 
                 {/* ADAPTIVE SIZING */}
-                <section className="panel" data-testid="settings-adaptive-sizing">
-                    <SectionHeader label="ADAPTIVE LOT SIZING · LAYER 5b" title="USD-Lot per Setup Strength" />
+                <CollapsibleSection testId="settings-adaptive-sizing" label="ADAPTIVE LOT SIZING · LAYER 5b" title="USD-Lot per Setup Strength">
                     <div className="p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
@@ -374,11 +362,10 @@ export default function SettingsPage() {
                             description="Beyond this, fresh BUY signals are queued for the next cycle."
                         />
                     </div>
-                </section>
+                </CollapsibleSection>
 
                 {/* EXITS & WATCHER */}
-                <section className="panel" data-testid="settings-exits">
-                    <SectionHeader label="EXITS · POSITION WATCHER" title="Stop-Loss & Trailing Take-Profit" />
+                <CollapsibleSection testId="settings-exits" label="EXITS · POSITION WATCHER" title="Stop-Loss & Trailing Take-Profit">
                     <div className="p-5 space-y-5">
                         <SliderField
                             id="stop-loss-pct"
@@ -466,11 +453,10 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </div>
-                </section>
+                </CollapsibleSection>
 
                 {/* EXCHANGE FRICTION (fees + paper slippage) */}
-                <section className="panel" data-testid="settings-friction">
-                    <SectionHeader label="EXCHANGE FRICTION" title="Fees & Slippage" />
+                <CollapsibleSection testId="settings-friction" label="EXCHANGE FRICTION" title="Fees & Slippage">
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <NumberField
                             id="taker-fee-pct"
@@ -503,11 +489,10 @@ export default function SettingsPage() {
                             description="Synthetic taker slippage applied to PAPER breakout market fills."
                         />
                     </div>
-                </section>
+                </CollapsibleSection>
 
                 {/* OPERATIONAL */}
-                <section className="panel" data-testid="settings-operational">
-                    <SectionHeader label="OPERATIONS" title="Mode & Symbols" />
+                <CollapsibleSection testId="settings-operational" label="OPERATIONS" title="Mode & Symbols">
                     <div className="p-5 space-y-5">
                         <div>
                             <div className="label-tag mb-2">TRADING MODE</div>
@@ -582,88 +567,12 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </div>
-                </section>
+                </CollapsibleSection>
 
-                {/* SYSTEMIC BREAKOUT (Layer 5c) */}
-                <section className="panel" data-testid="settings-breakout">
-                    <SectionHeader label="LAYER 5c · SYSTEMIC BREAKOUT" title="High-Velocity Override" />
-                    <div className="p-5 space-y-5">
-                        <NumberField
-                            id="breakout-lot-usd"
-                            label="BREAKOUT LOT (USD)"
-                            value={s.breakout_lot_usd}
-                            min={1}
-                            max={10000}
-                            step={1}
-                            onChange={(v) => upd({ breakout_lot_usd: v })}
-                            description="Position size when all 3 breakout legs fire. Defaults to $50."
-                        />
-                        <SliderField
-                            id="breakout-min-conf"
-                            label="MIN CONFIDENCE"
-                            description="Macro must be BULLISH at this or higher to qualify."
-                            value={s.breakout_min_confidence}
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            unit=""
-                            onChange={(v) => upd({ breakout_min_confidence: v })}
-                        />
-                        <SliderField
-                            id="breakout-vol-pct"
-                            label="VOLUME PERCENTILE FLOOR"
-                            description="Current 1h volume rank vs last 14h must meet/exceed this."
-                            value={s.breakout_volume_percentile}
-                            min={0}
-                            max={100}
-                            step={1}
-                            unit="%"
-                            onChange={(v) => upd({ breakout_volume_percentile: v })}
-                        />
-                        <SliderField
-                            id="breakout-max-spread"
-                            label="MAX SPREAD"
-                            description="Tight book required for explosive fills."
-                            value={s.breakout_max_spread_pct}
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            unit="%"
-                            onChange={(v) => upd({ breakout_max_spread_pct: v })}
-                        />
-                        <div className="border-t border-atlas-border pt-5">
-                            <div className="label-tag mb-3">BREAKOUT TRAIL OVERRIDES</div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <SliderField
-                                    id="breakout-trail-arm"
-                                    label="TRAIL ARM"
-                                    description="Wider arm so breakouts can run."
-                                    value={s.breakout_trail_arm_pct}
-                                    min={0.5}
-                                    max={20}
-                                    step={0.1}
-                                    unit="%"
-                                    onChange={(v) => upd({ breakout_trail_arm_pct: v })}
-                                />
-                                <SliderField
-                                    id="breakout-trail-dist"
-                                    label="TRAIL DISTANCE"
-                                    description="Wider distance to ride volatile vertical moves."
-                                    value={s.breakout_trail_distance_pct}
-                                    min={0.1}
-                                    max={20}
-                                    step={0.1}
-                                    unit="%"
-                                    onChange={(v) => upd({ breakout_trail_distance_pct: v })}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                {/* Systemic Breakout override removed per request */}
 
                 {/* SYMMETRIC EXIT COOLDOWNS */}
-                <section className="panel" data-testid="settings-cooldowns">
-                    <SectionHeader label="EXIT COOLDOWNS" title="Per-Symbol Time Lock" />
+                <CollapsibleSection testId="settings-cooldowns" label="EXIT COOLDOWNS" title="Per-Symbol Time Lock">
                     <div className="p-5 grid grid-cols-2 gap-4">
                         <NumberField
                             id="sl-cooldown"
@@ -686,37 +595,11 @@ export default function SettingsPage() {
                             description="Let momentum reset after a winning trail exit. Default 1800 = 30m."
                         />
                     </div>
-                </section>
-                <section className="panel lg:col-span-2" data-testid="settings-history">
-                    <SectionHeader label="HOUSEKEEPING" title="Clear Old Logs & Trade History" />
-                    <div className="p-5 flex flex-col md:flex-row gap-4 items-start">
-                        <div className="flex-1 font-mono text-[11px] text-atlas-textSecondary leading-relaxed">
-                            Wipe all trades + AI reasoning rows. Useful when you&apos;ve changed thresholds and want a clean slate for the next observation window. <span className="text-atlas-warning font-bold">Cannot be undone.</span>
-                        </div>
-                        <Button
-                            data-testid="clear-history-btn"
-                            onClick={() => clearHistory(false)}
-                            disabled={!isOwner}
-                            variant="outline"
-                            className="rounded-none border-atlas-border text-atlas-textSecondary hover:text-white hover:border-atlas-warning font-mono text-[11px] tracking-widest disabled:opacity-40"
-                        >
-                            CLEAR TRADES + REASONING
-                        </Button>
-                        <Button
-                            data-testid="clear-history-reset-btn"
-                            onClick={() => clearHistory(true)}
-                            disabled={!isOwner}
-                            variant="outline"
-                            className="rounded-none border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative hover:text-white font-mono text-[11px] tracking-widest disabled:opacity-40"
-                        >
-                            CLEAR ALL + RESET TO $300
-                        </Button>
-                    </div>
-                </section>
+                </CollapsibleSection>
+                {/* Housekeeping / Clear History removed per request */}
 
                 {/* API KEYS */}
-                <section className="panel lg:col-span-2" data-testid="settings-api-keys">
-                    <SectionHeader label="EXCHANGE CREDENTIALS" title="API Keys (Optional)" />
+                <CollapsibleSection testId="settings-api-keys" label="EXCHANGE CREDENTIALS" title="API Keys (Optional)">
                     <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <div className="label-tag mb-2 flex items-center gap-2">
@@ -765,7 +648,7 @@ export default function SettingsPage() {
                         Keys are only used in LIVE mode. PAPER mode reads public market data; no auth required. Public Kraken API
                         provides live tickers and orderbooks even without keys.
                     </div>
-                </section>
+                </CollapsibleSection>
             </div>
 
             <div className="sticky bottom-0 panel p-4 flex items-center justify-between border-atlas-cyan/40">
@@ -784,15 +667,6 @@ export default function SettingsPage() {
             </div>
         </div>
         </TooltipProvider>
-    );
-}
-
-function SectionHeader({ label, title }) {
-    return (
-        <div className="px-5 pt-4 pb-3 border-b border-atlas-border">
-            <div className="label-tag">{label}</div>
-            <h3 className="font-heading text-xl font-bold mt-1">{title}</h3>
-        </div>
     );
 }
 

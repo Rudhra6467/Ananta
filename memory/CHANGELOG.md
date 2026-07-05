@@ -1,3 +1,35 @@
+## 2026-07-05 — Datalogs + Research Lab: in-place accordion sections (web) + 2 removals
+
+**Request:** In the Datalogs and Research Lab tabs, every section should behave like Cockpit's
+Position Tracker / Trade Life Cycle — collapsed by default, expanding IN PLACE (downward) on click,
+no dialog/modal. Single-open (opening one closes the others). Also remove two Research Lab sections.
+
+**User decisions:** single-open accordion; all sections collapsed by default; remove
+"LAYER 5C · SYSTEMIC BREAKOUT · High-Velocity Override" and "HOUSEKEEPING · Clear Old Logs & Trade History".
+
+**Implementation (web frontend only):**
+- New `components/CollapsibleSection.jsx` — native `<details>`/`<summary>` accordion with a shared
+  `name` per tab so only ONE section is open at a time (single-open, zero-JS). Header shows label +
+  title + chevron (rotates via `group-open`), body expands downward. testIds: `<id>` on the details,
+  `<id>-toggle` on the summary.
+- `pages/Settings.jsx` (Research Lab): converted all sections (Strategy Validation, Manual Kill, Risk
+  Monitor, Analytics, Risk Thresholds, Adaptive Sizing, Exits, Friction, Operations, Cooldowns, API
+  Keys) to `CollapsibleSection` in a single-column stack (was a 2-col grid + always-open panels).
+  Removed the Systemic Breakout + Housekeeping sections and the now-unused `clearHistory` handler and
+  `SectionHeader` helper.
+- `pages/Reports.jsx` (Datalogs): wrapped all 12 cards in `CollapsibleSection`; stripped each child's
+  own outer `panel` class + duplicate big title (kept dynamic subtitles) to avoid double borders/titles.
+
+**Verification (preview, playwright DOM assertions + screenshots):**
+- Both tabs render; all sections collapsed by default (no `open` attr).
+- Click expands in place; opening a second section auto-collapses the first (single-open confirmed:
+  `risk-thresholds → None, exits → open`).
+- `settings-breakout` and `settings-history` count = 0 (removed). No console errors. ESLint clean.
+- Note: web only — user maintains mobile in a separate workspace.
+
+---
+
+
 ## 2026-07-05 — Research Lab: automatic multi-config exit-engine comparison in PDF (P0, DONE + tested)
 
 **Request:** Every validation should automatically replay the identical entry set under multiple exit
