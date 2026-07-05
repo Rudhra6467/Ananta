@@ -1,3 +1,39 @@
+## 2026-07-05 — Research Lab: automatic multi-config exit-engine comparison in PDF (P0, DONE + tested)
+
+**Request:** Every validation should automatically replay the identical entry set under multiple exit
+configs ($2.00/$1.50, $3.00/$2.25, $4.00/$3.00, $5.00/$4.00, ATR baseline) and generate a comparison
+table (Profit factor, Win rate, Expectancy, Net return, Max drawdown) with a best-engine verdict.
+
+**User decisions:** (1a) runs automatically on every backtest; (2) comparison runs on the run's active
+timeframes — 1h by default, +15m/30m only when Compare Timeframes is on; (3) best engine ranked by
+return-over-drawdown, percentage columns show `%` symbols in the PDF; (4) Expectancy = avg net P&L per
+trade ($); (5) PDF/backend only — no mobile UI change (mobile downloads the same PDF).
+
+**Implementation (backend only):**
+- `lab/backtest.py`: added `expectancy_usd` + `entries` to `_summarize`; new thin `run_multi_exit()`
+  wrapper + `EXIT_COMPARISON_CONFIGS` (5 presets). It calls `run_backtest()` per config — safe because
+  PASS-1 entry scan is deterministic & exit-agnostic, so entries are provably identical across configs
+  (no risky engine refactor). Returns per-config headline metrics + winner_key (return/drawdown).
+- `lab/runner.py`: `LabWorker._run_backtest` now runs a 2nd process task per symbol×timeframe cell
+  (`_run_multi_exit_one`, 900s budget) and stores results under `result.exit_comparison`. Progress total
+  doubled to account for the extra pass.
+- `lab/lab_report.py`: new `_exit_comparison_block` renders one table per symbol×timeframe with `%` on
+  Win rate / Net return / Max DD, `$` expectancy, `★ best` row marker, and a "Best engine
+  (return/drawdown)" verdict line. Appended after the multi-timeframe block for `kind=backtest`.
+
+**Verification:**
+- `tests/test_exit_comparison.py`: entries identical across fixed/atr/native (58/58/58; native shows 59
+  trade rows only due to a partial-exit leg). Multi-exit returns 5 rows + winner.
+- PDF built end-to-end and content-extracted: "EXIT ENGINE COMPARISON" table shows all 5 configs, `%`
+  symbols on percentage columns, ★ best on the winner, and the verdict line. Lint (Python) clean.
+
+**Mobile sync:** `/app/memory/MOBILE_LAUNCH_SYNC_PROMPT.md` — full launch-ready prompt for the separate
+Expo workspace covering Account/Privacy overlay + Research Lab modular-exit parity + auto-comparison PDF
+(table is server-generated, so mobile only triggers runs and downloads the PDF).
+
+---
+
+
 # Ananta.AI — CHANGELOG
 
 ## 2026-07-05 — Validation: selectable exit logic (Universal Engine vs Fixed $ Target) + full trade logs

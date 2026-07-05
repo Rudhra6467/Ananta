@@ -178,6 +178,66 @@ def _multi_tf_block(s, multi_tf: dict):
     return flow
 
 
+def _exit_comparison_block(s, res: dict):
+    """Exit-engine A/B/C comparison — each config replayed on the IDENTICAL entry set
+    (two-pass engine: entries scanned once, exit-agnostic; only exits vary). One table per
+    symbol × timeframe, best engine ranked by return-over-drawdown."""
+    cmp = res.get("exit_comparison") or {}
+    if not cmp:
+        return []
+    flow = [PageBreak(),
+            Paragraph("EXIT ENGINE COMPARISON", s["h2"]),
+            Paragraph("Every configuration below is replayed on the EXACT same entry signals "
+                      "(the engine scans entries once, exit-agnostic, then simulates each exit "
+                      "engine independently). This isolates the exit as the sole variable, so the "
+                      "tables are a true A/B/C test. Best engine is ranked by return-over-drawdown. "
+                      "Percentage columns are marked with %; expectancy is average net P&amp;L per trade.",
+                      s["subtitle"]),
+            Spacer(1, 8)]
+    for sym, by_tf in cmp.items():
+        for tf, block in (by_tf or {}).items():
+            if not block or block.get("error"):
+                flow.append(Paragraph(f"{sym} · {tf}: {(block or {}).get('error', 'no data')}", s["italic"]))
+                continue
+            rows_data = block.get("rows") or {}
+            winner = block.get("winner_key")
+            order = [c["key"] for c in (block.get("configs") or [])] or list(rows_data.keys())
+            table_rows = []
+            for key in order:
+                m = rows_data.get(key) or {}
+                label = m.get("label", key)
+                if winner and key == winner:
+                    label = f"{label}  ★ best"
+                if m.get("error"):
+                    table_rows.append([label, m["error"], "—", "—", "—", "—"])
+                    continue
+                pf = m.get("profit_factor")
+                exp = m.get("expectancy_usd")
+                table_rows.append([
+                    label,
+                    ("—" if pf is None else f"{pf:.2f}"),
+                    f'{m.get("win_rate_pct", 0):.1f}%',
+                    ("—" if exp is None else f"${exp:+.2f}"),
+                    f'{m.get("total_return_pct", 0):+.2f}%',
+                    f'{m.get("max_drawdown_pct", 0):.2f}%',
+                ])
+            flow += [Paragraph(f"{sym} · {tf}  —  identical entries: {block.get('entries', '—')}", s["h3"]),
+                     _kv_table(s, ["Exit config", "Profit factor", "Win rate", "Expectancy",
+                                   "Net return", "Max DD"], table_rows,
+                               [1.9 * inch, 1.0 * inch, 0.85 * inch, 0.95 * inch, 0.9 * inch, 0.8 * inch]),
+                     Spacer(1, 6)]
+            if winner:
+                wm = rows_data.get(winner) or {}
+                flow.append(Paragraph(
+                    f"Best engine (return/drawdown): <b>{wm.get('label', winner)}</b> — "
+                    f"{wm.get('total_return_pct', 0):+.2f}% net return at {wm.get('win_rate_pct', 0):.1f}% "
+                    f"win rate, profit factor {wm.get('profit_factor', '—')}, "
+                    f"{wm.get('max_drawdown_pct', 0):.2f}% max drawdown over {wm.get('trades', 0)} trades.",
+                    s["italic"]))
+            flow.append(Spacer(1, 10))
+    return flow
+
+
 def _result_block(s, run: dict):
     kind = run.get("kind")
     res = run.get("result") or {}
@@ -194,6 +254,7 @@ def _result_block(s, run: dict):
                 flow += _summary_metrics(s, sym, summ)
                 flow += _trade_log_block(s, summ)
         flow += _multi_tf_block(s, res.get("multi_timeframe") or {})
+        flow += _exit_comparison_block(s, res)
         return flow
 
     if kind == "grid_search":

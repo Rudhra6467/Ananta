@@ -132,6 +132,12 @@ def _run_backtest_one(kwargs: dict) -> dict:
     return backtest.run_backtest(**kwargs)
 
 
+def _run_multi_exit_one(kwargs: dict) -> dict:
+    """Picklable exit-comparison wrapper — replays the identical entry set under the 5 fixed
+    exit configs in ONE worker process (a true A/B/C test; only the exit engine varies)."""
+    return backtest.run_multi_exit(**kwargs)
+
+
 def _run_optimize(run: dict) -> dict:
     """Picklable optimizer body (grid/sensitivity/walk_forward) — executed in a worker
     PROCESS. Runs with a no-op progress callback (parent shows an indeterminate bar)."""
@@ -165,6 +171,8 @@ class LabWorker:
     # Hard per-backtest wall-clock budget. A single 1h backtest is ~10s and a 15m one
     # ~40s; 300s is a generous ceiling that guarantees a run can never hang forever.
     BACKTEST_BUDGET_S = 300
+    # Exit comparison runs 5 backtests sequentially in one process → a larger ceiling.
+    EXIT_COMPARISON_BUDGET_S = 900
 
     def __init__(self, db, poll_seconds: int = 3):
         self.db = db
@@ -251,9 +259,13 @@ class LabWorker:
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
         loop = asyncio.get_event_loop()
 
-        out, multi_tf = {}, {}
+        out, multi_tf, exit_cmp = {}, {}, {}
         tf_results: dict[str, dict] = {}
-        total = (len(symbols) or 1) * len(timeframes)
+        cmp_overrides = dict(setting_overrides=run.get("setting_overrides"),
+                             profile_overrides=run.get("profile_overrides"),
+                             strategies=run.get("strategies"))
+        # Each cell = 1 chosen-config backtest + 1 exit-comparison (5 configs in one task).
+        total = (len(symbols) or 1) * len(timeframes) * 2
         step = 0
         for sym in symbols:
             for tf in timeframes:
@@ -270,6 +282,21 @@ class LabWorker:
                 tf_results[f"{sym}|{tf}"] = r
                 if tf == "1h":
                     out[sym] = r
+                step += 1
+                await self._set_progress(rid, step / total * 100)
+
+                # Exit-engine comparison: 5 fixed configs replayed on the SAME entries.
+                cmp_kwargs = {"symbol": sym, "start_ms": start, "end_ms": end, "timeframe": tf, **cmp_overrides}
+                try:
+                    cr = await asyncio.wait_for(
+                        loop.run_in_executor(self._pool, _run_multi_exit_one, cmp_kwargs),
+                        timeout=self.EXIT_COMPARISON_BUDGET_S)
+                except (asyncio.TimeoutError, Exception) as e:  # noqa: BLE001
+                    cr = {"error": "timed_out" if isinstance(e, asyncio.TimeoutError) else str(e), "symbol": sym}
+                    if isinstance(e, asyncio.TimeoutError):
+                        self._reset_pool()
+                        loop = asyncio.get_event_loop()
+                exit_cmp.setdefault(sym, {})[tf] = cr
                 step += 1
                 await self._set_progress(rid, step / total * 100)
             tf_metrics = {tf: _tf_metrics(tf_results.get(f"{sym}|{tf}")) for tf in timeframes}

@@ -353,7 +353,7 @@ def run_backtest(
 
     return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe,
                       exit_method=exit_method, target_profit=target_profit, target_loss=target_loss,
-                      lot=lot, atrp=atrp)
+                      lot=lot, atrp=atrp, entries=len(entry_signals))
 
 
 def _exit_method_label(exit_method: str, target_profit: float, target_loss: float, atrp: dict | None = None) -> str:
@@ -367,7 +367,8 @@ def _exit_method_label(exit_method: str, target_profit: float, target_loss: floa
 
 
 def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h",
-               exit_method="fixed", target_profit=5.0, target_loss=4.0, lot=75.0, atrp=None) -> dict:
+               exit_method="fixed", target_profit=5.0, target_loss=4.0, lot=75.0, atrp=None,
+               entries=None) -> dict:
     n = len(trades)
     wins = [t for t in trades if t["pnl"] > 0]
     net = sum(t["pnl"] for t in trades)
@@ -423,7 +424,9 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         "ending_capital": round(equity_curve[-1], 2) if equity_curve else start_cap,
         "total_return_pct": total_ret,
         "net_pnl": round(net, 4),
+        "expectancy_usd": round(net / n, 4) if n else 0.0,
         "trades": n,
+        "entries": entries if entries is not None else n,
         "win_rate_pct": win_rate,
         "max_drawdown_pct": round(max_dd, 2),
         "sharpe": sharpe,
@@ -460,3 +463,74 @@ def _recommend(total_ret, win_rate, max_dd, sharpe, profit_factor, n) -> str:
                 f"of the {total_ret:+.1f}% return.")
     return (f"UNDERPERFORMING — {total_ret:+.1f}% at {win_rate}% win rate; the edge is weak in this window. "
             f"Re-test other timeframes or parameter presets.")
+
+
+
+# ---------------------------------------------------------------------------
+# Exit-engine comparison — replay ONE entry set under multiple exit configs.
+# Because PASS 1 (entry scan) is deterministic and exit-agnostic, calling
+# run_backtest() with different exit configs is guaranteed to reuse the EXACT
+# same entries, so the comparison is a true A/B/C test (only exits vary).
+# ---------------------------------------------------------------------------
+EXIT_COMPARISON_CONFIGS = [
+    {"key": "fixed_2_1.5",  "label": "Fixed $2.00 / $1.50", "exit_method": "fixed", "target_profit": 2.0, "target_loss": 1.5},
+    {"key": "fixed_3_2.25", "label": "Fixed $3.00 / $2.25", "exit_method": "fixed", "target_profit": 3.0, "target_loss": 2.25},
+    {"key": "fixed_4_3",    "label": "Fixed $4.00 / $3.00", "exit_method": "fixed", "target_profit": 4.0, "target_loss": 3.0},
+    {"key": "fixed_5_4",    "label": "Fixed $5.00 / $4.00", "exit_method": "fixed", "target_profit": 5.0, "target_loss": 4.0},
+    {"key": "atr_baseline", "label": "ATR Baseline (\u00d72.5, 14p)", "exit_method": "atr"},
+]
+
+# Metrics carried per config into the PDF comparison table.
+_CMP_METRICS = ("profit_factor", "win_rate_pct", "expectancy_usd",
+                "total_return_pct", "net_pnl", "max_drawdown_pct", "trades")
+
+
+def run_multi_exit(
+    symbol: str,
+    start_ms: int,
+    end_ms: int,
+    settings: RiskSettings | None = None,
+    setting_overrides: dict | None = None,
+    profile_overrides: dict | None = None,
+    timeframe: str = "1h",
+    strategies: list | tuple | set | None = None,
+    configs: list[dict] | None = None,
+) -> dict:
+    """Replay the (identical) entry set under every exit config and return a comparison
+    block: per-config headline metrics + the best engine ranked by return-over-drawdown.
+    Entries are identical across configs because the PASS-1 scan is exit-agnostic."""
+    configs = configs or EXIT_COMPARISON_CONFIGS
+    rows: dict[str, dict] = {}
+    entries: int | None = None
+    for cfg in configs:
+        r = run_backtest(
+            symbol, start_ms, end_ms, settings=settings,
+            setting_overrides=setting_overrides, profile_overrides=profile_overrides,
+            timeframe=timeframe, strategies=strategies,
+            exit_method=cfg["exit_method"],
+            target_profit=cfg.get("target_profit", 5.0),
+            target_loss=cfg.get("target_loss", 4.0),
+            atr_params=cfg.get("atr_params"),
+        )
+        if "error" in r:
+            rows[cfg["key"]] = {"label": cfg["label"], "error": r["error"]}
+            continue
+        if entries is None:
+            entries = r.get("entries")
+        rows[cfg["key"]] = {"label": cfg["label"], **{k: r.get(k) for k in _CMP_METRICS}}
+
+    winner = None  # (key, score) by return-over-drawdown
+    for key, m in rows.items():
+        if "error" in m or not m.get("trades"):
+            continue
+        ret = m.get("total_return_pct") or 0.0
+        dd = max(abs(m.get("max_drawdown_pct") or 0.0), 0.1)
+        score = ret / dd
+        if winner is None or score > winner[1]:
+            winner = (key, score)
+
+    return {
+        "symbol": symbol, "timeframe": timeframe, "entries": entries,
+        "configs": [{"key": c["key"], "label": c["label"]} for c in configs],
+        "rows": rows, "winner_key": (winner[0] if winner else None),
+    }
