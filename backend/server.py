@@ -1338,6 +1338,9 @@ class LabRunCreate(BaseModel):
     label: str | None = None
     strategies: list[str] | None = None  # subset of hunter|squeeze|continuation (None = all)
     compare_timeframes: bool = False  # off = 1h-only (fast); on = add 30m/15m comparison
+    exit_method: str = "engine"  # "engine" = Universal ATR exit; "fixed" = $ target TP/SL
+    target_profit: float = 5.0  # fixed-exit take-profit ($, net)
+    target_loss: float = 4.0  # fixed-exit stop-loss ($, net)
 
 
 @api_router.get("/lab/data/coverage", dependencies=[Depends(require_owner)])

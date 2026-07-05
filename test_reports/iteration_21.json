@@ -1,0 +1,42 @@
+{
+  "summary": "Ananta Research Lab EXIT LOGIC feature fully verified — web + shared backend. Dialog exposes EXIT LOGIC section (exit-logic-config) on Track A + Track C (hidden on Track B / Fresh, as coded). Sub-options COLLAPSED by default; exit-targets-toggle expands to reveal target-profit-input (default 5) & target-loss-input (default 4). Engine selection disables the inputs; Fixed enables them. Existing DONE run rows render badges 'Fixed $5/$4' and 'Engine exit' via run-exit-<id8>. Expanded fixed run shows detail-exit-method banner ('Exit method used: Fixed $ Target (TP $5 / SL $4)') and tradelog-toggle-<BASE> ('Show full trade log (7)') that expands tradelog-table-<BASE> with all 8 columns (#, Entry time, Exit time, Entry, Exit, Size, P&L $, Exit). First trade P&L row = -4.00 / FIXED_SL — matches spec. Engine run's banner reads 'Universal Exit Engine (ATR-based)'. PDF download OK (11473 bytes). Backend pytest: 4/4 green (fixed run nets ±5/±4 on every non-EOD close, engine label present, runs list surfaces exit_method, PDF 200). Only pre-existing minor: Radix Dialog a11y warning (missing DialogDescription) — carry-over from iter 20.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Validation dialog · exit-targets-toggle label", "issues": ["Toggle text renders as 'Target profit / loss($5 / $4)' — missing a space before the parenthetical value hint. Cosmetic only."]},
+        {"screen": "Validation dialog (Radix)", "issues": ["Pre-existing a11y warning: 'Missing Description or aria-describedby={undefined} for {DialogContent}' on run-validation dialog (same as iter 20 for AccountOverlay). Add <DialogDescription> in DialogHeader. Non-blocking."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_lab_exit_logic.py",
+    "/app/test_reports/pytest/pytest_iter21.xml",
+    "/tmp/dialog_exit_logic.png",
+    "/tmp/fixed_detail.png"
+  ],
+  "action_items": [
+    "(Cosmetic) Add a space in exit-targets-toggle label: '/ loss (${targetProfit || 5} / ${targetLoss || 4})' — currently '/loss($5/$4)'. File: /app/frontend/src/components/StrategyValidationPanel.jsx L332-334.",
+    "(Optional a11y) Add <DialogDescription> to the RUN VALIDATION and PROMOTE dialogs to silence Radix warning."
+  ],
+  "critical_code_review_comments": [
+    "StrategyValidationPanel.jsx is 740 lines — over the 700-line guideline. Consider extracting RunRow / RunDetails / TradeLog / MultiSelect into sibling files for maintainability.",
+    "Backend fixed-exit synth-price math (backtest.py L184-198) correctly nets exactly ±$5/±$4 after fees on FIXED_TP/FIXED_SL; the only trades outside the window are legitimate 'EOD' force-close mark-outs at the last bar (backtest.py L273-275). Trade log distinguishes these via exit_module — good.",
+    "Radix a11y warning still not addressed on any Dialog in the app (carry-over from iter 20)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lab_exit_logic.py (new — 4 tests, all green)"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (all 9 requested checks pass)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (localStorage key 'ananta_owner_token').",
+  "seed_data_creation": "Backend test suite created 2 fresh lab runs (1 fixed, 1 engine) against seeded assets; both completed DONE.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All requested spec items verified: exit-logic-config, exit-method-engine/-fixed, collapsed exit-targets-panel + exit-targets-toggle, target-profit-input(5)/target-loss-input(4), enable/disable behaviour, run-exit-<id8> badges ('Fixed $5/$4' vs 'Engine exit'), detail-exit-method banner, tradelog-toggle-<BASE> + tradelog-table-<BASE> with all 8 columns and correct row data, PDF download. Frontend testIDs used in tests match the ones listed in the review request. Backend regression file: /app/backend/tests/test_lab_exit_logic.py (needs REACT_APP_BACKEND_URL exported).",
+  "rca of the issue": "N/A — feature works as specified."
+}

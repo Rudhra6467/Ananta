@@ -24,12 +24,23 @@ def _date(ms) -> str:
     return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d")
 
 
+def _exit_label(run: dict) -> str:
+    res = run.get("result") or {}
+    if res.get("exit_method_label"):
+        return res["exit_method_label"]
+    if run.get("exit_method") == "fixed":
+        return f'Fixed $ Target (TP ${run.get("target_profit", 5):g} / SL ${run.get("target_loss", 4):g})'
+    return "Universal Exit Engine (ATR-based)"
+
+
 def _config_block(s, run: dict):
     rows = [
         ["Run ID", run.get("id", "—")],
         ["Kind", run.get("kind", "—")],
         ["Symbols", ", ".join(run.get("symbols") or [])],
         ["Period", f'{run.get("period","—")}  ({_date(run.get("start_ms"))} → {_date(run.get("end_ms"))})'],
+        ["Exit method", _exit_label(run)],
+        ["Strategies", ", ".join(run.get("strategies") or ["hunter", "squeeze", "continuation"])],
         ["Metric", run.get("metric", "—")],
         ["Git commit", run.get("git_hash", "—")],
         ["Created", (run.get("created_at") or "—")[:19]],
@@ -73,6 +84,38 @@ def _summary_metrics(s, title, summ: dict):
                  _kv_table(s, ["Regime", "N", "Win%", "Net P&L"], rr,
                            [1.8 * inch, 0.9 * inch, 1.0 * inch, 1.2 * inch]), Spacer(1, 10)]
     return flow
+
+
+def _trade_log_block(s, summ: dict):
+    """Full per-trade log for the report: timestamps, entry/exit fills, position size, P&L."""
+    trades = summ.get("trade_log") or []
+    if not trades:
+        return []
+
+    def _t(iso):
+        return (iso or "—").replace("T", " ")[:16]
+
+    def _p(v):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return "—"
+        return f"{v:,.2f}" if v >= 1000 else (f"{v:.4f}" if v >= 1 else f"{v:.6f}")
+
+    rows = []
+    for i, t in enumerate(trades, 1):
+        rows.append([
+            str(i), _t(t.get("entry_ts")), _t(t.get("exit_ts")),
+            _p(t.get("entry_price")), _p(t.get("exit_price")),
+            f'{float(t.get("qty", 0)):.4g}', f'{float(t.get("pnl", 0)):+.2f}',
+            t.get("exit_module", "—"),
+        ])
+    return [Paragraph("Full trade log", s["h3"]),
+            Paragraph("Timestamps (UTC), entry/exit fills, position size and net P&amp;L per trade.", s["subtitle"]),
+            _kv_table(s, ["#", "Entry (UTC)", "Exit (UTC)", "Entry", "Exit", "Size", "P&L $", "Exit"], rows,
+                      [0.35 * inch, 1.15 * inch, 1.15 * inch, 0.85 * inch, 0.85 * inch,
+                       0.7 * inch, 0.7 * inch, 0.75 * inch]),
+            Spacer(1, 10)]
 
 
 def _multi_tf_block(s, multi_tf: dict):
@@ -119,12 +162,14 @@ def _result_block(s, run: dict):
         return [Paragraph("No results — run status: %s" % run.get("status"), s["italic"])]
 
     if kind == "backtest":
-        flow = [Paragraph("BACKTEST RESULTS", s["h2"]), Spacer(1, 4)]
+        flow = [Paragraph("BACKTEST RESULTS", s["h2"]),
+                Paragraph(f"<b>Exit method used:</b> {_exit_label(run)}", s["italic"]), Spacer(1, 4)]
         for sym, summ in (res.get("per_symbol") or {}).items():
             if "error" in summ:
                 flow.append(Paragraph(f"{sym}: {summ['error']}", s["italic"]))
             else:
                 flow += _summary_metrics(s, sym, summ)
+                flow += _trade_log_block(s, summ)
         flow += _multi_tf_block(s, res.get("multi_timeframe") or {})
         return flow
 

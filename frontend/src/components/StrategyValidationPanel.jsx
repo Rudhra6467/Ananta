@@ -45,6 +45,10 @@ export default function StrategyValidationPanel() {
     const [period, setPeriod] = useState(_labCache.period || "3m");
     const [strategies, setStrategies] = useState(_labCache.strategies || ALL_STRATEGY_IDS);
     const [compareTf, setCompareTf] = useState(_labCache.compareTf || false);
+    const [exitMethod, setExitMethod] = useState(_labCache.exitMethod || "engine");
+    const [targetProfit, setTargetProfit] = useState(_labCache.targetProfit ?? 5);
+    const [targetLoss, setTargetLoss] = useState(_labCache.targetLoss ?? 4);
+    const [showTargets, setShowTargets] = useState(false); // collapsed by default
     const [runs, setRuns] = useState(_labCache.runs || []);
     const [open, setOpen] = useState(false);
     const [track, setTrack] = useState("current");
@@ -108,6 +112,9 @@ export default function StrategyValidationPanel() {
     const choosePeriod = (next) => { _labCache.period = next; setPeriod(next); };
     const chooseStrategies = (next) => { _labCache.strategies = next; setStrategies(next); };
     const chooseCompareTf = (next) => { _labCache.compareTf = next; setCompareTf(next); };
+    const chooseExitMethod = (next) => { _labCache.exitMethod = next; setExitMethod(next); };
+    const chooseTargetProfit = (next) => { _labCache.targetProfit = next; setTargetProfit(next); };
+    const chooseTargetLoss = (next) => { _labCache.targetLoss = next; setTargetLoss(next); };
 
     // poll while any run is active
     useEffect(() => {
@@ -133,7 +140,12 @@ export default function StrategyValidationPanel() {
         if (!strategies.length) { toast.error("Select at least one strategy"); return; }
         setBusy(true);
         try {
-            const common = { symbols: assets, period, strategies, compare_timeframes: compareTf };
+            const common = {
+                symbols: assets, period, strategies, compare_timeframes: compareTf,
+                exit_method: exitMethod,
+                target_profit: Number(targetProfit) || 5,
+                target_loss: Number(targetLoss) || 4,
+            };
             let spec;
             if (track === "current") {
                 spec = { kind: "backtest", ...common };
@@ -297,6 +309,50 @@ export default function StrategyValidationPanel() {
                             </div>
                         )}
 
+                        {track !== "fresh" && (
+                            <div className="mt-4 pt-3 border-t border-atlas-border" data-testid="exit-logic-config">
+                                <Label className="label-tag text-[10px]">EXIT LOGIC</Label>
+                                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                                    <button type="button" data-testid="exit-method-engine" onClick={() => chooseExitMethod("engine")}
+                                        className={`text-left p-3 rounded-lg border-2 transition-all ${exitMethod === "engine" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                        <div className="font-mono text-xs font-bold text-atlas-text">Universal Engine</div>
+                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">ATR trail / structural stops</div>
+                                    </button>
+                                    <button type="button" data-testid="exit-method-fixed" onClick={() => chooseExitMethod("fixed")}
+                                        className={`text-left p-3 rounded-lg border-2 transition-all ${exitMethod === "fixed" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                        <div className="font-mono text-xs font-bold text-atlas-text">Fixed $ Target</div>
+                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">Exit at fixed profit / loss</div>
+                                    </button>
+                                </div>
+
+                                {/* sub-options — collapsed (minimised) by default, expand to edit */}
+                                <button type="button" data-testid="exit-targets-toggle" onClick={() => setShowTargets((v) => !v)}
+                                    className="mt-2 w-full flex items-center gap-1.5 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                                    {showTargets ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                    Target profit / loss
+                                    {!showTargets && <span className="text-atlas-textTertiary/70">(${targetProfit || 5} / ${targetLoss || 4})</span>}
+                                </button>
+                                {showTargets && (
+                                    <div className="grid grid-cols-2 gap-3 mt-2" data-testid="exit-targets-panel">
+                                        <div>
+                                            <Label className="label-tag text-[10px]">TARGET PROFIT ($)</Label>
+                                            <Input data-testid="target-profit-input" type="number" min={0} step="0.5" value={targetProfit}
+                                                onChange={(e) => chooseTargetProfit(e.target.value)}
+                                                disabled={exitMethod !== "fixed"}
+                                                className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1 disabled:opacity-50" />
+                                        </div>
+                                        <div>
+                                            <Label className="label-tag text-[10px]">TARGET LOSS ($)</Label>
+                                            <Input data-testid="target-loss-input" type="number" min={0} step="0.5" value={targetLoss}
+                                                onChange={(e) => chooseTargetLoss(e.target.value)}
+                                                disabled={exitMethod !== "fixed"}
+                                                className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1 disabled:opacity-50" />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <label data-testid="compare-tf-toggle" className="flex items-start gap-2.5 mt-4 p-3 rounded-lg border border-atlas-border cursor-pointer hover:bg-atlas-panelHover transition-colors">
                             <input type="checkbox" checked={compareTf} onChange={(e) => chooseCompareTf(e.target.checked)}
                                 className="mt-0.5 h-4 w-4 accent-atlas-cyan" data-testid="compare-tf-checkbox" />
@@ -446,6 +502,12 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
                         </button>
                     )}
                     <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-atlas-border text-atlas-textSecondary">{run.kind}</span>
+                    {run.exit_method && (
+                        <span data-testid={`run-exit-${run.id.slice(0, 8)}`}
+                            className="font-mono text-[10px] px-2 py-0.5 rounded border border-atlas-cyan/40 text-atlas-cyan whitespace-nowrap">
+                            {run.exit_method === "fixed" ? `Fixed $${run.target_profit ?? 5}/$${run.target_loss ?? 4}` : "Engine exit"}
+                        </span>
+                    )}
                     <span className="font-mono text-xs text-atlas-textSecondary truncate">{run.label || (run.symbols || []).join(", ")}</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -493,8 +555,15 @@ function RunDetails({ run }) {
     if (!run?.result) return <div className="font-mono text-[11px] text-atlas-textSecondary">No detail available.</div>;
     const per = run.result.per_symbol || {};
     const mtf = run.result.multi_timeframe || {};
+    const exitLabel = run.result.exit_method_label
+        || (run.exit_method === "fixed" ? `Fixed $ Target (TP $${run.target_profit ?? 5} / SL $${run.target_loss ?? 4})` : "Universal Exit Engine (ATR-based)");
     return (
         <div className="space-y-4">
+            {/* explicitly state which exit method was used — for cross-strategy comparison */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5" data-testid="detail-exit-method">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-atlas-cyan shrink-0" />
+                <span className="font-mono text-[11px] text-atlas-text">Exit method used: <b className="text-atlas-cyan">{exitLabel}</b></span>
+            </div>
             {Object.entries(per).map(([sym, m]) => {
                 if (m.error) return <div key={sym} className="font-mono text-[11px] text-atlas-negative">{sym}: {m.error}</div>;
                 const verdict = mtf[sym]?.verdict;
@@ -551,9 +620,60 @@ function RunDetails({ run }) {
                                 {m.recommendation}
                             </div>
                         )}
+                        <TradeLog trades={m.trade_log || []} base={sym.split("/")[0]} />
                     </div>
                 );
             })}
+        </div>
+    );
+}
+
+function TradeLog({ trades, base }) {
+    const [open, setOpen] = useState(false);
+    if (!trades.length) return null;
+    const fmtTs = (iso) => (iso ? String(iso).replace("T", " ").slice(0, 16) : "—");
+    const fmtPx = (v) => (v >= 1000 ? v.toFixed(2) : v >= 1 ? v.toFixed(4) : v.toPrecision(4));
+    return (
+        <div className="mt-2">
+            <button data-testid={`tradelog-toggle-${base}`} onClick={() => setOpen((v) => !v)}
+                className="flex items-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                {open ? "Hide" : "Show"} full trade log ({trades.length})
+            </button>
+            {open && (
+                <div className="mt-1.5 overflow-x-auto max-h-72 overflow-y-auto border border-atlas-border rounded">
+                    <table className="w-full font-mono text-[10px]" data-testid={`tradelog-table-${base}`}>
+                        <thead className="sticky top-0 bg-atlas-panel">
+                            <tr className="text-atlas-textTertiary text-left border-b border-atlas-border">
+                                <th className="px-2 py-1">#</th>
+                                <th className="px-2">Entry time</th>
+                                <th className="px-2">Exit time</th>
+                                <th className="px-2 text-right">Entry</th>
+                                <th className="px-2 text-right">Exit</th>
+                                <th className="px-2 text-right">Size</th>
+                                <th className="px-2 text-right">P&amp;L $</th>
+                                <th className="px-2">Exit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {trades.map((t, i) => (
+                                <tr key={i} className="text-atlas-textSecondary border-b border-atlas-border/40">
+                                    <td className="px-2 py-1 text-atlas-textTertiary">{i + 1}</td>
+                                    <td className="px-2 whitespace-nowrap">{fmtTs(t.entry_ts)}</td>
+                                    <td className="px-2 whitespace-nowrap">{fmtTs(t.exit_ts)}</td>
+                                    <td className="px-2 text-right tabular-nums">{fmtPx(t.entry_price)}</td>
+                                    <td className="px-2 text-right tabular-nums">{fmtPx(t.exit_price)}</td>
+                                    <td className="px-2 text-right tabular-nums">{Number(t.qty).toPrecision(4)}</td>
+                                    <td className={`px-2 text-right tabular-nums font-bold ${t.pnl >= 0 ? "text-atlas-positive" : "text-atlas-negative"}`}>
+                                        {t.pnl >= 0 ? "+" : ""}{Number(t.pnl).toFixed(2)}
+                                    </td>
+                                    <td className="px-2 text-atlas-textTertiary whitespace-nowrap">{t.exit_module}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }

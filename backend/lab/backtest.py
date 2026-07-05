@@ -69,6 +69,9 @@ def run_backtest(
     profile_overrides: dict | None = None,
     timeframe: str = "1h",
     strategies: list | tuple | set | None = None,
+    exit_method: str = "engine",
+    target_profit: float = 5.0,
+    target_loss: float = 4.0,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
@@ -140,6 +143,31 @@ def run_backtest(
 
     _entry_ms = [0]
 
+    def _close_fixed(fill: float, module, reason, ts):
+        """Fixed-$ target exit: close the FULL position at an exact limit-style fill that nets
+        the requested profit/loss (after entry+exit fees). Used when exit_method == 'fixed'."""
+        nonlocal cash, pos
+        qty = pos.quantity
+        fee = qty * fill * (s.taker_fee_pct / 100.0)
+        pnl = (fill - pos.avg_cost) * qty - fee - pos.fee_paid_buy
+        cash += qty * fill - fee
+        hold_h = max(0.0, (ts - _entry_ms[0]) / 3_600_000.0)
+        ret_pct = (fill - pos.avg_cost) / pos.avg_cost * 100.0
+        trades.append({
+            "symbol": symbol, "strategy": pos.strategy, "entry_profile": pos.entry_profile,
+            "regime_at_entry": pos.regime_at_entry, "exit_module": module, "exit_reason": reason,
+            "entry_price": round(pos.avg_cost, 8), "exit_price": round(fill, 8),
+            "qty": round(qty, 8), "pnl": round(pnl, 6), "return_pct": round(ret_pct, 4),
+            "mfe_pct": pos.mfe_pct, "mae_pct": pos.mae_pct,
+            "potential_best_exit": round(pos.peak_price, 8), "potential_worst_exit": round(pos.trough_price, 8),
+            "entry_ts": pos.entry_timestamp, "exit_ts": _iso(ts), "hold_hours": round(hold_h, 2),
+            "partial": False,
+            "trade_quality_score": _trade_quality(ret_pct, pos.mfe_pct, pos.mae_pct, hold_h),
+        })
+        pos.quantity = 0.0
+
+    use_fixed = exit_method == "fixed"
+
     for i in range(start_idx, end_idx):
         bar = bars[i]
         window = bars[max(0, i + 1 - ANALYSIS_LOOKBACK): i + 1]   # bounded trailing window (parity w/ live)
@@ -153,30 +181,46 @@ def run_backtest(
             pos.mae_pct = round((pos.trough_price - pos.avg_cost) / pos.avg_cost * 100, 4)
             now_dt = _dt(bar[0])
 
-            # per-strategy exit-profile override (sweeps): patch the live profile
-            pos_profile = None
-            if profile_overrides and pos.strategy in profile_overrides:
-                pos_profile = _dc_replace(get_profile(pos.strategy), **profile_overrides[pos.strategy])
-
-            # pessimistic pass 1: feed the LOW to catch hard-stop / trail breaches
-            d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=pos_profile)
-            if d_low.action == ACT_EXIT_FULL and d_low.module in ("A", "C", "KILL"):
-                lvl = d_low.stop_price if d_low.stop_price is not None else bar[_L]
-                _close(lvl, d_low.module, d_low.exit_reason, bar[0], 1.0)
-                pos = None
-            else:
-                # pass 2: bar CLOSE handles upside modules (F tighten, B partial, D, E)
-                d = evaluate_exit_engine(pos, px, window, s, now=now_dt, profile_override=pos_profile)
-                if d.action == ACT_TIGHTEN and d.new_floor:
-                    pos.locked_profit_floor = d.new_floor
-                elif d.action == ACT_EXIT_PARTIAL:
-                    pos.momentum_partial_taken = True
-                    _close(px, d.module, d.exit_reason, bar[0], PARTIAL_FRACTION)
-                    if pos.quantity <= 1e-12:
-                        pos = None
-                elif d.action == ACT_EXIT_FULL:
-                    _close(px, d.module, d.exit_reason, bar[0], 1.0)
+            if use_fixed:
+                # Fixed-$ target exit: compute the exact fill prices that net +target_profit /
+                # -target_loss (after fees), then trigger when the bar's range reaches them.
+                # Loss checked first (pessimistic) in case a bar spans both levels.
+                taker = s.taker_fee_pct / 100.0
+                denom = pos.quantity * (1.0 - taker)
+                base = pos.fee_paid_buy + pos.avg_cost * pos.quantity
+                tp_fill = (target_profit + base) / denom
+                sl_fill = (base - target_loss) / denom
+                if bar[_L] <= sl_fill:
+                    _close_fixed(sl_fill, "FIXED_SL", "FIXED_TARGET_LOSS", bar[0])
                     pos = None
+                elif bar[_H] >= tp_fill:
+                    _close_fixed(tp_fill, "FIXED_TP", "FIXED_TARGET_PROFIT", bar[0])
+                    pos = None
+            else:
+                # per-strategy exit-profile override (sweeps): patch the live profile
+                pos_profile = None
+                if profile_overrides and pos.strategy in profile_overrides:
+                    pos_profile = _dc_replace(get_profile(pos.strategy), **profile_overrides[pos.strategy])
+
+                # pessimistic pass 1: feed the LOW to catch hard-stop / trail breaches
+                d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=pos_profile)
+                if d_low.action == ACT_EXIT_FULL and d_low.module in ("A", "C", "KILL"):
+                    lvl = d_low.stop_price if d_low.stop_price is not None else bar[_L]
+                    _close(lvl, d_low.module, d_low.exit_reason, bar[0], 1.0)
+                    pos = None
+                else:
+                    # pass 2: bar CLOSE handles upside modules (F tighten, B partial, D, E)
+                    d = evaluate_exit_engine(pos, px, window, s, now=now_dt, profile_override=pos_profile)
+                    if d.action == ACT_TIGHTEN and d.new_floor:
+                        pos.locked_profit_floor = d.new_floor
+                    elif d.action == ACT_EXIT_PARTIAL:
+                        pos.momentum_partial_taken = True
+                        _close(px, d.module, d.exit_reason, bar[0], PARTIAL_FRACTION)
+                        if pos.quantity <= 1e-12:
+                            pos = None
+                    elif d.action == ACT_EXIT_FULL:
+                        _close(px, d.module, d.exit_reason, bar[0], 1.0)
+                        pos = None
 
         # ---- entry evaluation on closed bar i -> fill at bar i+1 OPEN ----
         if pos is None and i + 1 < len(bars):
@@ -230,10 +274,18 @@ def run_backtest(
         _close(bars[end_idx - 1][_C], "EOD", "END_OF_WINDOW", bars[end_idx - 1][0], 1.0)
         pos = None
 
-    return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe)
+    return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe,
+                      exit_method=exit_method, target_profit=target_profit, target_loss=target_loss)
 
 
-def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h") -> dict:
+def _exit_method_label(exit_method: str, target_profit: float, target_loss: float) -> str:
+    if exit_method == "fixed":
+        return f"Fixed $ Target (TP ${target_profit:g} / SL ${target_loss:g})"
+    return "Universal Exit Engine (ATR-based)"
+
+
+def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h",
+               exit_method="engine", target_profit=5.0, target_loss=4.0) -> dict:
     closed = [t for t in trades if not t["partial"]] or trades
     n = len(trades)
     wins = [t for t in trades if t["pnl"] > 0]
@@ -276,6 +328,10 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
     return {
         "symbol": symbol, "start_ms": start_ms, "end_ms": end_ms,
         "timeframe": timeframe,
+        "exit_method": exit_method,
+        "exit_method_label": _exit_method_label(exit_method, target_profit, target_loss),
+        "target_profit": target_profit,
+        "target_loss": target_loss,
         "starting_capital": start_cap,
         "ending_capital": round(equity_curve[-1], 2) if equity_curve else start_cap,
         "total_return_pct": total_ret,
