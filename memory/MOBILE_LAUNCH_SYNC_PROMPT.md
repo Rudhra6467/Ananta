@@ -76,6 +76,23 @@ All Lab endpoints are **owner-only** (Bearer `ananta_owner_token`).
 
 ---
 
+
+### B5. UI/UX parity — collapsible sections (updated 2026-07-05, web now uses this)
+The web **Datalogs** and **Research Lab** tabs were refactored so **every section is a collapsible
+card**, matching the Cockpit's Position Tracker / Trade Life Cycle behaviour. Bring mobile to the same UX:
+- **Collapsed by default** — on load, only the section header cards show (label + title + a chevron).
+- **Expand in place, downward** — tapping a header reveals its body below (NO modal / bottom-sheet /
+  dialog); tapping again collapses it. It should grow/shrink the screen space dynamically.
+- **Single-open accordion** — opening one section auto-collapses the others in that tab.
+- On web this uses native `<details name="...">`. In React Native there is no `<details>` — implement a
+  controlled accordion: keep one `openId` state per tab, render each section header as a `Pressable`
+  (`testID="<id>-toggle"`) that toggles it, and animate expand/collapse with `LayoutAnimation` (or
+  `react-native-reanimated`). Only the body of the open section is rendered/visible.
+- **Removed sections — do NOT build these on mobile either:** "LAYER 5C · SYSTEMIC BREAKOUT ·
+  High-Velocity Override" and "HOUSEKEEPING · Clear Old Logs & Trade History" were deleted from the web
+  Research Lab. Exclude them from the mobile Research Lab too.
+- Backend/API is unchanged by this refactor — it is purely a presentation change.
+
 ## C. Theme parity — align `src/theme.ts` to web
 - Colors: bg `#090A0C`, card `#121418`, border `#2A2D35`, text `#E2E4E9`, accent `#C0C5CE` (matte silver, NOT teal), positive `#10B981`, negative `#F43F5E`, warning `#D9B36B`; radii 4/6/8.
 - Fonts via `expo-font`: **Chivo** (headings), **IBM Plex Sans** (body), **JetBrains Mono** (numbers/labels). Labels: 10px / 700 / 0.2em uppercase, color `#878E99`.
@@ -87,3 +104,4 @@ All Lab endpoints are **owner-only** (Bearer `ananta_owner_token`).
 2. **Research Lab:** can pick assets/period/strategies, choose Native/ATR/Fixed (with collapsible advanced panels), toggle Compare Timeframes, submit a run, watch progress, and **download the PDF**.
 3. **Exit-comparison PDF:** open a completed run's PDF and confirm the **"EXIT ENGINE COMPARISON"** section lists all 5 configs with Profit factor / Win rate / Expectancy / Net return (%) / Max DD (%), a ★ best row, and a "Best engine (return/drawdown)" summary line. (This is server-generated — if the web PDF shows it, mobile's will too.)
 4. Matte-black/silver theme + the 3 fonts applied throughout.
+5. **Accordion sections:** Datalogs + Research Lab sections are collapsed by default, expand in place on tap (no modal), and are single-open (opening one closes the others). Systemic Breakout + Housekeeping sections are absent.
