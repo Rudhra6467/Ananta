@@ -1,5 +1,14 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-05 — Validation: selectable exit logic (Universal Engine vs Fixed $ Target) + full trade logs
+
+- **Fixed $ Target exit (backtest):** `run_backtest(..., exit_method, target_profit, target_loss)` — when `fixed`, exits the full position at exact limit-style fills netting **+$target_profit / -$target_loss** after fees (loss checked first per bar); exit modules `FIXED_TP`/`FIXED_SL`. Verified: TP nets exactly +$5, SL exactly -$4.
+- **Selectable in the UI:** RUN VALIDATION dialog (Tracks A/C) now has an **EXIT LOGIC** selector (Universal Engine | Fixed $ Target) with **collapsed-by-default** sub-options Target Profit ($) / Target Loss ($), defaults 5 & 4 (`exit-targets-toggle` expands them; inputs enabled only for Fixed).
+- **Report states the exit method:** each completed run shows an exit badge (`Fixed $5/$4` / `Engine exit`), the detail view shows an "Exit method used: …" banner, and the PDF includes it in config + a per-symbol **Full trade log** table (timestamps, entry/exit prices, size, P&L, exit module). New `TradeLog` component with a "Show full trade log (N)" toggle.
+- Backend: `LabRunCreate` + `create_run` persist `exit_method`/`target_profit`/`target_loss`; `_run_backtest` passes them through and adds run-level `exit_method_label`.
+- Verified by testing agent (iteration_21): backend 4/4 pytest (`test_lab_exit_logic.py`) + frontend 9/9, all PASS.
+
+
 ## 2026-07-05 — WEB: Ananta logo button + Account/Privacy overlay (parity with mobile)
 
 - The web Ananta logo (header, `AppShell.jsx` TopHeader) is now an interactive **button** (`ananta-logo-btn`) with hover (`hover:border-atlas-border hover:bg-atlas-panelHover`) + active (`active:scale-95`) states.

@@ -330,7 +330,7 @@ export default function StrategyValidationPanel() {
                                     className="mt-2 w-full flex items-center gap-1.5 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
                                     {showTargets ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                                     Target profit / loss
-                                    {!showTargets && <span className="text-atlas-textTertiary/70">(${targetProfit || 5} / ${targetLoss || 4})</span>}
+                                    {!showTargets && <span className="text-atlas-textTertiary/70">&nbsp;(${targetProfit || 5} / ${targetLoss || 4})</span>}
                                 </button>
                                 {showTargets && (
                                     <div className="grid grid-cols-2 gap-3 mt-2" data-testid="exit-targets-panel">
