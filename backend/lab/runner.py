@@ -17,9 +17,8 @@ import asyncio
 import logging
 import subprocess
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
-from functools import partial
 
 from lab import backtest, data_store, optimize
 
@@ -112,6 +111,8 @@ async def create_run(db, spec: dict) -> dict:
         "profile_overrides": spec.get("profile_overrides"),
         "target": spec.get("target"), "values": spec.get("values"),
         "label": spec.get("label"),
+        "strategies": spec.get("strategies") or None,
+        "compare_timeframes": bool(spec.get("compare_timeframes", False)),
         "status": "QUEUED", "progress_pct": 0.0, "git_hash": git_hash(),
         "created_at": _now(), "started_at": None, "finished_at": None,
         "result": None, "error": None,
@@ -121,68 +122,65 @@ async def create_run(db, spec: dict) -> dict:
     return doc
 
 
-def _run_job(run: dict, cb) -> dict:
-    """SYNC job body (executed in a worker thread). Reuses the live-parity replay engine."""
+def _run_backtest_one(kwargs: dict) -> dict:
+    """Picklable single-backtest wrapper — executed in a worker PROCESS (no GIL contention
+    with the FastAPI event loop, so live API calls / login stay responsive during a run)."""
+    return backtest.run_backtest(**kwargs)
+
+
+def _run_optimize(run: dict) -> dict:
+    """Picklable optimizer body (grid/sensitivity/walk_forward) — executed in a worker
+    PROCESS. Runs with a no-op progress callback (parent shows an indeterminate bar)."""
     kind = run["kind"]
     symbols = run["symbols"]
     metric = run.get("metric", "return_over_dd")
     min_trades = run.get("min_trades", 8)
     start, end = run.get("start_ms"), run.get("end_ms")
-
-    if kind == "backtest":
-        out = {}
-        multi_tf = {}
-        n = (len(symbols) or 1) * (1 + len(COMPARE_TIMEFRAMES))
-        step = 0
-        for sym in symbols:
-            base = backtest.run_backtest(
-                sym, start, end,
-                setting_overrides=run.get("setting_overrides"),
-                profile_overrides=run.get("profile_overrides"),
-                timeframe="1h",
-            )
-            out[sym] = base
-            step += 1
-            cb(step / n)
-            # Multi-timeframe comparison: replay the SAME window/params on 30m + 15m.
-            tf_metrics = {"1h": _tf_metrics(base)}
-            for tf in COMPARE_TIMEFRAMES:
-                r = backtest.run_backtest(
-                    sym, start, end,
-                    setting_overrides=run.get("setting_overrides"),
-                    profile_overrides=run.get("profile_overrides"),
-                    timeframe=tf,
-                )
-                tf_metrics[tf] = _tf_metrics(r)
-                step += 1
-                cb(step / n)
-            multi_tf[sym] = {"by_tf": tf_metrics, "verdict": _tf_verdict(tf_metrics)}
-        return {"per_symbol": out, "multi_timeframe": multi_tf}
+    noop = lambda *_a, **_k: None  # noqa: E731
     if kind == "grid_search":
-        return optimize.grid_search(symbols, start, end, run["grid"], metric, min_trades, progress_cb=cb)
+        return optimize.grid_search(symbols, start, end, run["grid"], metric, min_trades, progress_cb=noop)
     if kind == "sensitivity":
         return optimize.sensitivity(symbols, start, end, run["target"], run["values"],
-                                    metric, min_trades, progress_cb=cb)
+                                    metric, min_trades, progress_cb=noop)
     if kind == "walk_forward":
         return optimize.walk_forward(symbols, run["grid"], run.get("folds", 5),
-                                     metric, min_trades, progress_cb=cb)
+                                     metric, min_trades, progress_cb=noop)
     raise ValueError(f"unknown kind {kind}")
 
 
+
 class LabWorker:
-    """Polls lab_runs for QUEUED jobs and executes them one at a time."""
+    """Polls lab_runs for QUEUED jobs and executes them one at a time.
+
+    Compute runs in a worker PROCESS (not a thread): a backtest is CPU-bound and, in a
+    thread, would hold Python's GIL and stall the FastAPI event loop — that starves
+    concurrent API calls (login, portfolio, etc.). A separate process keeps the API
+    fully responsive while a validation runs.
+    """
+
+    # Hard per-backtest wall-clock budget. A single 1h backtest is ~10s and a 15m one
+    # ~40s; 300s is a generous ceiling that guarantees a run can never hang forever.
+    BACKTEST_BUDGET_S = 300
 
     def __init__(self, db, poll_seconds: int = 3):
         self.db = db
         self.poll = poll_seconds
         self._task: asyncio.Task | None = None
-        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lab")
+        self._pool = ProcessPoolExecutor(max_workers=1)
         self._stop = asyncio.Event()
+
+    def _reset_pool(self):
+        """Recycle the process pool (used after a timeout to kill a runaway worker)."""
+        try:
+            self._pool.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        self._pool = ProcessPoolExecutor(max_workers=1)
 
     def start(self):
         self._stop.clear()
         self._task = asyncio.create_task(self._loop())
-        logger.info("LabWorker started (poll=%ss)", self.poll)
+        logger.info("LabWorker started (poll=%ss, process-isolated)", self.poll)
 
     async def stop(self):
         self._stop.set()
@@ -213,21 +211,17 @@ class LabWorker:
                 logger.exception("LabWorker loop error: %s", e)
                 await asyncio.sleep(self.poll)
 
+    async def _set_progress(self, rid: str, pct: float):
+        await self.db.lab_runs.update_one(
+            {"id": rid}, {"$set": {"progress_pct": round(min(100.0, max(0.0, pct)), 1)}})
+
     async def _execute(self, run: dict):
         rid = run["id"]
-        progress = {"pct": 0.0}
-
-        def cb(p: float):
-            progress["pct"] = max(progress["pct"], min(1.0, float(p)))
-
-        loop = asyncio.get_event_loop()
-        fut = loop.run_in_executor(self._pool, partial(_run_job, run, cb))
         try:
-            while not fut.done():
-                await self.db.lab_runs.update_one(
-                    {"id": rid}, {"$set": {"progress_pct": round(progress["pct"] * 100, 1)}})
-                await asyncio.sleep(2)
-            result = await fut
+            if run["kind"] == "backtest":
+                result = await self._run_backtest(run)
+            else:
+                result = await self._run_optimize(run)
             await self.db.lab_runs.update_one({"id": rid}, {"$set": {
                 "status": "DONE", "progress_pct": 100.0, "result": result, "finished_at": _now()}})
             logger.info("LabWorker DONE run=%s kind=%s", rid, run["kind"])
@@ -235,6 +229,59 @@ class LabWorker:
             logger.exception("LabWorker run %s failed: %s", rid, e)
             await self.db.lab_runs.update_one({"id": rid}, {"$set": {
                 "status": "FAILED", "error": str(e), "finished_at": _now()}})
+
+    async def _run_backtest(self, run: dict) -> dict:
+        """Orchestrate a backtest cell-by-cell in the parent (accurate progress), while each
+        individual replay executes in the worker process. 1h is always run (live parity);
+        30m/15m are only added when the user enabled the multi-timeframe comparison."""
+        rid = run["id"]
+        symbols = run["symbols"]
+        start, end = run.get("start_ms"), run.get("end_ms")
+        overrides = dict(setting_overrides=run.get("setting_overrides"),
+                         profile_overrides=run.get("profile_overrides"),
+                         strategies=run.get("strategies"))
+        timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
+        loop = asyncio.get_event_loop()
+
+        out, multi_tf = {}, {}
+        tf_results: dict[str, dict] = {}
+        total = (len(symbols) or 1) * len(timeframes)
+        step = 0
+        for sym in symbols:
+            for tf in timeframes:
+                kwargs = {"symbol": sym, "start_ms": start, "end_ms": end, "timeframe": tf, **overrides}
+                try:
+                    r = await asyncio.wait_for(
+                        loop.run_in_executor(self._pool, _run_backtest_one, kwargs),
+                        timeout=self.BACKTEST_BUDGET_S)
+                except (asyncio.TimeoutError, Exception) as e:  # noqa: BLE001
+                    r = {"error": "timed_out" if isinstance(e, asyncio.TimeoutError) else str(e), "symbol": sym}
+                    if isinstance(e, asyncio.TimeoutError):
+                        self._reset_pool()
+                        loop = asyncio.get_event_loop()
+                tf_results[f"{sym}|{tf}"] = r
+                if tf == "1h":
+                    out[sym] = r
+                step += 1
+                await self._set_progress(rid, step / total * 100)
+            tf_metrics = {tf: _tf_metrics(tf_results.get(f"{sym}|{tf}")) for tf in timeframes}
+            multi_tf[sym] = {"by_tf": tf_metrics, "verdict": _tf_verdict(tf_metrics)}
+        return {"per_symbol": out, "multi_timeframe": multi_tf}
+
+    async def _run_optimize(self, run: dict) -> dict:
+        """Grid/sensitivity/walk_forward run as a single unit in the worker process. Progress
+        is shown as an indeterminate crawl since sub-step callbacks can't cross the process."""
+        rid = run["id"]
+        loop = asyncio.get_event_loop()
+        fut = loop.run_in_executor(self._pool, _run_optimize, run)
+        pct = 0.0
+        while not fut.done():
+            pct = min(95.0, pct + 3.0)  # gentle crawl so the bar is alive, never claims done
+            await self._set_progress(rid, pct)
+            await asyncio.sleep(2)
+        return await fut
+
+
 
 
 class LabDataAppender:

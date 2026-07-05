@@ -1328,6 +1328,8 @@ class LabRunCreate(BaseModel):
     target: str | None = None
     values: list | None = None
     label: str | None = None
+    strategies: list[str] | None = None  # subset of hunter|squeeze|continuation (None = all)
+    compare_timeframes: bool = False  # off = 1h-only (fast); on = add 30m/15m comparison
 
 
 @api_router.get("/lab/data/coverage", dependencies=[Depends(require_owner)])

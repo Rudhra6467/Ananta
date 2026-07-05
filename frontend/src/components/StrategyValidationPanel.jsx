@@ -8,6 +8,15 @@ import { Label } from "@/components/ui/label";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+
+// The three native strategies the replay engine can run. "Select all" = run every one.
+const STRATEGIES = [
+    { id: "hunter", label: "Hunter" },
+    { id: "squeeze", label: "Volatility Squeeze" },
+    { id: "continuation", label: "Continuation" },
+];
+const ALL_STRATEGY_IDS = STRATEGIES.map((s) => s.id);
 
 // Parameter presets for the "Fresh Values" optimization sandbox. Keys map to the
 // backend grid targets ("prof:<strategy>:<field>" or "set:<field>").
@@ -28,12 +37,14 @@ const STATUS_CLS = {
 // rarely change — caching them means re-opening the Research Lab tab is INSTANT and never
 // "loads afresh" or gets stuck when the user hasn't changed anything. Runs still refresh
 // silently in the background (and while a job is active).
-const _labCache = { cov: null, presets: null, runs: null, assets: null, period: null };
+const _labCache = { cov: null, presets: null, runs: null, assets: null, period: null, strategies: null, compareTf: false };
 
 export default function StrategyValidationPanel() {
     const [cov, setCov] = useState(_labCache.cov);
     const [assets, setAssets] = useState(_labCache.assets || []);
     const [period, setPeriod] = useState(_labCache.period || "3m");
+    const [strategies, setStrategies] = useState(_labCache.strategies || ALL_STRATEGY_IDS);
+    const [compareTf, setCompareTf] = useState(_labCache.compareTf || false);
     const [runs, setRuns] = useState(_labCache.runs || []);
     const [open, setOpen] = useState(false);
     const [track, setTrack] = useState("current");
@@ -92,9 +103,11 @@ export default function StrategyValidationPanel() {
         loadRuns();
     }, []);
 
-    // keep the user's asset/period selection across tab switches
+    // keep the user's asset/period/strategy selection across tab switches
     const chooseAssets = (next) => { _labCache.assets = next; setAssets(next); };
     const choosePeriod = (next) => { _labCache.period = next; setPeriod(next); };
+    const chooseStrategies = (next) => { _labCache.strategies = next; setStrategies(next); };
+    const chooseCompareTf = (next) => { _labCache.compareTf = next; setCompareTf(next); };
 
     // poll while any run is active
     useEffect(() => {
@@ -117,19 +130,21 @@ export default function StrategyValidationPanel() {
 
     const submit = async () => {
         if (!assets.length) { toast.error("Select at least one asset"); return; }
+        if (!strategies.length) { toast.error("Select at least one strategy"); return; }
         setBusy(true);
         try {
+            const common = { symbols: assets, period, strategies, compare_timeframes: compareTf };
             let spec;
             if (track === "current") {
-                spec = { kind: "backtest", symbols: assets, period };
+                spec = { kind: "backtest", ...common };
             } else if (track === "presets") {
                 if (!presetId) { toast.error("Pick a preset"); setBusy(false); return; }
-                spec = { kind: "backtest", symbols: assets, period, preset: presetId };
+                spec = { kind: "backtest", ...common, preset: presetId };
             } else {
                 const vals = values.split(",").map((v) => parseFloat(v.trim())).filter((v) => !Number.isNaN(v));
                 if (vals.length < 2) { toast.error("Enter at least 2 comma-separated values"); setBusy(false); return; }
                 spec = {
-                    kind: "walk_forward", symbols: assets, period,
+                    kind: "walk_forward", ...common,
                     grid: { [param]: vals }, folds: Number(folds) || 4,
                     metric: "total_return_pct", min_trades: 3,
                     label: `Fresh: ${PARAMS.find((p) => p.key === param)?.label}`,
@@ -282,7 +297,18 @@ export default function StrategyValidationPanel() {
                             </div>
                         )}
 
-                        <Button data-testid="submit-validation-btn" onClick={submit} disabled={busy} className="w-full mt-3 gap-2">
+                        <label data-testid="compare-tf-toggle" className="flex items-start gap-2.5 mt-4 p-3 rounded-lg border border-atlas-border cursor-pointer hover:bg-atlas-panelHover transition-colors">
+                            <input type="checkbox" checked={compareTf} onChange={(e) => chooseCompareTf(e.target.checked)}
+                                className="mt-0.5 h-4 w-4 accent-atlas-cyan" data-testid="compare-tf-checkbox" />
+                            <span>
+                                <span className="font-mono text-xs font-bold text-atlas-text">Compare 30m &amp; 15m timeframes</span>
+                                <span className="block font-mono text-[10px] text-atlas-textTertiary mt-0.5">
+                                    Off = 1h only (live-parity, fastest). On = also replays 30m/15m for the multi-timeframe report — ~3× slower.
+                                </span>
+                            </span>
+                        </label>
+
+                        <Button data-testid="submit-validation-btn" onClick={submit} disabled={busy || !assets.length || !strategies.length} className="w-full mt-3 gap-2">
                             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                             {track === "current" ? "RUN CURRENT-PROD BACKTEST"
                                 : track === "presets" ? "RUN PRESET BACKTEST"
@@ -292,28 +318,46 @@ export default function StrategyValidationPanel() {
                 </Dialog>
             </div>
 
-            {/* config: assets + period */}
-            <div className="mt-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-3">
+            {/* config: strategy · assets · period — three compact dropdowns */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="validation-config">
+                <div>
+                    <Label className="label-tag text-[10px]">STRATEGY · {strategies.length === ALL_STRATEGY_IDS.length ? "all" : `${strategies.length} selected`}</Label>
+                    <MultiSelect
+                        testid="strategy-select"
+                        summary={strategies.length === ALL_STRATEGY_IDS.length ? "All strategies"
+                            : strategies.length === 0 ? "None"
+                                : strategies.length === 1 ? STRATEGIES.find((s) => s.id === strategies[0])?.label
+                                    : `${strategies.length} selected`}
+                        allOn={strategies.length === ALL_STRATEGY_IDS.length}
+                        onToggleAll={() => chooseStrategies(strategies.length === ALL_STRATEGY_IDS.length ? [] : ALL_STRATEGY_IDS)}
+                        options={STRATEGIES.map((s) => ({
+                            key: s.id, label: s.label, on: strategies.includes(s.id),
+                            onToggle: () => chooseStrategies(strategies.includes(s.id) ? strategies.filter((x) => x !== s.id) : [...strategies, s.id]),
+                        }))}
+                    />
+                </div>
+                <div>
                     <Label className="label-tag text-[10px]">ASSETS · {assets.length} selected</Label>
-                    <div className="flex flex-wrap gap-2 mt-2" data-testid="asset-chips">
-                        {symbols.length === 0 && <span className="font-mono text-xs text-atlas-textSecondary">No seeded history found. Run the backfill first.</span>}
-                        {symbols.map((s) => {
-                            const base = s.symbol.split("/")[0];
-                            const on = assets.includes(s.symbol);
-                            return (
-                                <button key={s.symbol} data-testid={`asset-chip-${base}`} onClick={() => toggleAsset(s.symbol)}
-                                    className={`px-3 py-1.5 rounded-full border font-mono text-xs transition-all ${on ? "border-atlas-cyan bg-atlas-panelHover text-atlas-text" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
-                                    {base} <span className="text-[9px] text-atlas-textTertiary">{s.bars_1h}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    <MultiSelect
+                        testid="asset-select"
+                        disabled={symbols.length === 0}
+                        summary={symbols.length === 0 ? "No history seeded"
+                            : assets.length === 0 ? "Select assets"
+                                : assets.length === symbols.length ? "All assets"
+                                    : assets.length === 1 ? assets[0].split("/")[0]
+                                        : `${assets.length} selected`}
+                        allOn={symbols.length > 0 && assets.length === symbols.length}
+                        onToggleAll={() => chooseAssets(assets.length === symbols.length ? [] : symbols.map((s) => s.symbol))}
+                        options={symbols.map((s) => ({
+                            key: s.symbol, label: s.symbol.split("/")[0], meta: `${s.bars_1h}`,
+                            on: assets.includes(s.symbol), onToggle: () => toggleAsset(s.symbol),
+                        }))}
+                    />
                 </div>
                 <div>
                     <Label className="label-tag text-[10px]">HISTORICAL PERIOD</Label>
                     <select data-testid="period-select" value={period} onChange={(e) => choosePeriod(e.target.value)}
-                        className="w-full mt-2 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
+                        className="w-full mt-2 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text h-[38px]">
                         {periods.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                 </div>
@@ -525,6 +569,40 @@ function Metric({ label, value, good }) {
 
 function fmtPct(v) {
     return v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${v}%`;
+}
+
+// Compact multi-select dropdown (trigger + popover checklist with a "Select all" row).
+// Keeps the dark terminal aesthetic; used for both Strategy and Asset pickers so a long
+// asset list no longer floods the panel with chips.
+function MultiSelect({ testid, summary, options, allOn, onToggleAll, disabled }) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button data-testid={testid} disabled={disabled}
+                    className="w-full mt-2 h-[38px] flex items-center justify-between gap-2 bg-atlas-panel border border-atlas-border rounded px-3 font-mono text-sm text-atlas-text hover:border-atlas-cyan/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span className="truncate">{summary}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-atlas-textTertiary shrink-0" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" data-testid={`${testid}-menu`}
+                className="w-[var(--radix-popover-trigger-width)] min-w-56 max-h-72 overflow-auto p-1.5 bg-atlas-panel border-atlas-border">
+                <button data-testid={`${testid}-all`} onClick={onToggleAll}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded font-mono text-xs text-atlas-text hover:bg-atlas-panelHover transition-colors">
+                    <Check className={`w-3.5 h-3.5 text-atlas-cyan ${allOn ? "opacity-100" : "opacity-0"}`} />
+                    <span className="font-bold">Select all</span>
+                </button>
+                <div className="h-px bg-atlas-border my-1" />
+                {options.map((o) => (
+                    <button key={o.key} data-testid={`${testid}-opt-${String(o.key).split("/")[0]}`} onClick={o.onToggle}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded font-mono text-xs text-atlas-textSecondary hover:bg-atlas-panelHover hover:text-atlas-text transition-colors">
+                        <Check className={`w-3.5 h-3.5 text-atlas-cyan shrink-0 ${o.on ? "opacity-100" : "opacity-0"}`} />
+                        <span className="flex-1 text-left truncate">{o.label}</span>
+                        {o.meta && <span className="text-[9px] text-atlas-textTertiary tabular-nums">{o.meta}</span>}
+                    </button>
+                ))}
+            </PopoverContent>
+        </Popover>
+    );
 }
 
 function runSummary(run) {

@@ -27,39 +27,48 @@ const CODE_LABELS = {
     HOLD_NO_SIGNAL: "No Signal",
 };
 
+// Module-level cache so re-opening the Datalogs tab renders INSTANTLY from the last
+// fetched data instead of showing empty/loading while 10 endpoints re-fetch. Data still
+// refreshes silently in the background (and on the 20s interval).
+const _reportsCache = {
+    rejections: null, funnel: null, winners: null, missed: null, rsiDist: null,
+    zones: null, sandbox: null, staged: null, summary: null, items: [], symbols: [], selected: null,
+};
+
 export default function Reports() {
-    const [symbols, setSymbols] = useState([]);
-    const [selected, setSelected] = useState(null);
+    const [symbols, setSymbols] = useState(_reportsCache.symbols);
+    const [selected, setSelected] = useState(_reportsCache.selected);
     const [whyRow, setWhyRow] = useState(null);
-    const [rejections, setRejections] = useState(null);
-    const [funnel, setFunnel] = useState(null);
-    const [winners, setWinners] = useState(null);
-    const [missed, setMissed] = useState(null);
-    const [rsiDist, setRsiDist] = useState(null);
-    const [zones, setZones] = useState(null);
-    const [sandbox, setSandbox] = useState(null);
-    const [staged, setStaged] = useState(null);
-    const [summary, setSummary] = useState(null);
-    const [items, setItems] = useState([]);
+    const [rejections, setRejections] = useState(_reportsCache.rejections);
+    const [funnel, setFunnel] = useState(_reportsCache.funnel);
+    const [winners, setWinners] = useState(_reportsCache.winners);
+    const [missed, setMissed] = useState(_reportsCache.missed);
+    const [rsiDist, setRsiDist] = useState(_reportsCache.rsiDist);
+    const [zones, setZones] = useState(_reportsCache.zones);
+    const [sandbox, setSandbox] = useState(_reportsCache.sandbox);
+    const [staged, setStaged] = useState(_reportsCache.staged);
+    const [summary, setSummary] = useState(_reportsCache.summary);
+    const [items, setItems] = useState(_reportsCache.items);
 
     const refresh = () => {
-        api.researchRejections().then(setRejections).catch(() => {});
-        api.researchFunnel().then(setFunnel).catch(() => {});
-        api.researchWinnerProfile().then(setWinners).catch(() => {});
-        api.researchMissedOpportunities().then(setMissed).catch(() => {});
-        api.researchRsiDistribution().then(setRsiDist).catch(() => {});
-        api.researchZoneEffectiveness().then(setZones).catch(() => {});
-        api.researchStrategyLab().then(setSandbox).catch(() => {});
-        api.researchStagedExit().then(setStaged).catch(() => {});
-        api.researchSummary().then(setSummary).catch(() => {});
-        api.reasoning(15, undefined, false).then((d) => setItems(d.items || [])).catch(() => setItems([]));
+        api.researchRejections().then((d) => { _reportsCache.rejections = d; setRejections(d); }).catch(() => {});
+        api.researchFunnel().then((d) => { _reportsCache.funnel = d; setFunnel(d); }).catch(() => {});
+        api.researchWinnerProfile().then((d) => { _reportsCache.winners = d; setWinners(d); }).catch(() => {});
+        api.researchMissedOpportunities().then((d) => { _reportsCache.missed = d; setMissed(d); }).catch(() => {});
+        api.researchRsiDistribution().then((d) => { _reportsCache.rsiDist = d; setRsiDist(d); }).catch(() => {});
+        api.researchZoneEffectiveness().then((d) => { _reportsCache.zones = d; setZones(d); }).catch(() => {});
+        api.researchStrategyLab().then((d) => { _reportsCache.sandbox = d; setSandbox(d); }).catch(() => {});
+        api.researchStagedExit().then((d) => { _reportsCache.staged = d; setStaged(d); }).catch(() => {});
+        api.researchSummary().then((d) => { _reportsCache.summary = d; setSummary(d); }).catch(() => {});
+        api.reasoning(15, undefined, false).then((d) => { _reportsCache.items = d.items || []; setItems(d.items || []); }).catch(() => setItems([]));
     };
 
     useEffect(() => {
         api.settings().then((st) => {
             const syms = st?.enabled_symbols || [];
+            _reportsCache.symbols = syms;
             setSymbols(syms);
-            if (!selected && syms.length) setSelected(syms[0]);
+            if (!_reportsCache.selected && syms.length) { _reportsCache.selected = syms[0]; setSelected(syms[0]); }
         }).catch(() => {});
         refresh();
         const t = setInterval(refresh, 20000);
@@ -69,6 +78,7 @@ export default function Reports() {
 
     useEffect(() => {
         if (!selected) return;
+        _reportsCache.selected = selected;
         api.researchLog(selected, 1).then((d) => setWhyRow(d.items?.[0] || null)).catch(() => setWhyRow(null));
     }, [selected]);
 

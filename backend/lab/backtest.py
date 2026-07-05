@@ -57,6 +57,9 @@ def _trade_quality(return_pct: float, mfe_pct: float, mae_pct: float, hold_h: fl
     return round(100.0 * (0.5 * capture + 0.3 * mae_term + 0.2 * hold_eff), 1)
 
 
+ALL_STRATEGIES = ("hunter", "squeeze", "continuation")
+
+
 def run_backtest(
     symbol: str,
     start_ms: int,
@@ -65,6 +68,7 @@ def run_backtest(
     setting_overrides: dict | None = None,
     profile_overrides: dict | None = None,
     timeframe: str = "1h",
+    strategies: list | tuple | set | None = None,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
@@ -82,6 +86,7 @@ def run_backtest(
             if hasattr(s, k):
                 setattr(s, k, v)
 
+    allowed = {x.lower() for x in strategies} if strategies else set(ALL_STRATEGIES)
     bars = data_store.load_candles(symbol, timeframe)
     daily = data_store.load_candles(symbol, "1d")
     if len(bars) < WARMUP_BARS + 5:
@@ -177,7 +182,7 @@ def run_backtest(
         if pos is None and i + 1 < len(bars):
             regime = classify_regime(window)
             strategy = entry_profile = struct_stop = None
-            if hunter_allowed(regime.regime):
+            if "hunter" in allowed and hunter_allowed(regime.regime):
                 zones = _zones_at(bar[0], window)
                 # WS1 parity: multi-timeframe trend filter (4h EMA50 > EMA200) — same gate as live.
                 _htf = None
@@ -192,11 +197,11 @@ def run_backtest(
                 sig = evaluate_primary(symbol, px, window, zones, s, regime=regime, htf_trend_aligned=_htf)
                 if sig.triggered:
                     strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
-            if strategy is None and squeeze_allowed(regime.regime):
+            if strategy is None and "squeeze" in allowed and squeeze_allowed(regime.regime):
                 sq = evaluate_squeeze(window)
                 if sq.triggered:
                     strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
-            if strategy is None and s.continuation_enabled and continuation_allowed(regime.regime):
+            if strategy is None and "continuation" in allowed and s.continuation_enabled and continuation_allowed(regime.regime):
                 ct = evaluate_continuation(window, s, regime=regime)
                 if ct.triggered:
                     strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop

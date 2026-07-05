@@ -1,0 +1,35 @@
+{
+  "summary": "Full E2E validation of the Research Lab / Strategy Validation redesign on the preview backend (https://hunter-squeeze-labs.preview.emergentagent.com). Backend: 7/7 pytest cases pass (login latency, invalid-login, coverage, presets, run lifecycle+strategy-filter, process isolation during a running backtest, compare_timeframes ON returning 1h/30m/15m). Web UI (owner logged in at viewport 1600x1000): all new testids present and behavior correct — [data-testid=validation-config] is a 3-column grid; [data-testid=strategy-select] popover exposes strategy-select-all + strategy-select-opt-{hunter,squeeze,continuation} and summary text tracks ('All strategies' -> 'None' -> 'All strategies'); [data-testid=asset-select] exposes asset-select-all + 8 asset options (BTC/ETH/SOL/AVAX/XRP/PAXG/LINK/ARB) and replaces the old chips (summary 'BTC', '1 selected', 'All assets', etc.); [data-testid=period-select] unchanged. RUN VALIDATION dialog opens, [data-testid=compare-tf-checkbox] defaults OFF (verified is_checked()==false), and submitting a Track A backtest (BTC/USD, hunter+squeeze, period=1m, compare OFF) went QUEUED->RUNNING->DONE in under a minute with monotonic progress. Datalogs tab returned in 110ms on repeat visit and rendered full content (Strategy Research Laboratory, Signal Attrition Funnel, 33/66/99 Stop Simulation). Cockpit Trade Life Cycle shows only the first live trade (BTC) with [data-testid=lifecycle-show-more] text 'Show 2 more trades' (3 live positions total). No hangs, no red errors, no failed API calls.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Bottom nav (preview only)", "issues": ["The Emergent preview overlay badge ('Made with Emergent') still floats over the bottom-right Research Lab nav button at viewport widths ~<=1280px, blocking pointer clicks in Playwright. Not app code — same finding as iteration_17. Ran this iteration at 1600x1000 to bypass it. Non-blocking for real users on production."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_validation_ui.py",
+    "/app/test_reports/pytest/pytest_iter18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StrategyValidationPanel.jsx: The MultiSelect component is clean and the summary logic correctly handles empty / partial / all states for both strategies and assets. Good use of testID conventions (strategy-select-opt-<id>, asset-select-opt-<BASE>) that make automated coverage straightforward.",
+    "Compare-timeframes UX: the checkbox lives inside the RUN VALIDATION dialog with a clear cost hint ('~3x slower'), and default OFF is preserved in module cache (_labCache.compareTf) across tab switches — matches spec.",
+    "Datalogs module-level cache is effective; repeat entry rendered in ~110ms with full content restored (funnel, promotion table, stop simulation). No visible 'loading' flash on the Reports page itself. (The iteration_17 finding about Settings.jsx re-fetch is separate and only affects the Research Lab tab wrapper — still pending as LOW.)",
+    "Process isolation confirmed: while a 2-asset backtest is RUNNING, /api/auth/login and /api/portfolio both return in <300ms (asserted 3x in pytest). This directly addresses the reported 'stuck at 11% for 39m + login stalls' bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter18_validation_ui.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (7/7 UI checks)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (preview env, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. One net-new lab run was submitted through the UI (BTC/USD, hunter+squeeze, period=1m, compare OFF) as part of the completion test; it finished DONE in <60s. A few short pytest-created runs were also submitted and finished DONE.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "For UI testing use viewport width >= 1600px to avoid the 'Made with Emergent' preview badge occluding the bottom-right Research Lab nav button (this is a preview overlay, not app code). The bottom-nav testid for Research Lab is [data-testid=bottom-nav-settings] (the tab is internally the Settings page). Backend regression file /app/backend/tests/test_iter18_validation_ui.py can be re-run any time with `REACT_APP_BACKEND_URL=<preview-url> pytest tests/test_iter18_validation_ui.py`. Note: /api/lab/data/coverage is the correct coverage path (not /api/lab/coverage); frontend api.js uses it correctly.",
+  "rca of the issue": "The original two-part bug (validation stuck at 11%, login stalls during runs) is resolved by the ProcessPoolExecutor isolation on the backend combined with per-symbol progress reporting. Verified end-to-end via pytest: run progresses QUEUED->RUNNING (progress advances 0->50->100 for 2 symbols in ~15s) while /api/auth/login stays ~200ms and /api/portfolio stays ~200ms during the same window. UI redesign resolves the 'chips filled the screen' complaint by moving assets into a compact popover multi-select with Select-all; the same compact widget is reused for strategies. Compare-timeframes toggle correctly defaults OFF (fast 1h-only path)."
+}
