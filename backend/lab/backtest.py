@@ -198,13 +198,75 @@ def run_backtest(
     atr_trail_act = float(atrp["trail_activation_pct"])
     atr_trail_dist = float(atrp["trail_distance"])
 
-    for i in range(start_idx, end_idx):
+    # ---- PASS 1: exit-agnostic entry scan (rising-edge). Identical for every exit method,
+    # so A/B/C runs share the EXACT same entry set and ONLY the exit logic differs. ----
+    def _scan_entry(i: int):
         bar = bars[i]
-        window = bars[max(0, i + 1 - ANALYSIS_LOOKBACK): i + 1]   # bounded trailing window (parity w/ live)
         px = bar[_C]
+        window = bars[max(0, i + 1 - ANALYSIS_LOOKBACK): i + 1]
+        regime = classify_regime(window)
+        strategy = entry_profile = struct_stop = None
+        _conf = None
+        if "hunter" in allowed and hunter_allowed(regime.regime):
+            zones = _zones_at(bar[0], window)
+            _htf = None
+            if s.htf_trend_enabled:
+                _wc = [b[_C] for b in window]
+                if len(_wc) >= 200:
+                    _e50 = ema(_wc, 50)[-1]
+                    _e200 = ema(_wc, 200)[-1]
+                    _htf = (_wc[-1] > _e50 > _e200)
+                else:
+                    _htf = False
+            sig = evaluate_primary(symbol, px, window, zones, s, regime=regime, htf_trend_aligned=_htf)
+            if sig.triggered:
+                strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
+                _conf = getattr(sig, "confidence", None) or getattr(sig, "score", None)
+        if strategy is None and "squeeze" in allowed and squeeze_allowed(regime.regime):
+            sq = evaluate_squeeze(window)
+            if sq.triggered:
+                strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
+                _conf = getattr(sq, "confidence", None) or getattr(sq, "score", None)
+        if strategy is None and "continuation" in allowed and s.continuation_enabled and continuation_allowed(regime.regime):
+            ct = evaluate_continuation(window, s, regime=regime)
+            if ct.triggered:
+                strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
+                _conf = getattr(ct, "confidence", None) or getattr(ct, "score", None)
+        if strategy is None:
+            return None
+        return {"i": i, "strategy": strategy, "entry_profile": entry_profile,
+                "struct_stop": struct_stop, "regime": regime.regime,
+                "conf": round(_conf, 3) if isinstance(_conf, (int, float)) else None}
 
-        # ---- manage an open position on THIS bar (before considering new entries) ----
-        if pos is not None:
+    entry_signals: list[dict] = []
+    prev_trig = False
+    for i in range(start_idx, end_idx):
+        e = _scan_entry(i) if i + 1 < len(bars) else None
+        trig = e is not None
+        if trig and not prev_trig and i + 1 < end_idx:
+            entry_signals.append(e)
+        prev_trig = trig
+
+    # ---- PASS 2: simulate each entry as an INDEPENDENT trade under the selected exit engine.
+    # Trades may overlap in time — that is intentional: the entry set is fixed, only exits vary. ----
+    for e in entry_signals:
+        i = e["i"]
+        fill = bars[i + 1][_O] * (1.0 + SLIPPAGE_PCT / 100.0)
+        qty = lot / fill
+        fee = qty * fill * (s.taker_fee_pct / 100.0)
+        _entry_ms[0] = bars[i + 1][0]
+        pmeta.clear()
+        pmeta.update(confidence=e["conf"], atr_stop=None, armed=False)
+        pos = Position(
+            symbol=symbol, quantity=qty, avg_cost=fill, peak_price=fill, trough_price=fill,
+            fee_paid_buy=fee, entry_timestamp=_iso(bars[i + 1][0]),
+            structural_stop=e["struct_stop"], strategy=e["strategy"], entry_profile=e["entry_profile"],
+            regime_at_entry=e["regime"],
+        )
+        for j in range(i + 1, end_idx):
+            bar = bars[j]
+            px = bar[_C]
+            window = bars[max(0, j + 1 - ANALYSIS_LOOKBACK): j + 1]
             pos.peak_price = max(pos.peak_price, bar[_H])
             pos.trough_price = min(pos.trough_price, bar[_L]) if pos.trough_price else bar[_L]
             pos.mfe_pct = round((pos.peak_price - pos.avg_cost) / pos.avg_cost * 100, 4)
@@ -212,8 +274,7 @@ def run_backtest(
             now_dt = _dt(bar[0])
 
             if use_fixed:
-                # Fixed-$ target exit: compute the exact fill prices that net +target_profit /
-                # -target_loss (after fees), then trigger when the bar's range reaches them.
+                # Fixed-$ target exit: exact fills that net +target_profit / -target_loss (fees in).
                 # Loss checked first (pessimistic) in case a bar spans both levels.
                 taker = s.taker_fee_pct / 100.0
                 denom = pos.quantity * (1.0 - taker)
@@ -227,9 +288,8 @@ def run_backtest(
                     _close_fixed(tp_fill, "FIXED_TP", "FIXED_TARGET_PROFIT", bar[0])
                     pos = None
             elif use_atr:
-                # Pure ATR exit: fixed initial stop = entry - mult*ATR(entry); once the trade
-                # is up >= trail_activation %, trail a stop at peak - trail_distance*ATR. Only
-                # tightens (never loosens). Exit when the bar LOW breaches the active stop.
+                # Pure ATR exit: initial stop = entry - mult*ATR; trail at peak - dist*ATR once up
+                # >= activation %. Only tightens. Exit when the bar LOW breaches the active stop.
                 highs = [b[_H] for b in window]
                 lows = [b[_L] for b in window]
                 closes = [b[_C] for b in window]
@@ -249,19 +309,16 @@ def run_backtest(
                     _close(stop, "ATR", reason, bar[0], 1.0)
                     pos = None
             else:
-                # per-strategy exit-profile override (sweeps): patch the live profile
+                # Native Strategy Exit — full Universal Exit Engine (modules A-F, structural, kill).
                 pos_profile = None
                 if profile_overrides and pos.strategy in profile_overrides:
                     pos_profile = _dc_replace(get_profile(pos.strategy), **profile_overrides[pos.strategy])
-
-                # pessimistic pass 1: feed the LOW to catch hard-stop / trail breaches
                 d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=pos_profile)
                 if d_low.action == ACT_EXIT_FULL and d_low.module in ("A", "C", "KILL"):
                     lvl = d_low.stop_price if d_low.stop_price is not None else bar[_L]
                     _close(lvl, d_low.module, d_low.exit_reason, bar[0], 1.0)
                     pos = None
                 else:
-                    # pass 2: bar CLOSE handles upside modules (F tighten, B partial, D, E)
                     d = evaluate_exit_engine(pos, px, window, s, now=now_dt, profile_override=pos_profile)
                     if d.action == ACT_TIGHTEN and d.new_floor:
                         pos.locked_profit_floor = d.new_floor
@@ -274,63 +331,25 @@ def run_backtest(
                         _close(px, d.module, d.exit_reason, bar[0], 1.0)
                         pos = None
 
-        # ---- entry evaluation on closed bar i -> fill at bar i+1 OPEN ----
-        if pos is None and i + 1 < len(bars):
-            regime = classify_regime(window)
-            strategy = entry_profile = struct_stop = None
-            _conf = None
-            if "hunter" in allowed and hunter_allowed(regime.regime):
-                zones = _zones_at(bar[0], window)
-                # WS1 parity: multi-timeframe trend filter (4h EMA50 > EMA200) — same gate as live.
-                _htf = None
-                if s.htf_trend_enabled:
-                    _wc = [b[_C] for b in window]
-                    if len(_wc) >= 200:
-                        _e50 = ema(_wc, 50)[-1]
-                        _e200 = ema(_wc, 200)[-1]
-                        _htf = (_wc[-1] > _e50 > _e200)
-                    else:
-                        _htf = False
-                sig = evaluate_primary(symbol, px, window, zones, s, regime=regime, htf_trend_aligned=_htf)
-                if sig.triggered:
-                    strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
-                    _conf = getattr(sig, "confidence", None) or getattr(sig, "score", None)
-            if strategy is None and "squeeze" in allowed and squeeze_allowed(regime.regime):
-                sq = evaluate_squeeze(window)
-                if sq.triggered:
-                    strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
-                    _conf = getattr(sq, "confidence", None) or getattr(sq, "score", None)
-            if strategy is None and "continuation" in allowed and s.continuation_enabled and continuation_allowed(regime.regime):
-                ct = evaluate_continuation(window, s, regime=regime)
-                if ct.triggered:
-                    strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
-                    _conf = getattr(ct, "confidence", None) or getattr(ct, "score", None)
-            if strategy is not None:
-                fill = bars[i + 1][_O] * (1.0 + SLIPPAGE_PCT / 100.0)
-                qty = lot / fill
-                fee = qty * fill * (s.taker_fee_pct / 100.0)
-                cash -= qty * fill + fee
-                _entry_ms[0] = bars[i + 1][0]
-                pmeta.update(confidence=(round(_conf, 3) if isinstance(_conf, (int, float)) else None),
-                             atr_stop=None, armed=False)
-                pos = Position(
-                    symbol=symbol, quantity=qty, avg_cost=fill, peak_price=fill, trough_price=fill,
-                    fee_paid_buy=fee, entry_timestamp=_iso(bars[i + 1][0]),
-                    structural_stop=struct_stop, strategy=strategy, entry_profile=entry_profile,
-                    regime_at_entry=regime.regime,
-                )
+            if pos is None:
+                break
 
-        # ---- equity curve + drawdown ----
-        eq = cash + (pos.quantity * px if pos else 0.0)
-        equity_curve.append(round(eq, 2))
-        peak_equity = max(peak_equity, eq)
+        # position still open at window end -> mark out at the last close (for reporting)
+        if pos is not None:
+            _close(bars[end_idx - 1][_C], "EOD", "END_OF_WINDOW", bars[end_idx - 1][0], 1.0)
+            pos = None
+
+    # ---- equity curve + drawdown from realised P&L (trades ordered by exit time) ----
+    equity_curve = [round(cash, 2)]
+    _eq = cash
+    peak_equity = _eq
+    max_dd = 0.0
+    for t in sorted(trades, key=lambda x: x["exit_ts"]):
+        _eq += t["pnl"]
+        equity_curve.append(round(_eq, 2))
+        peak_equity = max(peak_equity, _eq)
         if peak_equity > 0:
-            max_dd = max(max_dd, (peak_equity - eq) / peak_equity * 100.0)
-
-    # force mark-out of any still-open position at the last close (for reporting)
-    if pos is not None:
-        _close(bars[end_idx - 1][_C], "EOD", "END_OF_WINDOW", bars[end_idx - 1][0], 1.0)
-        pos = None
+            max_dd = max(max_dd, (peak_equity - _eq) / peak_equity * 100.0)
 
     return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe,
                       exit_method=exit_method, target_profit=target_profit, target_loss=target_loss,
@@ -349,7 +368,6 @@ def _exit_method_label(exit_method: str, target_profit: float, target_loss: floa
 
 def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h",
                exit_method="fixed", target_profit=5.0, target_loss=4.0, lot=75.0, atrp=None) -> dict:
-    closed = [t for t in trades if not t["partial"]] or trades
     n = len(trades)
     wins = [t for t in trades if t["pnl"] > 0]
     net = sum(t["pnl"] for t in trades)
@@ -363,7 +381,9 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         for t in trades:
             k = t.get(key) or "—"
             g = out.setdefault(k, {"n": 0, "wins": 0, "net": 0.0})
-            g["n"] += 1; g["wins"] += 1 if t["pnl"] > 0 else 0; g["net"] += t["pnl"]
+            g["n"] += 1
+            g["wins"] += 1 if t["pnl"] > 0 else 0
+            g["net"] += t["pnl"]
         return {k: {"n": v["n"], "win_pct": round(v["wins"] / v["n"] * 100, 1),
                     "net_pnl": round(v["net"], 4)} for k, v in out.items()}
 
