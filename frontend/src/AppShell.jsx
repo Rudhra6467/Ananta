@@ -8,6 +8,7 @@ import SettingsPage from "@/pages/Settings";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
+import AccountOverlay from "@/components/AccountOverlay";
 import anantaEmblem from "@/assets/ananta-emblem.png";
 import { useAuth } from "@/context/AuthContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
@@ -119,6 +120,7 @@ function Shell() {
 /* ---------------- Dynamic context top header (hide-on-scroll) ---------------- */
 function TopHeader({ active, ready, isOwner, hidden }) {
     const { portfolio } = useAppData();
+    const [accountOpen, setAccountOpen] = useState(false);
 
     return (
         <header
@@ -130,11 +132,17 @@ function TopHeader({ active, ready, isOwner, hidden }) {
             <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-3">
                 {/* Row 1 — brand + master controls (compact so the wordmark never clips) */}
                 <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        data-testid="ananta-logo-btn"
+                        onClick={() => setAccountOpen(true)}
+                        title="Account & privacy"
+                        className="flex items-center gap-2 shrink-0 -ml-1.5 pl-1.5 pr-2.5 py-1 rounded-lg border border-transparent hover:border-atlas-border hover:bg-atlas-panelHover active:scale-95 transition-all group"
+                    >
                         <img src={anantaEmblem} alt="Ananta" data-testid="ananta-emblem"
-                            className="h-7 w-7 md:h-9 md:w-9 object-contain select-none" draggable={false} />
-                        <div className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</div>
-                    </div>
+                            className="h-7 w-7 md:h-9 md:w-9 object-contain select-none transition-transform group-hover:scale-105" draggable={false} />
+                        <span className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</span>
+                    </button>
                     <div className="flex items-center gap-1.5 shrink-0">
                         <EnvironmentToggle />
                         <TradeHistoryPdfDialog />
@@ -155,6 +163,8 @@ function TopHeader({ active, ready, isOwner, hidden }) {
                     </div>
                 </div>
             )}
+
+            <AccountOverlay open={accountOpen} onOpenChange={setAccountOpen} />
         </header>
     );
 }
