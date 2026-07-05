@@ -1,5 +1,16 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-05 — HOTFIX: production crash-loop on MongoDB Atlas timeout
+
+- **Symptom (production):** `pymongo NetworkTimeout` to Atlas + repeated `/health` `connection refused`/`upstream timed out` → total outage (no login, no data). K8s was crash-looping the backend container.
+- **Root cause:** the FastAPI `@app.on_event("startup")` `await`ed several MongoDB calls (`load_settings`, `load_portfolio`, `seed_owner`, `create_index`). Uvicorn does not serve ANY request (incl. the `/health` probe) until startup returns — so when Atlas was slow/unreachable, startup hung (30s default server-selection × multiple ops), the probe failed, and the container was killed and restarted in a loop. The Mongo client also had **no timeouts** (30s default).
+- **Fix (server.py):**
+  1. Added fast client timeouts: `serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, socketTimeoutMS=20000` so a slow Atlas fails fast instead of hanging.
+  2. Made startup **non-blocking**: `on_startup` now only schedules `_deferred_startup()` and returns immediately → "Application startup complete" fires instantly and `/health` serves (~1ms). `_deferred_startup` runs the DB bootstrap + background loops with a retry loop, so a transient Atlas outage degrades gracefully (app stays up, self-heals when Mongo returns) instead of crash-looping.
+- Verified: `/health` returns 200 in ~1ms during boot; "startup complete" precedes "Deferred DB bootstrap complete"; login works once bootstrap finishes.
+- NOTE: if the Atlas cluster itself remains unreachable that is a production infra issue (contact Emergent Support) — this fix prevents the *total crash-loop outage* and auto-recovers, but data requires Atlas to be reachable. **Requires redeploy.**
+
+
 ## 2026-07-05 — Research Lab: stuck-run/login fix, strategy+asset dropdowns, Datalogs caching
 
 - **Root cause of "stuck at 11%" + login stalls (FIXED):** the CPU-bound backtest ran in a `ThreadPoolExecutor`, holding Python's GIL and starving the FastAPI event loop → other API calls (login/portfolio) stalled, and multi-asset × 15m/30m runs over long windows crawled for hours. Rewrote `LabWorker` to a **`ProcessPoolExecutor`** (compute in a separate process, event loop stays free) and orchestrate `backtest` runs cell-by-cell in the parent for accurate progress. Added a 300s per-backtest wall-clock budget + pool recycling so a run can never hang forever. Verified: login stays ~0.3s during a heavy 4-asset compare-ON run.

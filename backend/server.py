@@ -37,7 +37,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+# Fail fast instead of hanging on the driver's 30s default when Atlas is briefly slow /
+# unreachable — a hung Mongo op must never be able to stall the health probe or a request.
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+    socketTimeoutMS=20000,
+    retryWrites=True,
+)
 db = client[os.environ["DB_NAME"]]
 
 # ---- logging ----
@@ -1485,11 +1493,31 @@ app.add_middleware(
 # ---- lifecycle ----
 @app.on_event("startup")
 async def on_startup():
-    # ensure singletons exist
-    await load_settings(db)
-    await load_portfolio(db)
-    await seed_owner(db)
-    await db.users.create_index("email", unique=True)
+    # CRITICAL: nothing here may block on MongoDB. Uvicorn does not serve ANY request
+    # (including the K8s /health probe) until this returns, so a slow/unreachable Atlas
+    # here would hang the probe and crash-loop the whole container. All Mongo-dependent
+    # init is deferred to a resilient background task that retries until Mongo is reachable.
+    asyncio.create_task(_deferred_startup())
+    logger.info("Ananta backend started (serving /health; DB init deferred).")
+
+
+async def _deferred_startup():
+    """Initialise singletons/indexes and start the background loops off the boot path.
+    Retries the DB-dependent bootstrap until Mongo is reachable so a transient Atlas
+    outage degrades gracefully (app stays up, self-heals) instead of crash-looping."""
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            await load_settings(db)
+            await load_portfolio(db)
+            await seed_owner(db)
+            await db.users.create_index("email", unique=True)
+            logger.info("Deferred DB bootstrap complete (attempt %d).", attempt)
+            break
+        except Exception as e:  # noqa: BLE001
+            logger.warning("DB bootstrap attempt %d failed (Mongo unreachable?): %s", attempt, e)
+            await asyncio.sleep(min(5 + attempt, 30))
     trading_loop.start()
     position_watcher.start()
     research_resolver.start()
@@ -1499,7 +1527,6 @@ async def on_startup():
     # Heavy index builds + first cache compute run OFF the boot path so the backend
     # becomes healthy instantly even on a large production DB (avoids boot-probe timeouts).
     asyncio.create_task(_background_warmup())
-    logger.info("Ananta backend started.")
 
 
 async def _background_warmup():
