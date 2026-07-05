@@ -1,5 +1,13 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-05 — WEB: Ananta logo button + Account/Privacy overlay (parity with mobile)
+
+- The web Ananta logo (header, `AppShell.jsx` TopHeader) is now an interactive **button** (`ananta-logo-btn`) with hover (`hover:border-atlas-border hover:bg-atlas-panelHover`) + active (`active:scale-95`) states.
+- Clicking it opens `AccountOverlay.jsx` (shadcn Dialog): Profile header (avatar + real email + auth-status badge), Login & Auth card (real email + masked password + JWT type), invite banner, Features + Settings placeholder sections ("Soon"), an in-app **privacy statement** (for App Store privacy info), and a real **Log out** (owner only). Only real data this sprint = email + auth status.
+- Added `DialogDescription` for a11y. Verified by web testing agent (iteration_20, 11/11 PASS, both logged-out READ-ONLY and logged-in AUTHENTICATED states; password never leaked to DOM).
+- Created `/app/memory/MOBILE_ACCOUNT_PROMPT.md`: compiled mobile-workspace prompt (background, privacy info, logo-button click + features, corrections, parity).
+
+
 ## 2026-07-05 — Mobile: Account overlay (App Store privacy workaround) + parity pack
 
 - **New feature (mobile `/app/mobile`):** tapping the Ananta logo in the Cockpit header (now `Pressable`, testID `account-logo-btn`) opens an **Account overlay** modal route `app/account.tsx`, registered in `app/_layout.tsx` with `presentation:"modal"`. Mirrors the reference layout — **Profile header** (avatar initials + real email), a **Login Credentials** card (real email + masked password `••••••••` + "Secure token (JWT)"), an **invite banner**, a **Features** section (Exchange/Referrals/Offers/Earn/Tax — placeholders, "Soon" pills), a **Settings** section (Payment methods/Notifications/Security — placeholders), and a real **Log out** action. Only real login credentials populated this sprint (dynamic profile fields deferred). Built with theme tokens so it inherits the app theme. Verified by mobile testing agent (iteration_19, 10/10 PASS).

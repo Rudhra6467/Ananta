@@ -1,5 +1,5 @@
 import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 
 // Account overlay (web) — opened by the Ananta logo button. Mirrors the mobile Account
@@ -42,6 +42,9 @@ export default function AccountOverlay({ open, onOpenChange }) {
             <DialogContent className="bg-atlas-panel border-atlas-border max-w-md p-0 gap-0 overflow-hidden" data-testid="account-overlay">
                 <DialogHeader className="px-5 pt-5 pb-3 border-b border-atlas-border">
                     <DialogTitle className="font-heading tracking-wide text-atlas-text">Account</DialogTitle>
+                    <DialogDescription className="font-mono text-[11px] text-atlas-textTertiary">
+                        Account &amp; privacy · your login details and app info
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="max-h-[70vh] overflow-y-auto atlas-scroll px-5 py-4 space-y-5">
