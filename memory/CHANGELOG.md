@@ -1,5 +1,15 @@
 # Ananta.AI — CHANGELOG
 
+## 2026-07-05 — Research Lab: stuck-run/login fix, strategy+asset dropdowns, Datalogs caching
+
+- **Root cause of "stuck at 11%" + login stalls (FIXED):** the CPU-bound backtest ran in a `ThreadPoolExecutor`, holding Python's GIL and starving the FastAPI event loop → other API calls (login/portfolio) stalled, and multi-asset × 15m/30m runs over long windows crawled for hours. Rewrote `LabWorker` to a **`ProcessPoolExecutor`** (compute in a separate process, event loop stays free) and orchestrate `backtest` runs cell-by-cell in the parent for accurate progress. Added a 300s per-backtest wall-clock budget + pool recycling so a run can never hang forever. Verified: login stays ~0.3s during a heavy 4-asset compare-ON run.
+- **Backtest strategy filter:** `run_backtest(..., strategies=[...])` gates which of Hunter/Squeeze/Continuation are evaluated; `LabRunCreate` + `create_run` persist `strategies` and `compare_timeframes`.
+- **15m/30m comparison now OPT-IN:** `compare_timeframes` defaults **off** → 1h-only (live-parity, ~3× faster). Checkbox in the RUN VALIDATION dialog turns on the multi-timeframe report.
+- **Validation UI redesign (`StrategyValidationPanel.jsx`):** replaced the screen-filling asset chip grid with two compact Popover multi-select dropdowns — **Strategy** (with "Select all", default all three) and **Assets** (with "Select all") — plus the unchanged **Period** dropdown, in a 3-column config row. New `compare-tf-checkbox` (default off).
+- **Datalogs instant load (`Reports.jsx`):** added a module-level `_reportsCache` so re-opening the tab renders instantly from cache with a silent background refresh (was re-fetching 10 endpoints with an empty gate on every visit).
+- Verified end-to-end by testing agent (iteration_18): backend 7/7 pytest + full web UI flow, all PASS.
+
+
 ## 2026-07-04 — Deployment fix (/health probe) + Trade Life Cycle "Show N more"
 
 - **Deployment blocker RESOLVED:** production deploy was failing because the K8s liveness/readiness probe hits top-level `GET /health` but the backend only exposed `/api/*` routes → 404 → container marked unhealthy (nginx `upstream timed out` / `connection refused`). Added a lightweight top-level `@app.get("/health")` in `server.py` returning `{"status":"ok"}` instantly (no DB/external calls). Verified 200 locally. `deployment_agent` re-scan → PASS.
