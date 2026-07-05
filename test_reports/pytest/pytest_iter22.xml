@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="28.981" timestamp="2026-07-05T18:18:14.306545+00:00" hostname="agent-env-f38528a7-fb55-4fde-95ad-386468e0d3a7"><testcase classname="tests.test_lab_exit_abc" name="test_all_three_methods_reach_done" time="19.786" /><testcase classname="tests.test_lab_exit_abc" name="test_abc_have_identical_entries" time="0.001"><failure message="AssertionError: entries diverge across exit methods:&#10;    native=15 atr=12 fixed=7&#10;assert [('BTC/USD', ...143.055), ...] == [('BTC/USD', ...5.24225), ...]&#10;  &#10;  At index 4 diff: ('BTC/USD', 'continuation', '2026-06-12T22:00:00+00:00', 63469.9191) != ('BTC/USD', 'continuation', '2026-06-16T04:00:00+00:00', 66143.055)&#10;  Left contains 3 more items, first extra item: ('BTC/USD', 'hunter', '2026-06-24T17:00:00+00:00', 59804.0871)&#10;  &#10;  Full diff:&#10;    [&#10;        (...&#10;  &#10;  ...Full output truncated (90 lines hidden), use '-vv' to show">backend/tests/test_lab_exit_abc.py:115: in test_abc_have_identical_entries
+    assert entries["native"] == entries["atr"] == entries["fixed"], (
+E   AssertionError: entries diverge across exit methods:
+E       native=15 atr=12 fixed=7
+E   assert [('BTC/USD', ...143.055), ...] == [('BTC/USD', ...5.24225), ...]
+E     
+E     At index 4 diff: ('BTC/USD', 'continuation', '2026-06-12T22:00:00+00:00', 63469.9191) != ('BTC/USD', 'continuation', '2026-06-16T04:00:00+00:00', 66143.055)
+E     Left contains 3 more items, first extra item: ('BTC/USD', 'hunter', '2026-06-24T17:00:00+00:00', 59804.0871)
+E     
+E     Full diff:
+E       [
+E           (...
+E     
+E     ...Full output truncated (90 lines hidden), use '-vv' to show</failure></testcase><testcase classname="tests.test_lab_exit_abc" name="test_exit_modules_differ_per_method" time="0.000" /><testcase classname="tests.test_lab_exit_abc" name="test_fixed_nets_plus5_minus4" time="0.000" /><testcase classname="tests.test_lab_exit_abc" name="test_replay_fields_present" time="0.000" /><testcase classname="tests.test_lab_exit_abc" name="test_labels_and_position_size" time="0.000"><failure message="AssertionError: native: expected position_size_usd=75, got None&#10;assert None in (75, 75.0)&#10; +  where None = &lt;built-in method get of dict object at 0xf83b000c5480&gt;('position_size_usd')&#10; +    where &lt;built-in method get of dict object at 0xf83b000c5480&gt; = {'atr_params': None, 'exit_method': 'native', 'exit_method_label': 'Native Strategy Exit (Universal Engine)', 'multi_timeframe': {'BTC/USD': {'by_tf': {'1h': {'avg_mae_pct': -0.899, 'avg_mfe_pct': 1.077, 'avg_return_pct': -0.249, 'avg_trade_quality': 53.0, ...}}, 'verdict': {'best_tf': '1h', 'reason': '1h led on return-over-drawdown (-0.98% over 15 trades, 13.3% win)', 'score': -0.894}}}, ...}.get">backend/tests/test_lab_exit_abc.py:183: in test_labels_and_position_size
+    assert res.get("position_size_usd") in (75, 75.0), (
+E   AssertionError: native: expected position_size_usd=75, got None
+E   assert None in (75, 75.0)
+E    +  where None = &lt;built-in method get of dict object at 0xf83b000c5480&gt;('position_size_usd')
+E    +    where &lt;built-in method get of dict object at 0xf83b000c5480&gt; = {'atr_params': None, 'exit_method': 'native', 'exit_method_label': 'Native Strategy Exit (Universal Engine)', 'multi_timeframe': {'BTC/USD': {'by_tf': {'1h': {'avg_mae_pct': -0.899, 'avg_mfe_pct': 1.077, 'avg_return_pct': -0.249, 'avg_trade_quality': 53.0, ...}}, 'verdict': {'best_tf': '1h', 'reason': '1h led on return-over-drawdown (-0.98% over 15 trades, 13.3% win)', 'score': -0.894}}}, ...}.get</failure></testcase><testcase classname="tests.test_lab_exit_abc" name="test_pdf_download_all_methods" time="0.454" /><testcase classname="tests.test_lab_exit_abc" name="test_legacy_engine_maps_to_native" time="8.678" /></testsuite></testsuites>

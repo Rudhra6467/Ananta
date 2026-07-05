@@ -27,7 +27,7 @@ from levels import compute_levels, nearest_support
 from models import Position, Portfolio, RiskSettings
 from primary_layer import evaluate_primary
 from regime import classify_regime
-from setup_classifier import ema
+from setup_classifier import ema, atr
 from router import continuation_allowed, hunter_allowed, squeeze_allowed
 from squeeze import evaluate_squeeze
 from continuation import evaluate_continuation
@@ -59,6 +59,9 @@ def _trade_quality(return_pct: float, mfe_pct: float, mae_pct: float, hold_h: fl
 
 ALL_STRATEGIES = ("hunter", "squeeze", "continuation")
 
+# Default ATR-exit parameters (used when exit_method == "atr" and the caller omits a field).
+ATR_EXIT_DEFAULTS = {"multiplier": 2.5, "period": 14, "trail_activation_pct": 3.0, "trail_distance": 2.0}
+
 
 def run_backtest(
     symbol: str,
@@ -69,9 +72,10 @@ def run_backtest(
     profile_overrides: dict | None = None,
     timeframe: str = "1h",
     strategies: list | tuple | set | None = None,
-    exit_method: str = "engine",
+    exit_method: str = "fixed",
     target_profit: float = 5.0,
     target_loss: float = 4.0,
+    atr_params: dict | None = None,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
@@ -90,6 +94,10 @@ def run_backtest(
                 setattr(s, k, v)
 
     allowed = {x.lower() for x in strategies} if strategies else set(ALL_STRATEGIES)
+    # normalise exit method: legacy "engine" == "native" (full Universal Exit Engine)
+    if exit_method == "engine":
+        exit_method = "native"
+    atrp = {**ATR_EXIT_DEFAULTS, **(atr_params or {})}
     bars = data_store.load_candles(symbol, timeframe)
     daily = data_store.load_candles(symbol, "1d")
     if len(bars) < WARMUP_BARS + 5:
@@ -117,6 +125,21 @@ def run_backtest(
             zone_cache[day] = compute_levels(d_bars, hwin) if d_bars else []
         return zone_cache[day]
 
+    # per-position scratch (one position open at a time): entry confidence + ATR-exit stop state
+    pmeta = {"confidence": None, "atr_stop": None, "armed": False}
+
+    def _replay(qty: float, pnl: float) -> dict:
+        """Trade-replay analytics: $ position size, MFE/MAE in $, captured vs left-on-table."""
+        mfe_usd = (pos.peak_price - pos.avg_cost) * qty
+        mae_usd = (pos.trough_price - pos.avg_cost) * qty
+        return {
+            "position_size_usd": round(pos.avg_cost * qty, 2),
+            "mfe_usd": round(mfe_usd, 4), "mae_usd": round(mae_usd, 4),
+            "captured_pnl": round(pnl, 4),
+            "profit_left_usd": round(max(0.0, mfe_usd - pnl), 4),
+            "confidence": pmeta.get("confidence"),
+        }
+
     def _close(exit_price: float, module, reason, ts, frac: float):
         nonlocal cash, pos
         qty = pos.quantity * frac
@@ -139,6 +162,7 @@ def run_backtest(
             "entry_ts": pos.entry_timestamp, "exit_ts": _iso(ts), "hold_hours": round(hold_h, 2),
             "partial": frac < 1.0,
             "trade_quality_score": _trade_quality(ret_pct, pos.mfe_pct, pos.mae_pct, hold_h),
+            **_replay(qty, pnl),
         })
 
     _entry_ms = [0]
@@ -163,10 +187,16 @@ def run_backtest(
             "entry_ts": pos.entry_timestamp, "exit_ts": _iso(ts), "hold_hours": round(hold_h, 2),
             "partial": False,
             "trade_quality_score": _trade_quality(ret_pct, pos.mfe_pct, pos.mae_pct, hold_h),
+            **_replay(qty, pnl),
         })
         pos.quantity = 0.0
 
     use_fixed = exit_method == "fixed"
+    use_atr = exit_method == "atr"
+    atr_mult = float(atrp["multiplier"])
+    atr_period = int(atrp["period"])
+    atr_trail_act = float(atrp["trail_activation_pct"])
+    atr_trail_dist = float(atrp["trail_distance"])
 
     for i in range(start_idx, end_idx):
         bar = bars[i]
@@ -195,6 +225,28 @@ def run_backtest(
                     pos = None
                 elif bar[_H] >= tp_fill:
                     _close_fixed(tp_fill, "FIXED_TP", "FIXED_TARGET_PROFIT", bar[0])
+                    pos = None
+            elif use_atr:
+                # Pure ATR exit: fixed initial stop = entry - mult*ATR(entry); once the trade
+                # is up >= trail_activation %, trail a stop at peak - trail_distance*ATR. Only
+                # tightens (never loosens). Exit when the bar LOW breaches the active stop.
+                highs = [b[_H] for b in window]
+                lows = [b[_L] for b in window]
+                closes = [b[_C] for b in window]
+                atr_val = atr(highs, lows, closes, atr_period)[-1] if len(closes) >= 2 else None
+                stop = pmeta["atr_stop"]
+                if stop is None and atr_val:
+                    stop = pos.avg_cost - atr_mult * atr_val
+                    pmeta["atr_stop"] = stop
+                if atr_val and pos.mfe_pct >= atr_trail_act:
+                    trail_stop = pos.peak_price - atr_trail_dist * atr_val
+                    if stop is None or trail_stop > stop:
+                        stop = trail_stop
+                        pmeta["atr_stop"] = stop
+                        pmeta["armed"] = True
+                if stop is not None and bar[_L] <= stop:
+                    reason = "ATR_TRAIL_STOP" if pmeta["armed"] else "ATR_INITIAL_STOP"
+                    _close(stop, "ATR", reason, bar[0], 1.0)
                     pos = None
             else:
                 # per-strategy exit-profile override (sweeps): patch the live profile
@@ -226,6 +278,7 @@ def run_backtest(
         if pos is None and i + 1 < len(bars):
             regime = classify_regime(window)
             strategy = entry_profile = struct_stop = None
+            _conf = None
             if "hunter" in allowed and hunter_allowed(regime.regime):
                 zones = _zones_at(bar[0], window)
                 # WS1 parity: multi-timeframe trend filter (4h EMA50 > EMA200) — same gate as live.
@@ -241,20 +294,25 @@ def run_backtest(
                 sig = evaluate_primary(symbol, px, window, zones, s, regime=regime, htf_trend_aligned=_htf)
                 if sig.triggered:
                     strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
+                    _conf = getattr(sig, "confidence", None) or getattr(sig, "score", None)
             if strategy is None and "squeeze" in allowed and squeeze_allowed(regime.regime):
                 sq = evaluate_squeeze(window)
                 if sq.triggered:
                     strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
+                    _conf = getattr(sq, "confidence", None) or getattr(sq, "score", None)
             if strategy is None and "continuation" in allowed and s.continuation_enabled and continuation_allowed(regime.regime):
                 ct = evaluate_continuation(window, s, regime=regime)
                 if ct.triggered:
                     strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
+                    _conf = getattr(ct, "confidence", None) or getattr(ct, "score", None)
             if strategy is not None:
                 fill = bars[i + 1][_O] * (1.0 + SLIPPAGE_PCT / 100.0)
                 qty = lot / fill
                 fee = qty * fill * (s.taker_fee_pct / 100.0)
                 cash -= qty * fill + fee
                 _entry_ms[0] = bars[i + 1][0]
+                pmeta.update(confidence=(round(_conf, 3) if isinstance(_conf, (int, float)) else None),
+                             atr_stop=None, armed=False)
                 pos = Position(
                     symbol=symbol, quantity=qty, avg_cost=fill, peak_price=fill, trough_price=fill,
                     fee_paid_buy=fee, entry_timestamp=_iso(bars[i + 1][0]),
@@ -275,17 +333,22 @@ def run_backtest(
         pos = None
 
     return _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe,
-                      exit_method=exit_method, target_profit=target_profit, target_loss=target_loss)
+                      exit_method=exit_method, target_profit=target_profit, target_loss=target_loss,
+                      lot=lot, atrp=atrp)
 
 
-def _exit_method_label(exit_method: str, target_profit: float, target_loss: float) -> str:
+def _exit_method_label(exit_method: str, target_profit: float, target_loss: float, atrp: dict | None = None) -> str:
     if exit_method == "fixed":
         return f"Fixed $ Target (TP ${target_profit:g} / SL ${target_loss:g})"
-    return "Universal Exit Engine (ATR-based)"
+    if exit_method == "atr":
+        a = atrp or ATR_EXIT_DEFAULTS
+        return (f"ATR Exit (×{a['multiplier']:g} stop, {int(a['period'])}p, "
+                f"arm {a['trail_activation_pct']:g}%, trail ×{a['trail_distance']:g})")
+    return "Native Strategy Exit (Universal Engine)"
 
 
 def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timeframe="1h",
-               exit_method="engine", target_profit=5.0, target_loss=4.0) -> dict:
+               exit_method="fixed", target_profit=5.0, target_loss=4.0, lot=75.0, atrp=None) -> dict:
     closed = [t for t in trades if not t["partial"]] or trades
     n = len(trades)
     wins = [t for t in trades if t["pnl"] > 0]
@@ -329,9 +392,13 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         "symbol": symbol, "start_ms": start_ms, "end_ms": end_ms,
         "timeframe": timeframe,
         "exit_method": exit_method,
-        "exit_method_label": _exit_method_label(exit_method, target_profit, target_loss),
+        "exit_method_label": _exit_method_label(exit_method, target_profit, target_loss, atrp),
         "target_profit": target_profit,
         "target_loss": target_loss,
+        "position_size_usd": round(lot, 2),
+        "target_profit_pct": round(target_profit / lot * 100, 2) if lot else None,
+        "target_loss_pct": round(target_loss / lot * 100, 2) if lot else None,
+        "atr_params": (atrp if exit_method == "atr" else None),
         "starting_capital": start_cap,
         "ending_capital": round(equity_curve[-1], 2) if equity_curve else start_cap,
         "total_return_pct": total_ret,
@@ -345,6 +412,10 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         "avg_return_pct": round(sum(rets) / len(rets), 3) if rets else 0.0,
         "avg_mfe_pct": round(sum(mfes) / len(mfes), 3) if mfes else None,
         "avg_mae_pct": round(sum(maes) / len(maes), 3) if maes else None,
+        "avg_profit_left_usd": round(sum(t.get("profit_left_usd", 0) for t in trades) / n, 3) if n else None,
+        "total_profit_left_usd": round(sum(t.get("profit_left_usd", 0) for t in trades), 2),
+        "avg_mfe_usd": round(sum(t.get("mfe_usd", 0) for t in trades) / n, 3) if n else None,
+        "avg_mae_usd": round(sum(t.get("mae_usd", 0) for t in trades) / n, 3) if n else None,
         "avg_trade_quality": round(sum(t["trade_quality_score"] for t in trades) / n, 1) if n else None,
         "exit_module_breakdown": _bucket("exit_module"),
         "regime_breakdown": _bucket("regime_at_entry"),

@@ -37,7 +37,12 @@ const STATUS_CLS = {
 // rarely change — caching them means re-opening the Research Lab tab is INSTANT and never
 // "loads afresh" or gets stuck when the user hasn't changed anything. Runs still refresh
 // silently in the background (and while a job is active).
-const _labCache = { cov: null, presets: null, runs: null, assets: null, period: null, strategies: null, compareTf: false };
+const ATR_DEFAULTS = { multiplier: 2.5, period: 14, trail_activation_pct: 3, trail_distance: 2 };
+const _labCache = {
+    cov: null, presets: null, runs: null, assets: null, period: null, strategies: null,
+    compareTf: false, exitMethod: "fixed", targetProfit: 5, targetLoss: 4,
+    atrParams: { ...ATR_DEFAULTS }, positionSize: 75,
+};
 
 export default function StrategyValidationPanel() {
     const [cov, setCov] = useState(_labCache.cov);
@@ -45,10 +50,13 @@ export default function StrategyValidationPanel() {
     const [period, setPeriod] = useState(_labCache.period || "3m");
     const [strategies, setStrategies] = useState(_labCache.strategies || ALL_STRATEGY_IDS);
     const [compareTf, setCompareTf] = useState(_labCache.compareTf || false);
-    const [exitMethod, setExitMethod] = useState(_labCache.exitMethod || "engine");
+    const [exitMethod, setExitMethod] = useState(_labCache.exitMethod || "fixed");
     const [targetProfit, setTargetProfit] = useState(_labCache.targetProfit ?? 5);
     const [targetLoss, setTargetLoss] = useState(_labCache.targetLoss ?? 4);
-    const [showTargets, setShowTargets] = useState(false); // collapsed by default
+    const [atrParams, setAtrParams] = useState(_labCache.atrParams || { ...ATR_DEFAULTS });
+    const [positionSize, setPositionSize] = useState(_labCache.positionSize || 75);
+    const [showFixedAdv, setShowFixedAdv] = useState(false); // collapsed by default
+    const [showAtrAdv, setShowAtrAdv] = useState(false); // collapsed by default
     const [runs, setRuns] = useState(_labCache.runs || []);
     const [open, setOpen] = useState(false);
     const [track, setTrack] = useState("current");
@@ -105,6 +113,11 @@ export default function StrategyValidationPanel() {
         }
         // runs — silent background refresh (no spinner, cached list shows instantly)
         loadRuns();
+        // position size (lot) — for the live risk/reward % calculator on fixed-$ targets
+        api.settings().then((st) => {
+            const lot = Number(st?.normal_lot_usd);
+            if (lot > 0) { _labCache.positionSize = lot; setPositionSize(lot); }
+        }).catch(() => {});
     }, []);
 
     // keep the user's asset/period/strategy selection across tab switches
@@ -115,6 +128,10 @@ export default function StrategyValidationPanel() {
     const chooseExitMethod = (next) => { _labCache.exitMethod = next; setExitMethod(next); };
     const chooseTargetProfit = (next) => { _labCache.targetProfit = next; setTargetProfit(next); };
     const chooseTargetLoss = (next) => { _labCache.targetLoss = next; setTargetLoss(next); };
+    const chooseAtrParam = (key, val) => {
+        const next = { ...atrParams, [key]: val };
+        _labCache.atrParams = next; setAtrParams(next);
+    };
 
     // poll while any run is active
     useEffect(() => {
@@ -145,6 +162,12 @@ export default function StrategyValidationPanel() {
                 exit_method: exitMethod,
                 target_profit: Number(targetProfit) || 5,
                 target_loss: Number(targetLoss) || 4,
+                atr_params: exitMethod === "atr" ? {
+                    multiplier: Number(atrParams.multiplier) || ATR_DEFAULTS.multiplier,
+                    period: Number(atrParams.period) || ATR_DEFAULTS.period,
+                    trail_activation_pct: Number(atrParams.trail_activation_pct) || ATR_DEFAULTS.trail_activation_pct,
+                    trail_distance: Number(atrParams.trail_distance) || ATR_DEFAULTS.trail_distance,
+                } : null,
             };
             let spec;
             if (track === "current") {
@@ -311,43 +334,95 @@ export default function StrategyValidationPanel() {
 
                         {track !== "fresh" && (
                             <div className="mt-4 pt-3 border-t border-atlas-border" data-testid="exit-logic-config">
-                                <Label className="label-tag text-[10px]">EXIT LOGIC</Label>
-                                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                                    <button type="button" data-testid="exit-method-engine" onClick={() => chooseExitMethod("engine")}
-                                        className={`text-left p-3 rounded-lg border-2 transition-all ${exitMethod === "engine" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
-                                        <div className="font-mono text-xs font-bold text-atlas-text">Universal Engine</div>
-                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">ATR trail / structural stops</div>
-                                    </button>
-                                    <button type="button" data-testid="exit-method-fixed" onClick={() => chooseExitMethod("fixed")}
-                                        className={`text-left p-3 rounded-lg border-2 transition-all ${exitMethod === "fixed" ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
-                                        <div className="font-mono text-xs font-bold text-atlas-text">Fixed $ Target</div>
-                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">Exit at fixed profit / loss</div>
-                                    </button>
+                                <Label className="label-tag text-[10px]">EXIT STRATEGY</Label>
+                                <div className="grid grid-cols-3 gap-2 mt-1.5">
+                                    {[
+                                        { id: "native", title: "Native Strategy", sub: "Each strategy's own exit" },
+                                        { id: "atr", title: "ATR Exit", sub: "ATR trailing stop" },
+                                        { id: "fixed", title: "Fixed $ Target", sub: "Fixed profit / loss" },
+                                    ].map((o) => (
+                                        <button key={o.id} type="button" data-testid={`exit-method-${o.id}`} onClick={() => chooseExitMethod(o.id)}
+                                            className={`text-left p-2.5 rounded-lg border-2 transition-all ${exitMethod === o.id ? "border-atlas-cyan bg-atlas-panelHover" : "border-atlas-border hover:bg-atlas-panelHover"}`}>
+                                            <div className="font-mono text-[11px] font-bold text-atlas-text">{o.title}</div>
+                                            <div className="font-mono text-[9px] text-atlas-textTertiary mt-0.5 leading-tight">{o.sub}</div>
+                                        </button>
+                                    ))}
                                 </div>
 
-                                {/* sub-options — collapsed (minimised) by default, expand to edit */}
-                                <button type="button" data-testid="exit-targets-toggle" onClick={() => setShowTargets((v) => !v)}
-                                    className="mt-2 w-full flex items-center gap-1.5 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
-                                    {showTargets ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                    Target profit / loss
-                                    {!showTargets && <span className="text-atlas-textTertiary/70">&nbsp;(${targetProfit || 5} / ${targetLoss || 4})</span>}
-                                </button>
-                                {showTargets && (
-                                    <div className="grid grid-cols-2 gap-3 mt-2" data-testid="exit-targets-panel">
-                                        <div>
-                                            <Label className="label-tag text-[10px]">TARGET PROFIT ($)</Label>
-                                            <Input data-testid="target-profit-input" type="number" min={0} step="0.5" value={targetProfit}
-                                                onChange={(e) => chooseTargetProfit(e.target.value)}
-                                                disabled={exitMethod !== "fixed"}
-                                                className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1 disabled:opacity-50" />
-                                        </div>
-                                        <div>
-                                            <Label className="label-tag text-[10px]">TARGET LOSS ($)</Label>
-                                            <Input data-testid="target-loss-input" type="number" min={0} step="0.5" value={targetLoss}
-                                                onChange={(e) => chooseTargetLoss(e.target.value)}
-                                                disabled={exitMethod !== "fixed"}
-                                                className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1 disabled:opacity-50" />
-                                        </div>
+                                {/* ATR advanced settings — collapsed by default, only for ATR */}
+                                {exitMethod === "atr" && (
+                                    <div className="mt-2">
+                                        <button type="button" data-testid="atr-adv-toggle" onClick={() => setShowAtrAdv((v) => !v)}
+                                            className="w-full flex items-center gap-1.5 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                                            {showAtrAdv ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                            Advanced settings
+                                            {!showAtrAdv && <span className="text-atlas-textTertiary/70">&nbsp;(×{atrParams.multiplier}, {atrParams.period}p, arm {atrParams.trail_activation_pct}%, trail ×{atrParams.trail_distance})</span>}
+                                        </button>
+                                        {showAtrAdv && (
+                                            <div className="grid grid-cols-2 gap-3 mt-2" data-testid="atr-adv-panel">
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">ATR MULTIPLIER</Label>
+                                                    <Input data-testid="atr-multiplier-input" type="number" min={0.5} step="0.1" value={atrParams.multiplier}
+                                                        onChange={(e) => chooseAtrParam("multiplier", e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                </div>
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">ATR PERIOD</Label>
+                                                    <Input data-testid="atr-period-input" type="number" min={2} step="1" value={atrParams.period}
+                                                        onChange={(e) => chooseAtrParam("period", e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                </div>
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">TRAIL ACTIVATION (%)</Label>
+                                                    <Input data-testid="atr-trail-activation-input" type="number" min={0} step="0.5" value={atrParams.trail_activation_pct}
+                                                        onChange={(e) => chooseAtrParam("trail_activation_pct", e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                </div>
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">TRAIL DISTANCE (ATR)</Label>
+                                                    <Input data-testid="atr-trail-distance-input" type="number" min={0.5} step="0.1" value={atrParams.trail_distance}
+                                                        onChange={(e) => chooseAtrParam("trail_distance", e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Fixed $ advanced settings — collapsed by default, only for Fixed */}
+                                {exitMethod === "fixed" && (
+                                    <div className="mt-2">
+                                        <button type="button" data-testid="fixed-adv-toggle" onClick={() => setShowFixedAdv((v) => !v)}
+                                            className="w-full flex items-center gap-1.5 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                                            {showFixedAdv ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                            Advanced settings
+                                            {!showFixedAdv && <span className="text-atlas-textTertiary/70">&nbsp;(TP ${targetProfit || 5} / SL ${targetLoss || 4})</span>}
+                                        </button>
+                                        {showFixedAdv && (
+                                            <div className="grid grid-cols-2 gap-3 mt-2" data-testid="fixed-adv-panel">
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">PROFIT TARGET ($)</Label>
+                                                    <Input data-testid="target-profit-input" type="number" min={0} step="0.5" value={targetProfit}
+                                                        onChange={(e) => chooseTargetProfit(e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                    <div className="font-mono text-[10px] text-atlas-cyan mt-1" data-testid="profit-pct-hint">
+                                                        &asymp; {positionSize > 0 ? ((Number(targetProfit) || 0) / positionSize * 100).toFixed(2) : "0.00"}% of trade value
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <Label className="label-tag text-[10px]">STOP LOSS ($)</Label>
+                                                    <Input data-testid="target-loss-input" type="number" min={0} step="0.5" value={targetLoss}
+                                                        onChange={(e) => chooseTargetLoss(e.target.value)}
+                                                        className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" />
+                                                    <div className="font-mono text-[10px] text-atlas-cyan mt-1" data-testid="loss-pct-hint">
+                                                        &asymp; {positionSize > 0 ? ((Number(targetLoss) || 0) / positionSize * 100).toFixed(2) : "0.00"}% of trade value
+                                                    </div>
+                                                </div>
+                                                <div className="col-span-2 font-mono text-[9px] text-atlas-textTertiary">
+                                                    Position size ${positionSize} · percentages update live as you edit.
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -505,7 +580,9 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
                     {run.exit_method && (
                         <span data-testid={`run-exit-${run.id.slice(0, 8)}`}
                             className="font-mono text-[10px] px-2 py-0.5 rounded border border-atlas-cyan/40 text-atlas-cyan whitespace-nowrap">
-                            {run.exit_method === "fixed" ? `Fixed $${run.target_profit ?? 5}/$${run.target_loss ?? 4}` : "Engine exit"}
+                            {run.exit_method === "fixed" ? `Fixed $${run.target_profit ?? 5}/$${run.target_loss ?? 4}`
+                                : run.exit_method === "atr" ? "ATR exit"
+                                    : "Native exit"}
                         </span>
                     )}
                     <span className="font-mono text-xs text-atlas-textSecondary truncate">{run.label || (run.symbols || []).join(", ")}</span>
@@ -560,9 +637,22 @@ function RunDetails({ run }) {
     return (
         <div className="space-y-4">
             {/* explicitly state which exit method was used — for cross-strategy comparison */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5" data-testid="detail-exit-method">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-atlas-cyan shrink-0" />
-                <span className="font-mono text-[11px] text-atlas-text">Exit method used: <b className="text-atlas-cyan">{exitLabel}</b></span>
+            <div className="px-3 py-2 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5" data-testid="detail-exit-method">
+                <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-atlas-cyan shrink-0" />
+                    <span className="font-mono text-[11px] text-atlas-text">Exit method used: <b className="text-atlas-cyan">{exitLabel}</b></span>
+                </div>
+                <div className="font-mono text-[10px] text-atlas-textTertiary mt-1 pl-5" data-testid="detail-exit-params">
+                    Position size ${run.result.position_size_usd ?? run.position_size_usd ?? 75}
+                    {run.exit_method === "fixed" && (() => {
+                        const ps = run.result.position_size_usd || 75;
+                        const tp = run.target_profit ?? 5, tl = run.target_loss ?? 4;
+                        return ` · Profit $${tp} (≈${(tp / ps * 100).toFixed(2)}%) · Stop $${tl} (≈${(tl / ps * 100).toFixed(2)}%)`;
+                    })()}
+                    {run.exit_method === "atr" && run.result.atr_params && (
+                        ` · ATR ×${run.result.atr_params.multiplier} · ${run.result.atr_params.period}p · arm ${run.result.atr_params.trail_activation_pct}% · trail ×${run.result.atr_params.trail_distance}`
+                    )}
+                </div>
             </div>
             {Object.entries(per).map(([sym, m]) => {
                 if (m.error) return <div key={sym} className="font-mono text-[11px] text-atlas-negative">{sym}: {m.error}</div>;
@@ -578,6 +668,15 @@ function RunDetails({ run }) {
                             <Metric label="Prof.Factor" value={m.profit_factor ?? "—"} good={m.profit_factor >= 1} />
                             <Metric label="Max DD" value={fmtPct(m.max_drawdown_pct)} />
                             <Metric label="Trades" value={m.trades ?? 0} />
+                        </div>
+                        {/* trade-replay analytics: captured vs left-on-table (entry-vs-exit diagnosis) */}
+                        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-2" data-testid={`detail-replay-${sym.split("/")[0]}`}>
+                            <Metric label="Net $" value={`${m.net_pnl >= 0 ? "+" : ""}${(m.net_pnl ?? 0).toFixed(2)}`} good={m.net_pnl > 0} />
+                            <Metric label="Avg MFE $" value={m.avg_mfe_usd != null ? `+${m.avg_mfe_usd}` : "—"} />
+                            <Metric label="Avg MAE $" value={m.avg_mae_usd != null ? `${m.avg_mae_usd}` : "—"} />
+                            <Metric label="Avg Left $" value={m.avg_profit_left_usd != null ? `${m.avg_profit_left_usd}` : "—"} />
+                            <Metric label="Total Left $" value={m.total_profit_left_usd != null ? `${m.total_profit_left_usd}` : "—"} />
+                            <Metric label="Avg MFE%" value={m.avg_mfe_pct != null ? fmtPct(m.avg_mfe_pct) : "—"} />
                         </div>
                         {m.strategy_breakdown && Object.keys(m.strategy_breakdown).length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2" data-testid={`detail-strats-${sym.split("/")[0]}`}>
@@ -632,7 +731,8 @@ function TradeLog({ trades, base }) {
     const [open, setOpen] = useState(false);
     if (!trades.length) return null;
     const fmtTs = (iso) => (iso ? String(iso).replace("T", " ").slice(0, 16) : "—");
-    const fmtPx = (v) => (v >= 1000 ? v.toFixed(2) : v >= 1 ? v.toFixed(4) : v.toPrecision(4));
+    const fmtPx = (v) => (v >= 1000 ? v.toFixed(2) : v >= 1 ? v.toFixed(4) : Number(v).toPrecision(4));
+    const dur = (h) => (h == null ? "—" : h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`);
     return (
         <div className="mt-2">
             <button data-testid={`tradelog-toggle-${base}`} onClick={() => setOpen((v) => !v)}
@@ -641,33 +741,53 @@ function TradeLog({ trades, base }) {
                 {open ? "Hide" : "Show"} full trade log ({trades.length})
             </button>
             {open && (
-                <div className="mt-1.5 overflow-x-auto max-h-72 overflow-y-auto border border-atlas-border rounded">
-                    <table className="w-full font-mono text-[10px]" data-testid={`tradelog-table-${base}`}>
+                <div className="mt-1.5 overflow-x-auto max-h-80 overflow-y-auto border border-atlas-border rounded">
+                    <table className="w-full font-mono text-[10px] whitespace-nowrap" data-testid={`tradelog-table-${base}`}>
                         <thead className="sticky top-0 bg-atlas-panel">
                             <tr className="text-atlas-textTertiary text-left border-b border-atlas-border">
                                 <th className="px-2 py-1">#</th>
+                                <th className="px-2">Strategy</th>
                                 <th className="px-2">Entry time</th>
                                 <th className="px-2">Exit time</th>
                                 <th className="px-2 text-right">Entry</th>
                                 <th className="px-2 text-right">Exit</th>
-                                <th className="px-2 text-right">Size</th>
+                                <th className="px-2 text-right">Size $</th>
+                                <th className="px-2 text-right">Dur</th>
+                                <th className="px-2">Exit reason</th>
                                 <th className="px-2 text-right">P&amp;L $</th>
-                                <th className="px-2">Exit</th>
+                                <th className="px-2 text-right">P&amp;L %</th>
+                                <th className="px-2 text-right">MFE $</th>
+                                <th className="px-2 text-right">MAE $</th>
+                                <th className="px-2 text-right">Capt.</th>
+                                <th className="px-2 text-right">Left $</th>
+                                <th className="px-2">Regime</th>
+                                <th className="px-2 text-right">Conf.</th>
                             </tr>
                         </thead>
                         <tbody>
                             {trades.map((t, i) => (
                                 <tr key={i} className="text-atlas-textSecondary border-b border-atlas-border/40">
                                     <td className="px-2 py-1 text-atlas-textTertiary">{i + 1}</td>
-                                    <td className="px-2 whitespace-nowrap">{fmtTs(t.entry_ts)}</td>
-                                    <td className="px-2 whitespace-nowrap">{fmtTs(t.exit_ts)}</td>
+                                    <td className="px-2">{t.strategy || "—"}</td>
+                                    <td className="px-2">{fmtTs(t.entry_ts)}</td>
+                                    <td className="px-2">{fmtTs(t.exit_ts)}</td>
                                     <td className="px-2 text-right tabular-nums">{fmtPx(t.entry_price)}</td>
                                     <td className="px-2 text-right tabular-nums">{fmtPx(t.exit_price)}</td>
-                                    <td className="px-2 text-right tabular-nums">{Number(t.qty).toPrecision(4)}</td>
+                                    <td className="px-2 text-right tabular-nums">{t.position_size_usd ?? "—"}</td>
+                                    <td className="px-2 text-right tabular-nums">{dur(t.hold_hours)}</td>
+                                    <td className="px-2 text-atlas-textTertiary">{t.exit_reason || t.exit_module}</td>
                                     <td className={`px-2 text-right tabular-nums font-bold ${t.pnl >= 0 ? "text-atlas-positive" : "text-atlas-negative"}`}>
                                         {t.pnl >= 0 ? "+" : ""}{Number(t.pnl).toFixed(2)}
                                     </td>
-                                    <td className="px-2 text-atlas-textTertiary whitespace-nowrap">{t.exit_module}</td>
+                                    <td className={`px-2 text-right tabular-nums ${t.return_pct >= 0 ? "text-atlas-positive" : "text-atlas-negative"}`}>
+                                        {t.return_pct >= 0 ? "+" : ""}{Number(t.return_pct).toFixed(2)}%
+                                    </td>
+                                    <td className="px-2 text-right tabular-nums text-atlas-positive">{t.mfe_usd != null ? `+${t.mfe_usd}` : "—"}</td>
+                                    <td className="px-2 text-right tabular-nums text-atlas-negative">{t.mae_usd != null ? t.mae_usd : "—"}</td>
+                                    <td className="px-2 text-right tabular-nums">{t.captured_pnl != null ? t.captured_pnl : "—"}</td>
+                                    <td className="px-2 text-right tabular-nums text-atlas-warning">{t.profit_left_usd != null ? t.profit_left_usd : "—"}</td>
+                                    <td className="px-2 text-atlas-textTertiary">{t.regime_at_entry || "—"}</td>
+                                    <td className="px-2 text-right tabular-nums">{t.confidence != null ? t.confidence : "—"}</td>
                                 </tr>
                             ))}
                         </tbody>

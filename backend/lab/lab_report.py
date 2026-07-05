@@ -30,7 +30,26 @@ def _exit_label(run: dict) -> str:
         return res["exit_method_label"]
     if run.get("exit_method") == "fixed":
         return f'Fixed $ Target (TP ${run.get("target_profit", 5):g} / SL ${run.get("target_loss", 4):g})'
-    return "Universal Exit Engine (ATR-based)"
+    return "Native Strategy Exit (Universal Engine)"
+
+
+def _exit_params_rows(run: dict):
+    """Exit-parameter provenance rows for the config block (position size, targets/%, ATR params)."""
+    res = run.get("result") or {}
+    ps = res.get("position_size_usd") or 75
+    rows = [["Position size", f"${ps:g}"]]
+    em = run.get("exit_method")
+    if em == "fixed":
+        tp, tl = run.get("target_profit", 5), run.get("target_loss", 4)
+        rows.append(["Profit target", f"${tp:g}  (≈{tp / ps * 100:.2f}% of trade value)"])
+        rows.append(["Stop loss", f"${tl:g}  (≈{tl / ps * 100:.2f}% of trade value)"])
+    elif em == "atr":
+        a = res.get("atr_params") or run.get("atr_params") or {}
+        if a:
+            rows.append(["ATR parameters",
+                         f"×{a.get('multiplier')} stop · {int(a.get('period', 14))}p · "
+                         f"arm {a.get('trail_activation_pct')}% · trail ×{a.get('trail_distance')}"])
+    return rows
 
 
 def _config_block(s, run: dict):
@@ -40,6 +59,7 @@ def _config_block(s, run: dict):
         ["Symbols", ", ".join(run.get("symbols") or [])],
         ["Period", f'{run.get("period","—")}  ({_date(run.get("start_ms"))} → {_date(run.get("end_ms"))})'],
         ["Exit method", _exit_label(run)],
+        *_exit_params_rows(run),
         ["Strategies", ", ".join(run.get("strategies") or ["hunter", "squeeze", "continuation"])],
         ["Metric", run.get("metric", "—")],
         ["Git commit", run.get("git_hash", "—")],
@@ -63,8 +83,11 @@ def _summary_metrics(s, title, summ: dict):
         ["Sharpe (per-trade)", _fmt(summ.get("sharpe"))],
         ["Sortino (per-trade)", _fmt(summ.get("sortino"))],
         ["Profit factor", _fmt(summ.get("profit_factor"))],
+        ["Net P&L", (f"${summ['net_pnl']:g}" if summ.get("net_pnl") is not None else "—")],
         ["Avg MFE", _fmt(summ.get("avg_mfe_pct"), "%")],
         ["Avg MAE", _fmt(summ.get("avg_mae_pct"), "%")],
+        ["Avg profit left on table", (f"${summ['avg_profit_left_usd']:g}" if summ.get("avg_profit_left_usd") is not None else "—")],
+        ["Total profit left on table", (f"${summ['total_profit_left_usd']:g}" if summ.get("total_profit_left_usd") is not None else "—")],
         ["Avg trade quality", _fmt(summ.get("avg_trade_quality"))],
     ]
     flow = [Paragraph(title, s["h3"]),

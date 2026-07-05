@@ -113,9 +113,10 @@ async def create_run(db, spec: dict) -> dict:
         "label": spec.get("label"),
         "strategies": spec.get("strategies") or None,
         "compare_timeframes": bool(spec.get("compare_timeframes", False)),
-        "exit_method": spec.get("exit_method") or "engine",
+        "exit_method": spec.get("exit_method") or "fixed",
         "target_profit": float(spec.get("target_profit", 5.0)),
         "target_loss": float(spec.get("target_loss", 4.0)),
+        "atr_params": spec.get("atr_params") or None,
         "status": "QUEUED", "progress_pct": 0.0, "git_hash": git_hash(),
         "created_at": _now(), "started_at": None, "finished_at": None,
         "result": None, "error": None,
@@ -243,9 +244,10 @@ class LabWorker:
         overrides = dict(setting_overrides=run.get("setting_overrides"),
                          profile_overrides=run.get("profile_overrides"),
                          strategies=run.get("strategies"),
-                         exit_method=run.get("exit_method", "engine"),
+                         exit_method=run.get("exit_method", "fixed"),
                          target_profit=run.get("target_profit", 5.0),
-                         target_loss=run.get("target_loss", 4.0))
+                         target_loss=run.get("target_loss", 4.0),
+                         atr_params=run.get("atr_params"))
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
         loop = asyncio.get_event_loop()
 
@@ -272,14 +274,25 @@ class LabWorker:
                 await self._set_progress(rid, step / total * 100)
             tf_metrics = {tf: _tf_metrics(tf_results.get(f"{sym}|{tf}")) for tf in timeframes}
             multi_tf[sym] = {"by_tf": tf_metrics, "verdict": _tf_verdict(tf_metrics)}
-        em = run.get("exit_method", "engine")
+        em = run.get("exit_method", "fixed")
+        if em == "engine":
+            em = "native"
         tp, tl = run.get("target_profit", 5.0), run.get("target_loss", 4.0)
+        ap = {**{"multiplier": 2.5, "period": 14, "trail_activation_pct": 3.0, "trail_distance": 2.0},
+              **(run.get("atr_params") or {})}
+        if em == "fixed":
+            label = "Fixed $ Target (TP $%g / SL $%g)" % (tp, tl)
+        elif em == "atr":
+            label = "ATR Exit (×%g stop, %dp, arm %g%%, trail ×%g)" % (
+                ap["multiplier"], int(ap["period"]), ap["trail_activation_pct"], ap["trail_distance"])
+        else:
+            label = "Native Strategy Exit (Universal Engine)"
         return {
             "per_symbol": out, "multi_timeframe": multi_tf,
             "exit_method": em,
-            "exit_method_label": ("Fixed $ Target (TP $%g / SL $%g)" % (tp, tl)) if em == "fixed"
-                                 else "Universal Exit Engine (ATR-based)",
+            "exit_method_label": label,
             "target_profit": tp, "target_loss": tl,
+            "atr_params": (ap if em == "atr" else None),
         }
 
     async def _run_optimize(self, run: dict) -> dict:

@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 22 (A/B/C exit-strategy) — Web frontend PASSES all 9 requested UI checks. Dialog exposes EXIT STRATEGY section on Track A + Track C (hidden on Track B) with three buttons (exit-method-native / -atr / -fixed); default selected = fixed. Fixed advanced panel is COLLAPSED by default, expands to reveal target-profit-input=5 + target-loss-input=4 with LIVE percentage hints ('≈ 6.67% of trade value' / '≈ 5.33% of trade value'); editing profit to 7.5 reactively updates to '≈ 10.00%'. ATR panel is COLLAPSED by default, expands to atr-multiplier-input=2.5, atr-period-input=14, atr-trail-activation-input=3, atr-trail-distance-input=2. Native shows no advanced panel (correct). 12 pre-existing runs render correct badges (Native exit / ATR exit / Fixed $5/$4). Expanding each method's run shows detail-exit-method banner with the right label + detail-exit-params line ('Position size $75 · Profit $5 (≈6.67%) · Stop $4 (≈5.33%)' / 'ATR ×2.5 · 14p · arm 3% · trail ×2'), plus detail-replay-BTC row (Net $, Avg MFE $, Avg MAE $, Avg Left $, Total Left $, Avg MFE%). tradelog-toggle-BTC expands tradelog-table-BTC with ALL 17 spec columns; first fixed trade = FIXED_TARGET_LOSS -4.00/-4.55%, first ATR trade = ATR_INITIAL_STOP, first native trade = STRUCTURE_FAILURE. Backend pytest 6/8 (test_lab_exit_abc.py): PDFs 200 for all 3 methods, replay fields present, distinct exit modules per method, fixed nets exactly ±$5/-$4, legacy engine still accepted. TWO backend gaps: (1) A/B/C parity FAILS — entries diverge (native=15, atr=12, fixed=7) because different exit timings shift subsequent entry windows; spec requires 'Same entries, only exit changes'. (2) position_size_usd missing on native run's result block (present on fixed/atr; UI falls back to 75 hardcode so display still shows '$75'). Pre-existing Radix DialogDescription a11y warning persists on the validation dialog (carry-over from iter 20/21).",
+  "platforms_tested": ["web"],
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/lab/runs (A/B/C parity)",
+        "issue": "Entries diverge across exit methods on identical inputs. On period='2m', asset=BTC/USD, strategies=[hunter,squeeze,continuation]: native=15 entries, atr=12, fixed=7. Root cause: different exit timings change when positions release, shifting the next-entry candidate window (single-position/cooldown gate). Spec explicitly requires identical entries so only exit logic changes — this invariant currently does NOT hold. Fix approach: log ALL entry signals once (exit-agnostic) then simulate each exit against that fixed entry set.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/lab/runs/{id} (native)",
+        "issue": "result.position_size_usd is null on native-exit runs; present (=75) on fixed and atr. UI falls back to hardcoded 75 in detail-exit-params so cosmetic only. Populate on native runs too for parity."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "RUN VALIDATION dialog (Radix)", "issues": ["Pre-existing a11y warning: 'Missing Description or aria-describedby={undefined} for {DialogContent}' — carry-over from iter 20/21. Non-blocking."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_lab_exit_abc.py",
+    "/app/test_reports/pytest/pytest_iter22.xml",
+    "/tmp/dialog_iter22.png",
+    "/tmp/fixed_detail_iter22.png"
+  ],
+  "action_items": [
+    "HIGH — Backend: Make A/B/C runs use an IDENTICAL entry set. Currently different exit timings shift subsequent entries (native=15 vs atr=12 vs fixed=7 on same inputs). Suggested fix in /app/backend/lab/backtest.py: pre-compute the exit-agnostic entry log first, then re-simulate the same entries against each exit module.",
+    "MINOR — Backend: populate result.position_size_usd on native-exit runs (already present on fixed/atr). File hint: /app/backend/lab/backtest.py / runner.py.",
+    "MINOR — Frontend a11y: add <DialogDescription> to the RUN VALIDATION Dialog to silence the Radix warning (carry-over from iter 20/21). File: /app/frontend/src/components/StrategyValidationPanel.jsx L268-270."
+  ],
+  "critical_code_review_comments": [
+    "StrategyValidationPanel.jsx is 860 lines — exceeds the 700-line guideline (up from 740 in iter 21). Split RunRow / RunDetails / TradeLog / MultiSelect into sibling files.",
+    "detail-exit-params fallback uses a hardcoded 75 (`(run.result.position_size_usd || 75)`) — should read from settings.normal_lot_usd / positionSize state and never assume 75.",
+    "Live % hint math uses `positionSize` (from settings.normal_lot_usd) in the dialog but hardcoded 75 in the RunDetails fallback — inconsistent when the operator changes lot size."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lab_exit_abc.py (new — 8 tests, 6 passing, 2 failing revealing the backend gaps above)"
+  ],
+  "success_rate": {"backend": "75% (6/8 test_lab_exit_abc)", "frontend": "100% (all 9 requested UI checks green)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (localStorage key 'ananta_owner_token'). Auth via fetch in browser context works cleanly; direct urllib login returns 403 (WAF-style bot filter) — use in-browser fetch or UI login.",
+  "seed_data_creation": "Backend test suite created 4 lab runs (native, atr, fixed, legacy engine) on BTC/USD period 2m. All reached DONE and are visible in the runs list.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Full spec coverage verified on web UI: exit-logic-config, exit-method-native/-atr/-fixed with default=fixed, collapsed fixed-adv-panel/atr-adv-panel, target-profit-input(5)/target-loss-input(4), profit-pct-hint & loss-pct-hint LIVE reactivity, all 4 ATR inputs, run-exit-<id8> badges (Native/ATR/Fixed $5/$4), detail-exit-method + detail-exit-params banners, detail-replay-<BASE> with 6 metrics, tradelog-toggle-<BASE> + tradelog-table-<BASE> with all 17 columns exactly as speced. Backend regression: /app/backend/tests/test_lab_exit_abc.py (needs REACT_APP_BACKEND_URL exported). Also keep the earlier /app/backend/tests/test_lab_exit_logic.py (iter 21) around. Two backend gaps remain (see backend_issues).",
+  "rca of the issue": "A/B/C parity fails because the backtest engine advances state (position open/cooldown) using each exit's actual exit-time. When ATR fires earlier than native, the position frees up sooner → more entries later; when Fixed fires much later (1.5d in some cases vs native's 7h), fewer entries fit into the same window. This is why native=15 > atr=12 > fixed=7. To fulfil 'A/B/C testing = same entries, only exit changes', the runner must simulate all three exit modules against the SAME shared entry set (e.g., simulate all entries in parallel per bar, tracking each module's per-entry position independently), OR replay each module against the entries produced by a reference run (e.g., native). The frontend already surfaces the divergence correctly (7/12/15 counts in badges + trade log)."
+}
