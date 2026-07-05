@@ -72,7 +72,9 @@ export default function Cockpit() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Logo size={22} />
+        <Pressable testID="account-logo-btn" onPress={() => router.push("/account")} hitSlop={10}>
+          <Logo size={22} />
+        </Pressable>
         <Pill
           label={isLive ? "LIVE" : "PAPER"}
           tone={isLive ? "red" : "teal"}
