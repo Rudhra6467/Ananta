@@ -1,3 +1,32 @@
+## 2026-07-06 — Platform Phase 1: Strategy Registry + Parameter Schema + Strategy Configs (backend, DONE + tested)
+
+**Foundation for the AI-native platform vision** (see `ARCHITECTURE_PLATFORM.md`). Additive + non-breaking —
+existing Hunter/Squeeze/Continuation logic + backtest engine untouched; this is a new configuration layer.
+
+**New package `/app/backend/strategy/`:**
+- `core.py`: `ParamSpec` (type/min/max/step/grid/options/group/visibility/depends_on/engine_backed),
+  `StrategyDNA`, `StrategySchema`; `StrategyConfig` (tenant-aware, SPARSE overrides, `parent_config_id`
+  inheritance, `strategy_version`, `origin`, `rating`+`validation_status` hooks for Phase 3); versioned
+  REGISTRY (`key@version`); `validate_params`; `resolve_config` (defaults ← parent chain ← self, cycle-safe).
+- `definitions.py`: built-in schemas + DNA for hunter@1.0.0 (22 params), squeeze@1.0.0 (12), continuation@1.0.0 (18).
+  Param ids map to real `RiskSettings` fields (`engine_backed=True`) so Phase 2 can drive the engine 1:1.
+
+**API (`/api/strategy/*`, tenant="owner"):** GET registry, GET {key}/schema, GET/POST/PUT/DELETE configs
+(owner-gated writes; validates against schema; blocks deleting builtins or configs with children),
+POST seed-defaults (idempotent builtin roots). Mongo collection `strategy_configs`.
+
+**Verified:** `tests/test_strategy_foundation.py` (registry, validation ok/errors, enum, inheritance
+resolution, cycle-safety) all pass. Live curl E2E: registry lists 3 strategies w/ DNA; seed created 3
+builtins; parent→child inheritance resolved correctly (child inherits parent's rsi/target_profit, applies
+own lot, schema default exit_method); validation rejects out-of-range + unknown params. Python lint clean.
+
+**Platform:** backend only (this workspace = backend+web source of truth; sync to Workspace 2 via GitHub).
+**Next (Phase 2):** Research Lab reads schemas / edits configs; AI Optimization Engine (grid search over
+`grid`/ranges → rank by PF/Sharpe/DD/stability + overfitting/confidence scoring).
+
+---
+
+
 ## 2026-07-06 — Logs/Reports rename, 3-group Datalogs layout, naming cleanup, accordion data-render fix (web)
 
 **Requests (web frontend only):**

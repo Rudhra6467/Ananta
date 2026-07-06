@@ -1483,6 +1483,135 @@ async def lab_reject_proposal(prop_id: str):
     return {"status": "REJECTED"}
 
 
+# ============================================================================ #
+# PLATFORM PHASE 1 — Strategy Registry + Parameter Schema + Strategy Configs
+# Additive + tenant-aware. Configs are sparse overrides with inheritance + versioning;
+# resolved params flatten schema defaults <- parent chain <- self. (Engine wiring = Phase 2.)
+# ============================================================================ #
+from strategy import (  # noqa: E402
+    StrategyConfig,
+    get_schema,
+    list_schemas,
+    now_iso as _strat_now_iso,
+    resolve_config,
+    validate_params,
+)
+
+_OWNER_TENANT = "owner"  # single-tenant today; every row is already tenant-scoped for the future.
+
+
+@api_router.get("/strategy/registry")
+async def strategy_registry():
+    """All built-in strategies with their DNA + full parameter schema (latest version each)."""
+    return {"strategies": [s.model_dump() for s in list_schemas()]}
+
+
+@api_router.get("/strategy/{key}/schema")
+async def strategy_schema_endpoint(key: str, version: str | None = Query(None)):
+    s = get_schema(key, version)
+    if not s:
+        raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
+    return s.model_dump()
+
+
+@api_router.get("/strategy/configs")
+async def strategy_list_configs(strategy_key: str | None = Query(None)):
+    q: dict = {"tenant_id": _OWNER_TENANT}
+    if strategy_key:
+        q["strategy_key"] = strategy_key
+    rows = await db.strategy_configs.find(q, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return {"configs": rows}
+
+
+@api_router.get("/strategy/configs/{config_id}")
+async def strategy_get_config(config_id: str):
+    row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT}, {"_id": 0})
+    if not row:
+        raise HTTPException(status_code=404, detail="config not found")
+    all_rows = await db.strategy_configs.find({"tenant_id": _OWNER_TENANT}, {"_id": 0}).to_list(2000)
+    by_id = {r["id"]: r for r in all_rows}
+    schema = get_schema(row["strategy_key"], row.get("strategy_version"))
+    return {"config": row, "resolved_params": resolve_config(row, by_id, schema)}
+
+
+@api_router.post("/strategy/configs", dependencies=[Depends(require_owner)])
+async def strategy_create_config(payload: dict):
+    key = payload.get("strategy_key")
+    schema = get_schema(key, payload.get("strategy_version"))
+    if not schema:
+        raise HTTPException(status_code=400, detail=f"unknown strategy '{key}'")
+    params = payload.get("params") or {}
+    ok, errs = validate_params(schema, params)
+    if not ok:
+        raise HTTPException(status_code=422, detail={"errors": errs})
+    parent_id = payload.get("parent_config_id")
+    if parent_id and not await db.strategy_configs.find_one({"id": parent_id, "tenant_id": _OWNER_TENANT}):
+        raise HTTPException(status_code=400, detail="parent_config_id not found")
+    cfg = StrategyConfig(
+        tenant_id=_OWNER_TENANT, strategy_key=key, strategy_version=schema.version,
+        name=(payload.get("name") or f"{schema.name} config"),
+        params=params, parent_config_id=parent_id, origin=payload.get("origin", "user"),
+    )
+    await db.strategy_configs.insert_one(cfg.model_dump())
+    return {"config": cfg.model_dump()}
+
+
+@api_router.put("/strategy/configs/{config_id}", dependencies=[Depends(require_owner)])
+async def strategy_update_config(config_id: str, payload: dict):
+    row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT})
+    if not row:
+        raise HTTPException(status_code=404, detail="config not found")
+    schema = get_schema(row["strategy_key"], row.get("strategy_version"))
+    updates: dict = {}
+    if "params" in payload:
+        ok, errs = validate_params(schema, payload["params"] or {})
+        if not ok:
+            raise HTTPException(status_code=422, detail={"errors": errs})
+        updates["params"] = payload["params"] or {}
+    for f in ("name", "parent_config_id", "rating", "validation_status"):
+        if f in payload:
+            updates[f] = payload[f]
+    if not updates:
+        raise HTTPException(status_code=400, detail="no updatable fields provided")
+    updates["updated_at"] = _strat_now_iso()
+    await db.strategy_configs.update_one({"id": config_id}, {"$set": updates})
+    return {"config": await db.strategy_configs.find_one({"id": config_id}, {"_id": 0})}
+
+
+@api_router.delete("/strategy/configs/{config_id}", dependencies=[Depends(require_owner)])
+async def strategy_delete_config(config_id: str):
+    row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT})
+    if not row:
+        raise HTTPException(status_code=404, detail="config not found")
+    if row.get("origin") == "builtin":
+        raise HTTPException(status_code=400, detail="cannot delete a built-in default config")
+    children = await db.strategy_configs.count_documents(
+        {"tenant_id": _OWNER_TENANT, "parent_config_id": config_id})
+    if children:
+        raise HTTPException(status_code=400, detail=f"config has {children} child config(s); delete those first")
+    await db.strategy_configs.delete_one({"id": config_id})
+    return {"deleted": config_id}
+
+
+@api_router.post("/strategy/seed-defaults", dependencies=[Depends(require_owner)])
+async def strategy_seed_defaults():
+    """Create one 'Default' built-in config per strategy (idempotent) — the root of every inheritance chain."""
+    created: list[str] = []
+    for s in list_schemas():
+        exists = await db.strategy_configs.find_one(
+            {"tenant_id": _OWNER_TENANT, "strategy_key": s.key, "origin": "builtin"})
+        if exists:
+            continue
+        cfg = StrategyConfig(
+            tenant_id=_OWNER_TENANT, strategy_key=s.key, strategy_version=s.version,
+            name=f"{s.name} · Default", params={}, origin="builtin", validation_status="passed",
+        )
+        await db.strategy_configs.insert_one(cfg.model_dump())
+        created.append(cfg.id)
+    return {"created": created, "count": len(created)}
+
+
+
 # ---- mount router and CORS ----
 app.include_router(api_router)
 app.add_middleware(
