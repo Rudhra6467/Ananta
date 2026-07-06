@@ -16,7 +16,7 @@ import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 const TABS = [
     { id: "dashboard", label: "Cockpit", icon: Activity, Component: Dashboard },
     { id: "portfolio", label: "Portfolio", icon: Briefcase, Component: Portfolio },
-    { id: "reports", label: "Datalogs", icon: Database, Component: Reports },
+    { id: "reports", label: "Logs", icon: Database, Component: Reports },
     { id: "settings", label: "Research Lab", icon: FlaskConical, Component: SettingsPage },
 ];
 
@@ -204,8 +204,8 @@ function ContextInfo({ active, portfolio }) {
         );
     }
 
-    const title = id === "reports" ? "DataLogs / Reports" : "Research Lab";
-    const subtitle = id === "reports" ? "Validation · Analytics · Reasoning archive" : "Strategy validation · optimization sandbox · engine config";
+    const title = id === "reports" ? "Logs / Reports" : "Research Lab";
+    const subtitle = id === "reports" ? "Reasons, Reports, & Reasoning Analytics" : "Strategy validation · optimization sandbox · engine config";
     return (
         <div data-testid={`context-${id}`}>
             <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>

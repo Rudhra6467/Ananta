@@ -201,7 +201,7 @@ export default function SettingsPage() {
 
             <div className="space-y-4">
                 {/* RISK THRESHOLDS */}
-                <CollapsibleSection testId="settings-risk-thresholds" label="RISK ENGINE · LAYER 6" title="Risk Thresholds">
+                <CollapsibleSection testId="settings-risk-thresholds" label="RISK ENGINE" title="Risk Thresholds">
                     <div className="p-5 space-y-6">
                         <SliderField
                             id="spread"
@@ -275,7 +275,7 @@ export default function SettingsPage() {
                 </CollapsibleSection>
 
                 {/* ADAPTIVE SIZING */}
-                <CollapsibleSection testId="settings-adaptive-sizing" label="ADAPTIVE LOT SIZING · LAYER 5b" title="USD-Lot per Setup Strength">
+                <CollapsibleSection testId="settings-adaptive-sizing" label="ADAPTIVE LOT SIZING" title="USD-Lot per Setup Strength">
                     <div className="p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>

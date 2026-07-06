@@ -121,44 +121,61 @@ export default function Reports() {
                 </div>
             </div>
 
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-lab" label="RESEARCH" title="Strategy Research Laboratory">
-                <StrategyLab data={sandbox} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-funnel" label="RESEARCH" title="Signal Attrition Funnel">
-                <StrategyFunnel data={sandbox} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-staged-exit" label="RESEARCH" title="33/66/99 Stop Simulation">
-                <StagedExitCard data={staged} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-why-no-trade" label="DIAGNOSTIC" title="Why No Trade?">
-                <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-breaker" label="DIAGNOSTIC" title="Circuit Breaker Accuracy">
-                <BreakerAccuracy breaker={funnel?.breaker_accuracy} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-rejection" label="DIAGNOSTIC" title="Rejection Leaderboard">
-                <RejectionLeaderboard rejections={rejections} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-winner" label="PHASE B · DIAGNOSTIC ONLY" title="Winning Trade Profile">
-                <WinnerProfile data={winners} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-rsi" label="PHASE B · DIAGNOSTIC ONLY" title="RSI Distribution Study">
-                <RsiDistribution data={rsiDist} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-missed" label="PHASE B · DIAGNOSTIC ONLY" title="Missed-Opportunity Analysis">
-                <MissedOpportunities data={missed} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-zone" label="PHASE B · DIAGNOSTIC ONLY" title="Support-Zone Effectiveness">
-                <ZoneEffectiveness data={zones} />
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-reasoning" label="LOG" title="AI Reasoning Log · Latest 15">
-                <div className="max-h-[70vh] overflow-y-auto p-6 pt-4 atlas-scroll" data-testid="reasoning-scroll-container">
-                    <ReasoningTimeline items={items} />
+            <section className="space-y-3" data-testid="dl-group-research">
+                <div className="label-tag">Research</div>
+                <div className="space-y-4">
+                    <CollapsibleSection groupName="datalogs-accordion" defaultOpen testId="dl-strategy-lab" title="Strategy Research Laboratory">
+                        <StrategyLab data={sandbox} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-funnel" title="Signal Attrition Funnel">
+                        <StrategyFunnel data={sandbox} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-staged-exit" title="33 / 66 / 99 Stop Simulation">
+                        <StagedExitCard data={staged} />
+                    </CollapsibleSection>
                 </div>
-            </CollapsibleSection>
-            <CollapsibleSection groupName="datalogs-accordion" testId="dl-confidence" label="LOG" title="Confidence Distribution">
-                <ConfidenceDistribution summary={summary} />
-            </CollapsibleSection>
+            </section>
+
+            <section className="space-y-3" data-testid="dl-group-diagnostic">
+                <div className="label-tag">Diagnostic</div>
+                <div className="space-y-4">
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-why-no-trade" title="Why No Trade?">
+                        <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-breaker" title="Circuit Breaker Accuracy">
+                        <BreakerAccuracy breaker={funnel?.breaker_accuracy} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-rejection" title="Rejection Leaderboard">
+                        <RejectionLeaderboard rejections={rejections} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-winner" title="Winning Trade Profile">
+                        <WinnerProfile data={winners} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-rsi" title="RSI Distribution Study">
+                        <RsiDistribution data={rsiDist} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-missed" title="Missed-Opportunity Analysis">
+                        <MissedOpportunities data={missed} />
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-zone" title="Support-Zone Effectiveness">
+                        <ZoneEffectiveness data={zones} />
+                    </CollapsibleSection>
+                </div>
+            </section>
+
+            <section className="space-y-3" data-testid="dl-group-log">
+                <div className="label-tag">Log</div>
+                <div className="space-y-4">
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-reasoning" title="AI Reasoning Log · Latest 15">
+                        <div className="max-h-[70vh] overflow-y-auto p-6 pt-4 atlas-scroll" data-testid="reasoning-scroll-container">
+                            <ReasoningTimeline items={items} />
+                        </div>
+                    </CollapsibleSection>
+                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-confidence" title="Confidence Distribution">
+                        <ConfidenceDistribution summary={summary} />
+                    </CollapsibleSection>
+                </div>
+            </section>
         </div>
     );
 }

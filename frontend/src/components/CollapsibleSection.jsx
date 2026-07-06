@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 /**
  * CollapsibleSection — an in-place expand/collapse panel (no dialog/modal).
- * Uses the native <details> element with a shared `name` so only ONE section per
- * group can be open at a time (single-open accordion). Collapsed by default;
- * clicking the header expands the body downward and clicking again collapses it.
+ * Native <details> with a shared `name` = single-open accordion (only one open per group).
+ * `open` is React-controlled (synced via onToggle) so background data-polling re-renders never
+ * fight the user, and children are mounted ONLY when open — this guarantees charts/graphs
+ * measure a real width on expand (fixes blank/stalled charts inside a collapsed section).
  */
 export function CollapsibleSection({
     groupName = "rl-accordion",
@@ -14,10 +16,18 @@ export function CollapsibleSection({
     right,
     testId,
     className = "",
+    defaultOpen = false,
     children,
 }) {
+    const [open, setOpen] = useState(defaultOpen);
     return (
-        <details name={groupName} className={`panel group ${className}`} data-testid={testId}>
+        <details
+            name={groupName}
+            open={open}
+            onToggle={(e) => setOpen(e.currentTarget.open)}
+            className={`panel group ${className}`}
+            data-testid={testId}
+        >
             <summary
                 data-testid={testId ? `${testId}-toggle` : undefined}
                 className="list-none cursor-pointer select-none px-5 pt-4 pb-3 flex items-center justify-between gap-3 hover:bg-atlas-panelHover transition-colors group-open:border-b group-open:border-atlas-border [&::-webkit-details-marker]:hidden"
@@ -36,7 +46,7 @@ export function CollapsibleSection({
                     <ChevronDown className="w-4 h-4 text-atlas-textTertiary transition-transform group-open:rotate-180" />
                 </div>
             </summary>
-            <div>{children}</div>
+            {open && <div>{children}</div>}
         </details>
     );
 }

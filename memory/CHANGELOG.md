@@ -1,3 +1,40 @@
+## 2026-07-06 — Logs/Reports rename, 3-group Datalogs layout, naming cleanup, accordion data-render fix (web)
+
+**Requests (web frontend only):**
+1. Header/nav rename: "DataLogs / Reports" → **"Logs / Reports"**; subtitle → **"Reasons, Reports, &
+   Reasoning Analytics"** (rendered via `.label-tag`, 0.2em tracking); bottom-nav tab "Datalogs" → **"Logs"**.
+2. Datalogs 3-group layout: stripped per-card category labels; added three static group headers
+   **Research / Diagnostic / Log** (`.label-tag` tracking). Phase-B cards (Winning Trade Profile, RSI
+   Distribution, Missed-Opportunity, Support-Zone) merged into **Diagnostic**. Strategy Research
+   Laboratory **auto-expands** on load.
+3. Research Lab naming cleanup: dropped "· LAYER 6" and "· LAYER 5b" from section labels.
+
+**Files:** `AppShell.jsx` (title/subtitle/nav label), `pages/Reports.jsx` (3-group return, defaultOpen,
+per-card labels removed), `pages/Settings.jsx` (LAYER labels), `components/CollapsibleSection.jsx`.
+
+**CollapsibleSection fix (root-cause for "sections not drawing / stalling"):** rewrote to a React-
+controlled `<details>` (`open` synced via `onToggle`, `defaultOpen` prop) that **mounts children only
+when open**. This (a) makes charts measure a real width on expand (Recharts inside a collapsed
+`display:none` details previously computed 0-width), and (b) stops the 20s data-polling re-render from
+fighting the auto-expanded section. Single-open accordion preserved via shared `name`.
+
+**"Not loading data" / Counterfactual Engine — diagnosed, NOT a code bug:** curl'd all `/api/research/*`
+endpoints — they return HTTP 200 with valid structure but **empty data** because the paper book has only
+~9 closed trades and forward-resolution windows (24h/72h/7d) haven't produced resolved counterfactuals
+yet (`counterfactuals_resolved: {24h:0,72h:0,7d:0}`; RSI/zone/missed buckets all 0). Winner Profile
+(which has data) renders correctly. Components show correct empty states; charts populate once data exists.
+
+**Exit Configuration Panel (requested):** ALREADY EXISTS in `StrategyValidationPanel` (native / ATR /
+Fixed toggle with ATR multiplier+period+trail params and Target-PnL $ profit/loss fields + live %
+hints). No new build needed.
+
+**Verified (preview, playwright DOM + screenshots + curl):** both tabs render; group headers present;
+auto-expand + single-open confirmed; Winner Profile data table renders on expand; LAYER labels gone;
+ESLint clean; no console errors. FRESH START / PDF / REFRESH buttons already share identical `rounded-md`.
+
+---
+
+
 ## 2026-07-05 — Datalogs + Research Lab: in-place accordion sections (web) + 2 removals
 
 **Request:** In the Datalogs and Research Lab tabs, every section should behave like Cockpit's
