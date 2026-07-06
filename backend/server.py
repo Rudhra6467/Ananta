@@ -1611,6 +1611,78 @@ async def strategy_seed_defaults():
     return {"created": created, "count": len(created)}
 
 
+def _stars_from_metrics(m: dict) -> int:
+    """Rough 1-5 institutional star rating from a config's headline metrics."""
+    pf = m.get("profit_factor") or 0.0
+    dd = abs(m.get("max_drawdown_pct") or 0.0)
+    ret = m.get("total_return_pct") or 0.0
+    score = 0
+    score += 2 if pf >= 1.8 else 1 if pf >= 1.2 else 0
+    score += 1 if ret > 0 else 0
+    score += 2 if dd <= 5 else 1 if dd <= 12 else 0
+    return max(1, min(5, score))
+
+
+@api_router.post("/strategy/configs/from-lab-run", dependencies=[Depends(require_owner)])
+async def strategy_config_from_lab_run(payload: dict):
+    """Bridge: promote the winning exit engine from a Research Lab exit-comparison into a saved
+    StrategyConfig (origin='optimizer') — turns research findings into a reusable, rateable config."""
+    from lab.backtest import EXIT_COMPARISON_CONFIGS  # noqa: PLC0415
+
+    run_id = payload.get("run_id")
+    key = payload.get("strategy_key")
+    schema = get_schema(key, payload.get("strategy_version"))
+    if not schema:
+        raise HTTPException(status_code=400, detail=f"unknown strategy '{key}'")
+    run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})
+    if not run:
+        raise HTTPException(status_code=404, detail="lab run not found")
+    ec = ((run.get("result") or {}).get("exit_comparison")) or {}
+    if not ec:
+        raise HTTPException(status_code=400, detail="run has no exit_comparison (re-run to generate one)")
+    symbol = payload.get("symbol") or next(iter(ec), None)
+    by_tf = ec.get(symbol) or {}
+    timeframe = payload.get("timeframe") or ("1h" if "1h" in by_tf else next(iter(by_tf), None))
+    block = by_tf.get(timeframe) or {}
+    winner_key = block.get("winner_key")
+    if not winner_key:
+        raise HTTPException(status_code=400, detail=f"no winning config for {symbol} · {timeframe}")
+
+    cfg_def = next((c for c in EXIT_COMPARISON_CONFIGS if c["key"] == winner_key), None)
+    if not cfg_def:
+        raise HTTPException(status_code=400, detail=f"unknown exit config '{winner_key}'")
+    params: dict = {"exit_method": cfg_def["exit_method"]}
+    if cfg_def["exit_method"] == "fixed":
+        params["target_profit"] = float(cfg_def.get("target_profit", 5.0))
+        params["target_loss"] = float(cfg_def.get("target_loss", 4.0))
+    elif cfg_def["exit_method"] == "atr":
+        params["atr_multiplier"] = float((cfg_def.get("atr_params") or {}).get("multiplier", 2.5))
+
+    ok, errs = validate_params(schema, params)
+    if not ok:
+        raise HTTPException(status_code=422, detail={"errors": errs})
+
+    metrics = (block.get("rows") or {}).get(winner_key) or {}
+    rating = {
+        "stars": _stars_from_metrics(metrics),
+        "profit_factor": metrics.get("profit_factor"),
+        "win_rate_pct": metrics.get("win_rate_pct"),
+        "total_return_pct": metrics.get("total_return_pct"),
+        "max_drawdown_pct": metrics.get("max_drawdown_pct"),
+        "recommended": True,
+        "source": f"lab_run:{run_id}",
+    }
+    cfg = StrategyConfig(
+        tenant_id=_OWNER_TENANT, strategy_key=key, strategy_version=schema.version,
+        name=(payload.get("name") or f"{schema.name} · {cfg_def['label']} ({symbol} {timeframe})"),
+        params=params, origin="optimizer", rating=rating,
+    )
+    await db.strategy_configs.insert_one(cfg.model_dump())
+    return {"config": cfg.model_dump(), "source": {"run_id": run_id, "symbol": symbol,
+            "timeframe": timeframe, "winner_key": winner_key}}
+
+
+
 
 # ---- mount router and CORS ----
 app.include_router(api_router)
