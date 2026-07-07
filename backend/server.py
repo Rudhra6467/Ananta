@@ -119,6 +119,8 @@ class SettingsUpdate(BaseModel):
     stop_loss_pct: float | None = None
     trail_arm_pct: float | None = None
     trail_distance_pct: float | None = None
+    dynamic_trail_enabled: bool | None = None
+    profile_overrides: dict | None = None
     position_watcher_interval_seconds: int | None = None
     vault_sync_enabled: bool | None = None
     vault_max_override_usd: float | None = None

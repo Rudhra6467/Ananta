@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Download, RefreshCw, X } from "lucide-react";
+import { Check, Download, RefreshCw, X, Layers, Stethoscope, HelpCircle, Brain, Activity, Target, Gauge, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import api, { API, TOKEN_KEY } from "@/lib/api";
 import ReasoningTimeline from "@/components/ReasoningTimeline";
-import CollapsibleSection from "@/components/CollapsibleSection";
+import QuadrantCard from "@/components/lab/QuadrantCard";
+import LabModal from "@/components/lab/LabModal";
 
 const GATES = [
     { code: "REJECTED_NO_SUPPORT_ZONE", label: "Support Zone" },
@@ -74,7 +75,6 @@ export default function Reports() {
         refresh();
         const t = setInterval(refresh, 20000);
         return () => clearInterval(t);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -100,82 +100,135 @@ export default function Reports() {
         }
     };
 
+    const [openModal, setOpenModal] = useState(null); // 'dist' | 'diag' | 'why' | 'ai'
+
+    // ---- face metrics (localized) ----
+    const strategies = sandbox?.strategies || [];
+    const topStrat = strategies[0]?.label || strategies[0]?.name || strategies[0]?.strategy || "—";
+    const breaker = funnel?.breaker_accuracy;
+    const breakerRows = breaker ? Object.keys(breaker).length : 0;
+    const rejCount = rejections?.rejection_leaderboard?.length ?? (Array.isArray(rejections) ? rejections.length : 0);
+    const latest = (items && items[0]) || null;
+    const latestDecision = latest ? (latest.absolute_decision || latest.decision || "—") : "—";
+    const whyDecision = whyRow ? (whyRow.absolute_decision || whyRow.decision || "—") : "—";
+    const whyConf = whyRow?.macro_confidence != null ? Number(whyRow.macro_confidence).toFixed(2) : "—";
+    const decCls = (d) => /BUY|EXECUTE/i.test(d) ? "text-atlas-positive" : /SELL|REJECT/i.test(d) ? "text-atlas-negative" : "text-atlas-text";
+
     return (
-        <div className="space-y-4" data-testid="reports-page">
-            <div className="flex items-center justify-end flex-wrap gap-3">
-                <div className="flex items-center gap-2">
-                    {isOwner && (
-                        <button data-testid="reports-fresh-start" onClick={freshStart}
-                            className="font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10 transition-colors rounded-md">
-                            FRESH START
-                        </button>
-                    )}
-                    <button data-testid="reports-download-pdf" onClick={downloadPdf}
-                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border hover:border-atlas-cyan hover:text-atlas-text transition-colors text-atlas-textSecondary rounded-md">
-                        <Download className="w-3 h-3" /> PDF
+        <div className="space-y-5 pb-24" data-testid="reports-page">
+            {/* header controls */}
+            <div className="flex items-center justify-end flex-wrap gap-2">
+                {isOwner && (
+                    <button data-testid="reports-fresh-start" onClick={freshStart}
+                        className="font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10 transition-colors rounded-lg">
+                        FRESH START
                     </button>
-                    <button data-testid="reports-refresh" onClick={refresh}
-                        className="font-mono text-[10px] text-atlas-textSecondary hover:text-atlas-text flex items-center gap-2 transition-colors px-3 py-2 border border-atlas-border rounded-md">
-                        <RefreshCw className="w-3 h-3" /> REFRESH
-                    </button>
-                </div>
+                )}
+                <button data-testid="reports-download-pdf" onClick={downloadPdf}
+                    className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border hover:border-atlas-cyan hover:text-atlas-text transition-colors text-atlas-textSecondary rounded-lg">
+                    <Download className="w-3 h-3" /> PDF
+                </button>
+                <button data-testid="reports-refresh" onClick={refresh}
+                    className="font-mono text-[10px] text-atlas-textSecondary hover:text-atlas-text flex items-center gap-2 transition-colors px-3 py-2 border border-atlas-border rounded-lg">
+                    <RefreshCw className="w-3 h-3" /> REFRESH
+                </button>
             </div>
 
-            <section className="space-y-3" data-testid="dl-group-research">
-                <div className="label-tag">Research</div>
-                <div className="space-y-4">
-                    <CollapsibleSection groupName="datalogs-accordion" defaultOpen testId="dl-strategy-lab" title="Strategy Research Laboratory">
-                        <StrategyLab data={sandbox} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-strategy-funnel" title="Signal Attrition Funnel">
-                        <StrategyFunnel data={sandbox} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-staged-exit" title="33 / 66 / 99 Stop Simulation">
-                        <StagedExitCard data={staged} />
-                    </CollapsibleSection>
-                </div>
-            </section>
+            {/* 2×2 cockpit grid */}
+            <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="logs-grid">
+                {/* Q1 — Strategy Distributions */}
+                <QuadrantCard
+                    testid="quad-distributions" icon={Layers} accent="violet"
+                    title="Strategy Distributions" subtitle="Sandbox · Attrition · RSI"
+                    stats={[{ testid: "face-strat-count", label: "Strategies Tracked", value: strategies.length || "—", valueCls: "text-violet-400" }]}
+                    rows={[
+                        { testid: "face-top-strat", icon: TrendingUp, label: "Top by EV", value: typeof topStrat === "string" ? topStrat.slice(0, 16) : "—" },
+                        { testid: "face-funnel", icon: Activity, label: "Attrition Funnel", value: strategies.length ? "Live" : "—", valueCls: strategies.length ? "text-atlas-positive" : "text-atlas-textTertiary" },
+                        { testid: "face-conf-dist", icon: Gauge, label: "Confidence Study", value: summary ? "Ready" : "—", valueCls: summary ? "text-atlas-positive" : "text-atlas-textTertiary" },
+                    ]}
+                    cta="Open Distributions" onOpen={() => setOpenModal("dist")}
+                />
 
-            <section className="space-y-3" data-testid="dl-group-diagnostic">
-                <div className="label-tag">Diagnostic</div>
-                <div className="space-y-4">
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-why-no-trade" title="Why No Trade?">
-                        <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-breaker" title="Circuit Breaker Accuracy">
-                        <BreakerAccuracy breaker={funnel?.breaker_accuracy} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-rejection" title="Rejection Leaderboard">
-                        <RejectionLeaderboard rejections={rejections} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-winner" title="Winning Trade Profile">
-                        <WinnerProfile data={winners} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-rsi" title="RSI Distribution Study">
-                        <RsiDistribution data={rsiDist} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-missed" title="Missed-Opportunity Analysis">
-                        <MissedOpportunities data={missed} />
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-zone" title="Support-Zone Effectiveness">
-                        <ZoneEffectiveness data={zones} />
-                    </CollapsibleSection>
-                </div>
-            </section>
+                {/* Q2 — Diagnosis */}
+                <QuadrantCard
+                    testid="quad-diagnosis" icon={Stethoscope} accent="amber"
+                    title="Diagnosis" subtitle="Winners · Breakers · Zones"
+                    stats={[{ testid: "face-breaker", label: "Breaker Accuracy", value: breakerRows ? `${breakerRows} states` : "—", valueCls: "text-atlas-warning" }]}
+                    rows={[
+                        { testid: "face-rejections", icon: X, label: "Rejections Logged", value: rejCount || "—" },
+                        { testid: "face-winner", icon: Target, label: "Winner Profile", value: winners?.sample ? "Ready" : "—", valueCls: winners?.sample ? "text-atlas-positive" : "text-atlas-textTertiary" },
+                        { testid: "face-staged", icon: Layers, label: "33/66/99 Stops", value: staged?.sample ? "Ready" : "—", valueCls: staged?.sample ? "text-atlas-positive" : "text-atlas-textTertiary" },
+                    ]}
+                    cta="Open Diagnosis" onOpen={() => setOpenModal("diag")}
+                />
 
-            <section className="space-y-3" data-testid="dl-group-log">
-                <div className="label-tag">Log</div>
-                <div className="space-y-4">
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-reasoning" title="AI Reasoning Log · Latest 15">
-                        <div className="max-h-[70vh] overflow-y-auto p-6 pt-4 atlas-scroll" data-testid="reasoning-scroll-container">
-                            <ReasoningTimeline items={items} />
-                        </div>
-                    </CollapsibleSection>
-                    <CollapsibleSection groupName="datalogs-accordion" testId="dl-confidence" title="Confidence Distribution">
-                        <ConfidenceDistribution summary={summary} />
-                    </CollapsibleSection>
+                {/* Q3 — Why No Trade */}
+                <QuadrantCard
+                    testid="quad-why" icon={HelpCircle} accent="cyan"
+                    title="Why No Trade?" subtitle="Per-Symbol Decision Trace"
+                    stats={[{ testid: "face-why-symbol", label: "Symbol", value: selected ? selected.split("/")[0] : "—", valueCls: "text-atlas-cyan" }]}
+                    rows={[
+                        { testid: "face-why-decision", icon: Activity, label: "Last Decision", value: whyDecision, valueCls: decCls(whyDecision) },
+                        { testid: "face-why-conf", icon: Gauge, label: "Macro Confidence", value: whyConf },
+                    ]}
+                    cta="Open Why-No-Trade" onOpen={() => setOpenModal("why")}
+                />
+
+                {/* Q4 — AI Log */}
+                <QuadrantCard
+                    testid="quad-ai" icon={Brain} accent="green"
+                    title="AI Log" subtitle="Reasoning Timeline"
+                    stats={[{ testid: "face-ai-count", label: "Recent Evaluations", value: (items || []).length || "—", valueCls: "text-atlas-positive" }]}
+                    rows={[
+                        { testid: "face-ai-latest", icon: TrendingUp, label: "Latest", value: latest ? `${(latest.symbol || "—").split("/")[0]} · ${latestDecision}` : "—", valueCls: decCls(latestDecision) },
+                    ]}
+                    cta="Open AI Log" onOpen={() => setOpenModal("ai")}
+                />
+            </div>
+
+            {/* Q1 modal */}
+            <LabModal open={openModal === "dist"} onOpenChange={(o) => setOpenModal(o ? "dist" : null)}
+                testid="dist-modal" icon={Layers} accent="violet" title="Strategy Distributions" subtitle="Sandbox · Attrition · RSI · Confidence">
+                <Block title="Strategy Research Laboratory"><StrategyLab data={sandbox} /></Block>
+                <Block title="Signal Attrition Funnel"><StrategyFunnel data={sandbox} /></Block>
+                <Block title="RSI Distribution Study"><RsiDistribution data={rsiDist} /></Block>
+                <Block title="Confidence Distribution"><ConfidenceDistribution summary={summary} /></Block>
+            </LabModal>
+
+            {/* Q2 modal */}
+            <LabModal open={openModal === "diag"} onOpenChange={(o) => setOpenModal(o ? "diag" : null)}
+                testid="diag-modal" icon={Stethoscope} accent="amber" title="Diagnosis" subtitle="Winners · Breakers · Zones · Rejections">
+                <Block title="Winning Trade Profile"><WinnerProfile data={winners} /></Block>
+                <Block title="Circuit Breaker Accuracy"><BreakerAccuracy breaker={funnel?.breaker_accuracy} /></Block>
+                <Block title="33 / 66 / 99 Stop Simulation"><StagedExitCard data={staged} /></Block>
+                <Block title="Missed-Opportunity Analysis"><MissedOpportunities data={missed} /></Block>
+                <Block title="Support-Zone Effectiveness"><ZoneEffectiveness data={zones} /></Block>
+                <Block title="Rejection Leaderboard"><RejectionLeaderboard rejections={rejections} /></Block>
+            </LabModal>
+
+            {/* Q3 modal */}
+            <LabModal open={openModal === "why"} onOpenChange={(o) => setOpenModal(o ? "why" : null)}
+                testid="why-modal" icon={HelpCircle} accent="cyan" title="Why No Trade?" subtitle="Per-Symbol Decision Trace">
+                <WhyNoTrade symbols={symbols} selected={selected} onSelect={setSelected} row={whyRow} />
+            </LabModal>
+
+            {/* Q4 modal */}
+            <LabModal open={openModal === "ai"} onOpenChange={(o) => setOpenModal(o ? "ai" : null)}
+                testid="ai-modal" icon={Brain} accent="green" title="AI Log" subtitle="Reasoning Timeline · Latest 15">
+                <div className="max-h-full overflow-y-auto atlas-scroll" data-testid="reasoning-scroll-container">
+                    <ReasoningTimeline items={items} />
                 </div>
-            </section>
+            </LabModal>
+        </div>
+    );
+}
+
+// Thin titled wrapper so modal sub-sections stay visually separated (replaces the accordions).
+function Block({ title, children }) {
+    return (
+        <div className="panel border-atlas-border rounded-xl overflow-hidden" data-testid={`block-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}>
+            <div className="px-4 py-2.5 border-b border-atlas-border label-tag">{title}</div>
+            <div>{children}</div>
         </div>
     );
 }
