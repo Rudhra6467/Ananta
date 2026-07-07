@@ -1,3 +1,40 @@
+## 2026-07-07 — Research Lab + Logs redesigned into 2×2 Executive Cockpit (web, DONE + tested iter23)
+
+Reworked both the Research Lab (Settings.jsx) and Logs/Reports (Reports.jsx) pages from long vertical
+accordion scrolls into a rigid **2×2 quadrant grid** (always 2 columns at every width, per user). Each
+quadrant card shows REAL face-metrics on its face and opens a full-screen sub-page modal; face updates
+the instant the modal dismisses (localized state store).
+
+**New shared components:** `components/lab/QuadrantCard.jsx` (accent-themed card: icon, headline stats,
+metric rows, CTA), `components/lab/LabModal.jsx` (full-screen sticky-header + scroll-body + optional
+sticky footer), `components/lab/ExitEngineModal.jsx` (Q1).
+
+**Research Lab quadrants:**
+- Q1 Entry & Exit Engine (cyan) — face: Active Exit Engine (ATR/Fixed), trail multiplier, arm, stop.
+  Modal: Step-1 strategy multi-select (Global/Hunter/Squeeze/Continuation) → Step-2 ATR trailing vs
+  Fixed-% stop. **Save writes to LIVE settings** (profile_overrides per strategy + dynamic_trail_enabled
+  + stop/arm/trail). Face flips instantly on save.
+- Q2 Strategy Validation (violet) — face: Model Readiness % + Overfitting Risk + Walk-Forward/Monte
+  Carlo(soon)/Sensitivity, DERIVED from the latest lab runs (real, defensive; "—/Soon" where no data).
+  Modal: existing StrategyValidationPanel (incl. the Save-Winning-Config flow).
+- Q3 Risk Monitor (amber) — face: Risk Status + max positions + daily-loss cap + min conf + max spread.
+  Modal: Risk Thresholds sliders + Adaptive Sizing + KillSwitch + Manual Cycle + Exchange Credentials.
+- Q4 Analytics Engine (green) — face: Portfolio Health + Diversification (Herfindahl index) + win/PF/
+  expectancy/open-positions. Modal: AnalyticsPanel.
+- **Emergency Stop** button top-right under the header toggles manual_kill_switch (moved out of a section).
+- REMOVED per user: Exchange Friction, Operations (Mode & Symbols), Exit Cooldowns sections.
+
+**Logs quadrants:** Q1 Strategy Distributions (StrategyLab/Funnel/RSI/Confidence), Q2 Diagnosis
+(Winner/Breaker/Staged/Missed/Zone/Rejections), Q3 Why-No-Trade, Q4 AI Log (ReasoningTimeline). Header
+keeps PDF / Refresh / Fresh-Start.
+
+**Backend fix (blocker):** `SettingsUpdate` was missing `dynamic_trail_enabled` and `profile_overrides`,
+so Q1 Save silently no-op'd. Added both fields → PUT /api/settings now persists them (verified via re-GET).
+
+**Tested:** testing_agent iter23 — 10/10 backend GREEN, all quadrant/modal testIDs present, exit-engine
+save→instant-face-update confirmed, no runtime crashes. No mobile changes (separate workspace).
+
+
 ## 2026-07-07 — Save Winning Config: Research Lab → Strategy Config engine (backend + web, DONE + tested)
 
 Wired the last-session bridge endpoint (`POST /api/strategy/configs/from-lab-run`) into the web UI so an
