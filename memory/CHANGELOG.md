@@ -1,3 +1,33 @@
+## 2026-07-07 (batch 2) — AI Quant Analyst + Saved Configs (dynamic schema editor) + Monte Carlo (web, tested)
+
+Three backlog features shipped autonomously on top of the 2×2 cockpit.
+
+### AI Quant Analyst (Q4 Analytics modal) — tested green (iter24)
+- New `backend/ai_analyst.py` + `POST /api/analytics/ai_query` (owner-gated). Uses the Emergent LLM key
+  with **claude-sonnet-4-6** via emergentintegrations. Grounded: assembles a compact snapshot of the real
+  reasoning log + closed-trade ledger + aggregate win/PnL so answers are factual, not hallucinated.
+  Multi-turn via `ai_analyst_messages` (session_id replay).
+- Frontend `components/lab/AIAnalystTerminal.jsx`: chat terminal with suggested prompts, embedded above
+  the Analytics panel. Verified: grounded answers + multi-turn context in-browser.
+
+### Saved Configs + schema-driven editor (Q2 Validation modal) — tested green (iter24)
+- Surfaces the versioned `strategy_configs` (created by the lab bridge or by hand). Grouped by strategy,
+  with 1–5★ rating (persists), delete (builtin protected), and per-strategy "NEW".
+- `components/lab/SavedConfigsPanel.jsx` renders a **dynamic parameter editor from the ParameterSchema**
+  (Phase 2 goal: tuning = configuration, not code). Sparse-diff save (only non-default overrides), schema
+  validation → 422 on out-of-range. New api methods: strategyConfigGet/Create/Update/Delete.
+
+### Monte Carlo risk-of-ruin engine (Q2 Validation modal) — self-tested (curl + UI + 4 unit tests)
+- New `backend/lab/monte_carlo.py` + `POST /api/lab/monte_carlo`. Bootstraps (resample-with-replacement)
+  the realised per-trade P&L over N paths → risk-of-ruin %, prob-of-profit %, P5–P95 final-return band,
+  max-drawdown distribution, 12-bin histogram, and a ROBUST/ACCEPTABLE/FRAGILE verdict. Source = live
+  closed trades or a lab run. Pure numpy, credit-free, seeded/deterministic.
+- Frontend `components/lab/MonteCarloPanel.jsx`: iterations + ruin-threshold controls, run button, stat
+  cards, percentile band, histogram. The Q2 face **"Monte Carlo" tile now shows the real verdict** (was
+  "Soon"), computed on mount via a lightweight 1500-path run.
+- Regression: `backend/tests/test_monte_carlo.py` (4 passed).
+
+
 ## 2026-07-07 — Research Lab + Logs redesigned into 2×2 Executive Cockpit (web, DONE + tested iter23)
 
 Reworked both the Research Lab (Settings.jsx) and Logs/Reports (Reports.jsx) pages from long vertical

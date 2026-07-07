@@ -108,6 +108,7 @@ export const api = {
     deleteLabRun: (id) => client.delete(`/lab/runs/${id}`).then((r) => r.data),
     labApplyProposal: (pid) => client.post(`/lab/proposals/${pid}/apply`).then((r) => r.data),
     labRejectProposal: (pid) => client.post(`/lab/proposals/${pid}/reject`).then((r) => r.data),
+    labMonteCarlo: (payload) => client.post("/lab/monte_carlo", payload).then((r) => r.data),
     // --- Strategy Config Engine (schemas + configs) ---
     strategyRegistry: () => client.get("/strategy/registry").then((r) => r.data),
     strategyConfigs: (key) => client.get(`/strategy/configs${key ? `?strategy_key=${key}` : ""}`).then((r) => r.data),

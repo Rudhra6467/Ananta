@@ -560,6 +560,52 @@ async def analytics_ai_query(payload: AiQuery):
     return {"session_id": session_id, "answer": answer}
 
 
+class MonteCarloRequest(BaseModel):
+    source: str = "live"          # "live" (closed trades) | "run" (a lab backtest run)
+    run_id: str | None = None
+    iterations: int = 2000
+    ruin_threshold_pct: float = 25.0
+    starting_equity: float | None = None
+    exclude_synthetic: bool = True
+
+
+@api_router.post("/lab/monte_carlo")
+async def lab_monte_carlo(req: MonteCarloRequest):
+    """Monte Carlo risk-of-ruin: bootstrap thousands of randomised trade-order sequences over
+    the realised per-trade P&L and summarise the outcome distribution (risk-of-ruin, prob-profit,
+    percentile bands, drawdown distribution). Source = live closed trades, or a lab backtest run."""
+    from lab.monte_carlo import run_monte_carlo  # noqa: PLC0415
+
+    pnls: list[float] = []
+    if req.source == "run" and req.run_id:
+        run = await db.lab_runs.find_one({"id": req.run_id}, {"_id": 0})
+        if not run or not run.get("result"):
+            raise HTTPException(status_code=404, detail="run not found or has no result")
+        for m in (run["result"].get("per_symbol") or {}).values():
+            for t in (m.get("trades") or []):
+                if t.get("pnl") is not None:
+                    pnls.append(float(t["pnl"]))
+    else:
+        synthetic_filter = {"note": {"$ne": "DEMO_SEED"}} if req.exclude_synthetic else {}
+        docs = await db.trades.find(
+            {"pnl": {"$ne": None}, **synthetic_filter}, {"_id": 0, "pnl": 1},
+        ).sort("timestamp", 1).to_list(2000)
+        pnls = [float(d["pnl"]) for d in docs if d.get("pnl") is not None]
+
+    start_eq = req.starting_equity
+    if start_eq is None:
+        portfolio = await load_portfolio(db)
+        start_eq = float(getattr(portfolio, "starting_balance", 1000.0) or 1000.0)
+
+    result = run_monte_carlo(
+        pnls, iterations=req.iterations, starting_equity=start_eq,
+        ruin_threshold_pct=req.ruin_threshold_pct,
+    )
+    result["source"] = req.source
+    return result
+
+
+
 
 @api_router.get("/analytics/graduation")
 async def analytics_graduation():

@@ -19,6 +19,7 @@ import LabModal from "@/components/lab/LabModal";
 import ExitEngineModal from "@/components/lab/ExitEngineModal";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
+import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
 import { useAuth } from "@/context/AuthContext";
 
 // Cache the settings payload so re-opening the Research Lab renders instantly from cache.
@@ -169,7 +170,7 @@ export default function SettingsPage() {
                         ]}
                         rows={[
                             { testid: "face-wfa", icon: CheckCircle2, label: "Walk-Forward", value: validation?.wfa || "—", valueCls: validation?.wfa === "Passed" ? "text-atlas-positive" : "text-atlas-textTertiary" },
-                            { testid: "face-mc", icon: Layers, label: "Monte Carlo", value: "Soon", valueCls: "text-atlas-textTertiary" },
+                            { testid: "face-mc", icon: Layers, label: "Monte Carlo", value: validation?.monteCarlo || "—", valueCls: validation?.monteCarlo === "ROBUST" ? "text-atlas-positive" : validation?.monteCarlo === "ACCEPTABLE" ? "text-atlas-warning" : validation?.monteCarlo ? "text-atlas-negative" : "text-atlas-textTertiary" },
                             { testid: "face-sens", icon: Gauge, label: "Sensitivity", value: validation?.sensitivity || "—", valueCls: validation?.sensitivity === "Stable" ? "text-atlas-positive" : "text-atlas-textTertiary" },
                         ]}
                         cta="Open Validation" onOpen={() => setOpenModal("validation")}
@@ -218,6 +219,7 @@ export default function SettingsPage() {
                     testid="validation-modal" icon={ShieldCheck} accent="violet"
                     title="Strategy Validation" subtitle="Walk-Forward · Sensitivity · Stress Tester">
                     <SavedConfigsPanel isOwner={isOwner} />
+                    <MonteCarloPanel onResult={(r) => r?.ok && setValidation((v) => ({ ...(v || {}), monteCarlo: r.verdict }))} />
                     <StrategyValidationPanel />
                 </LabModal>
 
@@ -280,9 +282,14 @@ function diversify(counts) {
 // Derive validation face data from the latest completed lab runs (real, defensive).
 async function deriveValidation() {
     const { runs = [] } = await api.labRuns(20);
-    const done = runs.filter((r) => r.status === "DONE");
-    if (!done.length) return { empty: true };
+    // Monte Carlo verdict from live closed trades (credit-free) — powers the Q2 face tile.
     const out = {};
+    try {
+        const mc = await api.labMonteCarlo({ source: "live", iterations: 1500, ruin_threshold_pct: 25 });
+        if (mc?.ok) out.monteCarlo = mc.verdict;
+    } catch { /* noop */ }
+    const done = runs.filter((r) => r.status === "DONE");
+    if (!done.length) return { ...out, empty: true };
     // walk-forward verdict (needs detail)
     const wf = done.find((r) => r.kind === "walk_forward");
     if (wf) {
