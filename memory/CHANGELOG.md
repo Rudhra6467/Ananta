@@ -1,3 +1,31 @@
+## 2026-07-07 — Save Winning Config: Research Lab → Strategy Config engine (backend + web, DONE + tested)
+
+Wired the last-session bridge endpoint (`POST /api/strategy/configs/from-lab-run`) into the web UI so an
+optimized exit configuration from a Research Lab backtest can be saved into the `strategy_configs` layer.
+
+**Prerequisite BUG FIX (blocker):** `lab/runner.py::_run_backtest` computed the 5-config `exit_comparison`
+(A/B/C exit test) each run but **never included it in the returned result dict** — so `result.exit_comparison`
+was always absent. This silently broke BOTH the PDF exit-comparison table AND the bridge endpoint (always 400).
+Fixed by returning `"exit_comparison": exit_cmp`. Verified: fresh run now persists it (winner `fixed_4_3` for BTC 1h).
+
+**Backend:**
+- `runner.py`: persist `exit_comparison` in result; also store a lightweight top-level `exit_winner`
+  hint `{symbol, timeframe, winner_key, winner_label}` on the run doc (via new `_first_exit_winner`) so the
+  runs LIST endpoint (which strips heavy `result`) can offer one-click save without re-fetching.
+
+**Web frontend (`StrategyValidationPanel.jsx`):**
+- New `api.js` methods: `strategyRegistry`, `strategyConfigs`, `strategyConfigFromLabRun`.
+- Run DETAIL now renders an **Exit-Config Comparison (A/B/C)** table per symbol (winner row highlighted with
+  trophy) + a per-symbol **SAVE WINNING** button.
+- Completed backtest run ROWS with an `exit_winner` hint show a compact **SAVE CONFIG** button.
+- Both open a **SAVE WINNING CONFIG** dialog (winner summary + attach-to-strategy dropdown [Hunter/Squeeze/
+  Continuation] + optional name) → calls the bridge → toast "CONFIG SAVED (N★)".
+
+**Tested:** curl e2e (create run → DONE → `exit_comparison` present → bridge saves optimizer config, 2★) +
+UI screenshots (row button, comparison table, dialog, successful save toast). Lint clean (JS + Py).
+No mobile changes (mobile lives in the separate workspace; backend contract unchanged for it).
+
+
 ## 2026-07-06 — Platform Phase 1: Strategy Registry + Parameter Schema + Strategy Configs (backend, DONE + tested)
 
 **Foundation for the AI-native platform vision** (see `ARCHITECTURE_PLATFORM.md`). Additive + non-breaking —

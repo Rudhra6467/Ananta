@@ -138,6 +138,21 @@ def _run_multi_exit_one(kwargs: dict) -> dict:
     return backtest.run_multi_exit(**kwargs)
 
 
+def _first_exit_winner(result: dict) -> dict | None:
+    """Extract the first symbol/timeframe that has a winning exit config, for the list hint.
+    Prefers the 1h block (live-parity). Returns None when no winner exists."""
+    ec = (result or {}).get("exit_comparison") or {}
+    for symbol, by_tf in ec.items():
+        tf = "1h" if by_tf.get("1h") else (next(iter(by_tf), None))
+        block = by_tf.get(tf) or {}
+        wk = block.get("winner_key")
+        if wk:
+            return {"symbol": symbol, "timeframe": tf,
+                    "winner_key": wk, "winner_label": (block.get("rows") or {}).get(wk, {}).get("label", wk)}
+    return None
+
+
+
 def _run_optimize(run: dict) -> dict:
     """Picklable optimizer body (grid/sensitivity/walk_forward) — executed in a worker
     PROCESS. Runs with a no-op progress callback (parent shows an indeterminate bar)."""
@@ -234,8 +249,13 @@ class LabWorker:
                 result = await self._run_backtest(run)
             else:
                 result = await self._run_optimize(run)
-            await self.db.lab_runs.update_one({"id": rid}, {"$set": {
-                "status": "DONE", "progress_pct": 100.0, "result": result, "finished_at": _now()}})
+            update = {"status": "DONE", "progress_pct": 100.0, "result": result, "finished_at": _now()}
+            # Lightweight top-level winner hint so the runs LIST (which strips `result`)
+            # can offer a one-click "Save Winning Config" without re-fetching the full run.
+            hint = _first_exit_winner(result)
+            if hint:
+                update["exit_winner"] = hint
+            await self.db.lab_runs.update_one({"id": rid}, {"$set": update})
             logger.info("LabWorker DONE run=%s kind=%s", rid, run["kind"])
         except Exception as e:
             logger.exception("LabWorker run %s failed: %s", rid, e)
@@ -316,6 +336,7 @@ class LabWorker:
             label = "Native Strategy Exit (Universal Engine)"
         return {
             "per_symbol": out, "multi_timeframe": multi_tf,
+            "exit_comparison": exit_cmp,
             "exit_method": em,
             "exit_method_label": label,
             "target_profit": tp, "target_loss": tl,

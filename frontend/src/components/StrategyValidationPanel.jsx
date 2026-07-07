@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2, ChevronDown, ChevronRight, Save, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,41 @@ export default function StrategyValidationPanel() {
     const [deleting, setDeleting] = useState(null);
     const [presets, setPresets] = useState(_labCache.presets || []);
     const [presetId, setPresetId] = useState(_labCache.presets?.[0]?.id || "");
+    // Save-winning-config flow (bridge into the Strategy Config engine)
+    const [saveTarget, setSaveTarget] = useState(null); // { run, symbol, timeframe, winnerKey, winnerLabel }
+    const [saveStrategy, setSaveStrategy] = useState("hunter");
+    const [saveName, setSaveName] = useState("");
+    const [saveBusy, setSaveBusy] = useState(false);
+
+    const openSave = (target) => {
+        setSaveTarget(target);
+        // default the config's strategy to the run's sole strategy (else Hunter)
+        const strats = target?.run?.strategies || [];
+        setSaveStrategy(strats.length === 1 ? strats[0] : "hunter");
+        setSaveName("");
+    };
+
+    const submitSave = async () => {
+        if (!saveTarget) return;
+        setSaveBusy(true);
+        try {
+            const res = await api.strategyConfigFromLabRun({
+                run_id: saveTarget.run.id,
+                strategy_key: saveStrategy,
+                symbol: saveTarget.symbol,
+                timeframe: saveTarget.timeframe,
+                name: saveName.trim() || undefined,
+            });
+            toast.success("CONFIG SAVED", {
+                description: `${res.config.name} → strategy_configs (${res.config.rating?.stars ?? "?"}★)`,
+            });
+            setSaveTarget(null);
+        } catch (e) {
+            toast.error("SAVE FAILED", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally {
+            setSaveBusy(false);
+        }
+    };
 
     const loadRuns = () => api.labRuns(12).then((d) => {
         _labCache.runs = d.runs || [];
@@ -504,7 +539,8 @@ export default function StrategyValidationPanel() {
                 ) : (
                     <div className="space-y-2" data-testid="runs-list">
                         {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id}
-                            onPromote={promote} promoting={promoteBusy} onDelete={deleteRun} deleting={deleting === r.id} />)}
+                            onPromote={promote} promoting={promoteBusy} onDelete={deleteRun} deleting={deleting === r.id}
+                            onSaveConfig={openSave} />)}
                     </div>
                 )}
             </div>
@@ -543,14 +579,56 @@ export default function StrategyValidationPanel() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Save-winning-config bridge → Strategy Config engine */}
+            <Dialog open={!!saveTarget} onOpenChange={(o) => { if (!o) setSaveTarget(null); }}>
+                <DialogContent className="bg-atlas-panel border-atlas-border max-w-md" data-testid="save-config-dialog">
+                    <DialogHeader>
+                        <DialogTitle className="font-heading tracking-wide flex items-center gap-2">
+                            <Trophy className="w-4 h-4 text-atlas-cyan" /> SAVE WINNING CONFIG
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="font-mono text-[11px] text-atlas-textTertiary">
+                        Promote the winning exit configuration from this run into a reusable, rateable
+                        Strategy Config (origin&nbsp;=&nbsp;optimizer). It becomes selectable across the platform.
+                    </div>
+                    {saveTarget && (
+                        <div className="mt-3 space-y-3">
+                            <div className="px-3 py-2 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5 font-mono text-[11px]" data-testid="save-config-winner">
+                                <div className="text-atlas-textTertiary">Winner · {saveTarget.symbol} · {saveTarget.timeframe}</div>
+                                <div className="text-atlas-cyan font-bold mt-0.5">{saveTarget.winnerLabel}</div>
+                            </div>
+                            <div>
+                                <Label className="label-tag text-[10px]">ATTACH TO STRATEGY</Label>
+                                <select data-testid="save-config-strategy" value={saveStrategy} onChange={(e) => setSaveStrategy(e.target.value)}
+                                    className="w-full mt-1 bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
+                                    {STRATEGIES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <Label className="label-tag text-[10px]">CONFIG NAME (optional)</Label>
+                                <Input data-testid="save-config-name" value={saveName} onChange={(e) => setSaveName(e.target.value)}
+                                    className="font-mono text-sm bg-atlas-panel border-atlas-border mt-1" placeholder="Auto-generated if blank" />
+                            </div>
+                        </div>
+                    )}
+                    <Button data-testid="save-config-submit-btn" onClick={submitSave} disabled={saveBusy} className="w-full mt-4 gap-2">
+                        {saveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} SAVE CONFIGURATION
+                    </Button>
+                </DialogContent>
+            </Dialog>
         </section>
     );
 }
 
-function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, deleting }) {
+function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, deleting, onSaveConfig }) {
     const isDone = run.status === "DONE";
     const isTerminal = isDone || run.status === "FAILED";
     const canPromote = isDone && run.kind !== "backtest";
+    const winner = isDone && run.kind === "backtest" && run.exit_winner
+        ? { symbol: run.exit_winner.symbol, timeframe: run.exit_winner.timeframe,
+            winnerKey: run.exit_winner.winner_key, winnerLabel: run.exit_winner.winner_label }
+        : null;
     const summary = runSummary(run);
     const [expanded, setExpanded] = useState(false);
     const [detail, setDetail] = useState(null);
@@ -603,6 +681,12 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
                             <Rocket className="w-3.5 h-3.5" /> PROMOTE
                         </Button>
                     )}
+                    {winner && (
+                        <Button size="sm" data-testid={`save-config-${run.id.slice(0, 8)}`}
+                            onClick={() => onSaveConfig({ run, ...winner })} className="gap-1.5 h-7">
+                            <Trophy className="w-3.5 h-3.5" /> SAVE CONFIG
+                        </Button>
+                    )}
                     {isTerminal && (
                         <Button size="sm" variant="ghost" data-testid={`delete-run-${run.id.slice(0, 8)}`}
                             onClick={() => onDelete(run.id)} disabled={deleting} title="Delete this record (free up space)"
@@ -621,17 +705,18 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
             {run.status === "FAILED" && <div className="mt-2 font-mono text-[11px] text-atlas-negative">{run.error}</div>}
             {expanded && (
                 <div className="mt-3 pt-3 border-t border-atlas-border" data-testid={`run-detail-${run.id.slice(0, 8)}`}>
-                    {loadingDetail ? <Loader2 className="w-4 h-4 animate-spin text-atlas-cyan" /> : <RunDetails run={detail} />}
+                    {loadingDetail ? <Loader2 className="w-4 h-4 animate-spin text-atlas-cyan" /> : <RunDetails run={detail} onSaveConfig={onSaveConfig} />}
                 </div>
             )}
         </div>
     );
 }
 
-function RunDetails({ run }) {
+function RunDetails({ run, onSaveConfig }) {
     if (!run?.result) return <div className="font-mono text-[11px] text-atlas-textSecondary">No detail available.</div>;
     const per = run.result.per_symbol || {};
     const mtf = run.result.multi_timeframe || {};
+    const exitCmp = run.result.exit_comparison || {};
     const exitLabel = run.result.exit_method_label
         || (run.exit_method === "fixed" ? `Fixed $ Target (TP $${run.target_profit ?? 5} / SL $${run.target_loss ?? 4})` : "Universal Exit Engine (ATR-based)");
     return (
@@ -654,6 +739,9 @@ function RunDetails({ run }) {
                     )}
                 </div>
             </div>
+            {Object.keys(exitCmp).length > 0 && (
+                <ExitComparison run={run} exitCmp={exitCmp} onSaveConfig={onSaveConfig} />
+            )}
             {Object.entries(per).map(([sym, m]) => {
                 if (m.error) return <div key={sym} className="font-mono text-[11px] text-atlas-negative">{sym}: {m.error}</div>;
                 const verdict = mtf[sym]?.verdict;
@@ -856,4 +944,96 @@ function runSummary(run) {
     }
     if (run.kind === "sensitivity") return `${r.target} · ${r.verdict || ""}`;
     return `commit ${run.git_hash}`;
+}
+
+
+// Pick the timeframe block to show for a symbol (prefer 1h, else first available).
+function pickBlock(byTf) {
+    return byTf?.["1h"] ? { tf: "1h", block: byTf["1h"] } : (() => {
+        const tf = Object.keys(byTf || {})[0];
+        return tf ? { tf, block: byTf[tf] } : null;
+    })();
+}
+
+// A/B/C exit-config comparison table (winner highlighted) with a Save action per symbol.
+function ExitComparison({ run, exitCmp, onSaveConfig }) {
+    const CMP_COLS = [
+        { k: "total_return_pct", label: "Return", pct: true, good: (v) => v > 0 },
+        { k: "win_rate_pct", label: "Win%", pct: true },
+        { k: "profit_factor", label: "PF", good: (v) => v >= 1 },
+        { k: "expectancy_usd", label: "Exp $" },
+        { k: "max_drawdown_pct", label: "Max DD", pct: true },
+        { k: "trades", label: "Trades" },
+    ];
+    return (
+        <div className="space-y-4" data-testid="exit-comparison">
+            <div className="flex items-center gap-2">
+                <Trophy className="w-3.5 h-3.5 text-atlas-cyan" />
+                <span className="font-mono text-[11px] font-bold text-atlas-text uppercase tracking-wide">Exit-Config Comparison (A/B/C)</span>
+            </div>
+            {Object.entries(exitCmp).map(([sym, byTf]) => {
+                const picked = pickBlock(byTf);
+                const block = picked?.block;
+                if (!block || block.error) {
+                    return <div key={sym} className="font-mono text-[10px] text-atlas-textTertiary">{sym.split("/")[0]}: {block?.error || "no comparison"}</div>;
+                }
+                const wk = block.winner_key;
+                const configs = block.configs || [];
+                const rows = block.rows || {};
+                return (
+                    <div key={sym} data-testid={`exit-cmp-${sym.split("/")[0]}`} className="border border-atlas-border rounded-lg p-3">
+                        <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                            <span className="font-mono text-xs font-bold text-atlas-text">{sym.split("/")[0]} · {picked.tf}</span>
+                            {wk ? (
+                                <Button size="sm" data-testid={`save-winner-${sym.split("/")[0]}`}
+                                    onClick={() => onSaveConfig({ run, symbol: sym, timeframe: picked.tf, winnerKey: wk, winnerLabel: rows[wk]?.label || wk })}
+                                    className="gap-1.5 h-7">
+                                    <Save className="w-3.5 h-3.5" /> SAVE WINNING
+                                </Button>
+                            ) : (
+                                <span className="font-mono text-[10px] text-atlas-textTertiary">no clear winner</span>
+                            )}
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full font-mono text-[10px] whitespace-nowrap" data-testid={`exit-cmp-table-${sym.split("/")[0]}`}>
+                                <thead>
+                                    <tr className="text-atlas-textTertiary text-left border-b border-atlas-border">
+                                        <th className="px-2 py-1">Exit Config</th>
+                                        {CMP_COLS.map((c) => <th key={c.k} className="px-2 text-right">{c.label}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {configs.map((c) => {
+                                        const m = rows[c.key] || {};
+                                        const isWinner = c.key === wk;
+                                        if (m.error) {
+                                            return <tr key={c.key} className="text-atlas-textTertiary border-b border-atlas-border/40">
+                                                <td className="px-2 py-1">{c.label}</td>
+                                                <td className="px-2" colSpan={CMP_COLS.length}>{m.error}</td>
+                                            </tr>;
+                                        }
+                                        return (
+                                            <tr key={c.key} data-testid={`exit-cmp-row-${sym.split("/")[0]}-${c.key}`}
+                                                className={`border-b border-atlas-border/40 ${isWinner ? "bg-atlas-cyan/10 text-atlas-text" : "text-atlas-textSecondary"}`}>
+                                                <td className="px-2 py-1">
+                                                    {isWinner && <Trophy className="w-3 h-3 text-atlas-cyan inline mr-1 -mt-0.5" />}
+                                                    <span className={isWinner ? "font-bold text-atlas-cyan" : ""}>{c.label}</span>
+                                                </td>
+                                                {CMP_COLS.map((col) => {
+                                                    const v = m[col.k];
+                                                    const disp = v == null ? "—" : col.pct ? fmtPct(v) : v;
+                                                    const good = col.good ? col.good(v) : undefined;
+                                                    return <td key={col.k} className={`px-2 text-right tabular-nums ${good === undefined ? "" : good ? "text-atlas-positive" : "text-atlas-negative"}`}>{disp}</td>;
+                                                })}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
