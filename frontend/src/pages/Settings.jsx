@@ -17,6 +17,8 @@ import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import QuadrantCard from "@/components/lab/QuadrantCard";
 import LabModal from "@/components/lab/LabModal";
 import ExitEngineModal from "@/components/lab/ExitEngineModal";
+import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
+import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
 import { useAuth } from "@/context/AuthContext";
 
 // Cache the settings payload so re-opening the Research Lab renders instantly from cache.
@@ -215,6 +217,7 @@ export default function SettingsPage() {
                 <LabModal open={openModal === "validation"} onOpenChange={(o) => setOpenModal(o ? "validation" : null)}
                     testid="validation-modal" icon={ShieldCheck} accent="violet"
                     title="Strategy Validation" subtitle="Walk-Forward · Sensitivity · Stress Tester">
+                    <SavedConfigsPanel isOwner={isOwner} />
                     <StrategyValidationPanel />
                 </LabModal>
 
@@ -256,6 +259,7 @@ export default function SettingsPage() {
                 <LabModal open={openModal === "analytics"} onOpenChange={(o) => setOpenModal(o ? "analytics" : null)}
                     testid="analytics-modal" icon={BarChart3} accent="green"
                     title="Analytics Engine" subtitle="Performance Diagnostics · AI Reasoning">
+                    <AIAnalystTerminal isOwner={isOwner} />
                     <AnalyticsPanel analytics={analytics} excludeSynthetic={excludeSynthetic} onToggleSynthetic={setExcludeSynthetic} />
                 </LabModal>
             </div>

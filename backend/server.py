@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 # ---- imports that depend on env loaded ----
 from analytics import compute_performance, graduation_readiness, regime_insight, sector_exposure
+import ai_analyst
 from auth import authenticate, is_owner_request, require_owner, seed_owner
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
@@ -536,6 +537,28 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
             for p in open_positions
         ],
     }
+
+
+class AiQuery(BaseModel):
+    question: str
+    session_id: str | None = None
+
+
+@api_router.post("/analytics/ai_query", dependencies=[Depends(require_owner)])
+async def analytics_ai_query(payload: AiQuery):
+    """AI Quant Analyst — answers a plain-English question grounded in the app's own
+    reasoning log, trade ledger and analytics. Owner-only (consumes LLM credits)."""
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question is required")
+    session_id = payload.session_id or f"analyst-{uuid.uuid4().hex[:12]}"
+    try:
+        answer = await ai_analyst.answer_question(db, session_id, question)
+    except Exception as e:  # noqa: BLE001
+        logger.error("ai_query failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI analyst error: {e}")
+    return {"session_id": session_id, "answer": answer}
+
 
 
 @api_router.get("/analytics/graduation")
