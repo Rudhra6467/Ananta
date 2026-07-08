@@ -1,3 +1,34 @@
+## 2026-07-08 (batch 2) — Strategy Architect: AI-designed strategies from the "+" (web, tested iter26 all-green)
+
+The Strategy Center "+" is now the **Strategy Architect** — an AI quant strategist that interviews the
+user in plain English and produces a deployable, schema-validated strategy, saved to Strategy Manager and
+auto-registered in the Research Lab. Gated behind a **credits switch** per the user's request.
+
+- **Backend** `architect.py` + `POST /api/strategy/architect/chat` (owner-gated, Claude via Emergent LLM key).
+  Injects the REAL built-in ParameterSchemas into the system prompt so the model maps the goal to the
+  best-fit family (hunter/squeeze/continuation) and emits ONLY valid params; server re-validates/clamps
+  every design against the schema → always runnable. Returns `phase:"question"` (with quick_replies) or
+  `phase:"design"` (strategy_key + params + a rich Strategy Card: category, risk, confidence, win-rate/PF/DD,
+  strengths/weaknesses, per-param reasons). Validation (403/400/422) short-circuits BEFORE any LLM call.
+- **Frontend** `pages/StrategyArchitect.jsx`: full-screen experience with an **AI Architect switch**
+  (persists to localStorage) + a "burns LLM credits" warning when ON. AI ON → conversational interview →
+  Strategy Card with Save-to-Strategy-Manager / Refine. AI OFF → zero-credit manual flow (Copy Existing /
+  Import JSON; Git/Python/Pine/Marketplace shown as SOON). Save persists via `POST /api/strategy/configs`
+  (origin=architect, card stored in new `meta` field on StrategyConfig) and appears instantly in the grid +
+  Research Lab.
+- **Contextual help** icon changed from "?" to a circled **info (i)** (enterprise style) + fade-and-scale
+  animation. Applied across the parameter editor.
+- `StrategyConfig` model gained a free-form `meta` dict (carries the Architect card + param reasons).
+
+**Tested:** iter26 — backend 12/12, web 100%, zero extra LLM credits (manual + switch + help + regression
+all no-credit; AI happy path verified once via screenshot ~22s). Backend tests:
+`backend/tests/test_iter26_architect.py`. Web-only; mobile untouched.
+
+**Note:** the Architect maps goals onto the existing built-in families (safe, deployable) rather than
+generating/executing arbitrary new indicator code — true code-generating strategies (Python/Pine) still
+require the deferred sandbox.
+
+
 ## 2026-07-08 — Strategy Center + Research Lab 2.0 · PHASE 1 (web, tested iter25 all-green)
 
 Strategies are now first-class objects. New **"Strategies"** bottom-nav tab (nav is now 5 tabs).
