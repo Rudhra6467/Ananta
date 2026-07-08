@@ -55,11 +55,12 @@ def _fmt_trades(items: list[dict]) -> str:
     return "\n".join(lines) if lines else "(no closed trades yet)"
 
 
-async def _gather_context(db) -> str:
+async def _gather_context(db, strategy: str | None = None) -> str:
     reasoning = await db.reasoning.find({}, {"_id": 0}).sort("timestamp", -1).limit(25).to_list(25)
-    trades = await db.trades.find({"status": "CLOSED"}, {"_id": 0}).sort("timestamp", -1).limit(30).to_list(30)
+    trade_q = {"strategy": strategy} if strategy else {}
+    trades = await db.trades.find({"status": "CLOSED", **trade_q}, {"_id": 0}).sort("timestamp", -1).limit(30).to_list(30)
     if not trades:
-        trades = await db.trades.find({}, {"_id": 0}).sort("timestamp", -1).limit(30).to_list(30)
+        trades = await db.trades.find(trade_q, {"_id": 0}).sort("timestamp", -1).limit(30).to_list(30)
 
     closed = [t for t in trades if t.get("pnl") is not None]
     wins = [t for t in closed if (t.get("pnl") or 0) > 0]
@@ -78,12 +79,14 @@ async def _gather_context(db) -> str:
     )
 
 
-async def answer_question(db, session_id: str, question: str) -> str:
+async def answer_question(db, session_id: str, question: str, strategy: str | None = None) -> str:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise RuntimeError("EMERGENT_LLM_KEY not configured")
 
-    context = await _gather_context(db)
+    context = await _gather_context(db, strategy)
+    if strategy:
+        context = f"(Scope: strategy='{strategy}' only)\n" + context
 
     # Replay a short transcript for continuity.
     prior = await db.ai_analyst_messages.find(

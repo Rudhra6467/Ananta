@@ -542,6 +542,7 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
 class AiQuery(BaseModel):
     question: str
     session_id: str | None = None
+    strategy: str | None = None
 
 
 @api_router.post("/analytics/ai_query", dependencies=[Depends(require_owner)])
@@ -553,7 +554,7 @@ async def analytics_ai_query(payload: AiQuery):
         raise HTTPException(status_code=400, detail="question is required")
     session_id = payload.session_id or f"analyst-{uuid.uuid4().hex[:12]}"
     try:
-        answer = await ai_analyst.answer_question(db, session_id, question)
+        answer = await ai_analyst.answer_question(db, session_id, question, payload.strategy)
     except Exception as e:  # noqa: BLE001
         logger.error("ai_query failed: %s", e)
         raise HTTPException(status_code=502, detail=f"AI analyst error: {e}")
@@ -1569,6 +1570,88 @@ from strategy import (  # noqa: E402
 )
 
 _OWNER_TENANT = "owner"  # single-tenant today; every row is already tenant-scoped for the future.
+
+
+def _strategy_health(win_rate: float, roi: float, trades: int, stars: int) -> int:
+    """Composite 0-100 health from win-rate, ROI, sample size and star rating."""
+    score = 0.0
+    score += min(35.0, win_rate * 0.7)            # up to 35 for a 50%+ win rate
+    score += 25.0 if roi > 0 else max(0.0, 25.0 + roi)  # ROI% contribution (clamped)
+    score += min(20.0, trades * 2.0)              # sample-size confidence
+    score += stars * 4.0                          # up to 20 from rating
+    return int(max(1, min(100, round(score))))
+
+
+async def _compute_strategy_metrics() -> dict:
+    """Derive per-strategy live metrics from the closed-trade ledger + config ratings + state."""
+    portfolio = await load_portfolio(db)
+    start_eq = float(getattr(portfolio, "starting_balance", 1000.0) or 1000.0)
+    trades = await db.trades.find(
+        {"pnl": {"$ne": None}, "note": {"$ne": "DEMO_SEED"}},
+        {"_id": 0, "strategy": 1, "pnl": 1, "return_pct": 1, "timestamp": 1},
+    ).sort("timestamp", 1).to_list(4000)
+    configs = await db.strategy_configs.find({"tenant_id": _OWNER_TENANT}, {"_id": 0, "strategy_key": 1, "rating": 1}).to_list(1000)
+    meta = {m["key"]: m for m in await db.strategy_meta.find({}, {"_id": 0}).to_list(200)}
+
+    by_strat: dict[str, list[dict]] = {}
+    for t in trades:
+        by_strat.setdefault(t.get("strategy") or "unknown", []).append(t)
+    stars_by: dict[str, int] = {}
+    for c in configs:
+        s = (c.get("rating") or {}).get("stars") or 0
+        stars_by[c["strategy_key"]] = max(stars_by.get(c["strategy_key"], 0), int(s))
+
+    out = {}
+    for schema in list_schemas():
+        key = schema.key
+        ts = by_strat.get(key, [])
+        n = len(ts)
+        wins = sum(1 for t in ts if (t.get("pnl") or 0) > 0)
+        total_pnl = round(sum((t.get("pnl") or 0) for t in ts), 2)
+        win_rate = round(100 * wins / n, 1) if n else 0.0
+        roi = round(100 * total_pnl / start_eq, 2) if start_eq else 0.0
+        stars = stars_by.get(key, 0)
+        last_ts = ts[-1]["timestamp"] if ts else None
+        m = meta.get(key, {})
+        out[key] = {
+            "key": key, "name": schema.name, "category": (schema.dna or {}).get("family") if isinstance(schema.dna, dict) else None,
+            "status": m.get("status", "PAPER"), "enabled": m.get("enabled", True),
+            "trades": n, "win_rate": win_rate, "roi": roi, "total_pnl": total_pnl,
+            "stars": stars, "confidence": min(99, int(win_rate)) if n else 0,
+            "health": _strategy_health(win_rate, roi, n, stars),
+            "last_trade": last_ts, "config_count": sum(1 for c in configs if c["strategy_key"] == key),
+        }
+    return out
+
+
+@api_router.get("/strategy/metrics")
+async def strategy_metrics():
+    """Live scoreboard for every built-in strategy — powers the Strategy Center cards."""
+    return {"metrics": await _compute_strategy_metrics()}
+
+
+class StrategyState(BaseModel):
+    status: str | None = None
+    enabled: bool | None = None
+
+
+@api_router.put("/strategy/{key}/state", dependencies=[Depends(require_owner)])
+async def strategy_set_state(key: str, payload: StrategyState):
+    if not get_schema(key):
+        raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
+    valid = {"LIVE", "PAPER", "DISABLED", "TESTING", "OPTIMIZING", "ERROR"}
+    updates: dict = {}
+    if payload.status is not None:
+        if payload.status not in valid:
+            raise HTTPException(status_code=400, detail=f"status must be one of {sorted(valid)}")
+        updates["status"] = payload.status
+    if payload.enabled is not None:
+        updates["enabled"] = payload.enabled
+    if not updates:
+        raise HTTPException(status_code=400, detail="no state fields provided")
+    await db.strategy_meta.update_one({"key": key}, {"$set": {"key": key, **updates}}, upsert=True)
+    return {"key": key, **updates}
+
 
 
 @api_router.get("/strategy/registry")

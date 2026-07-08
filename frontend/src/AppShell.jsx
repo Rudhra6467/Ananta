@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, Briefcase, Database, FlaskConical } from "lucide-react";
+import { Activity, Briefcase, Database, FlaskConical, Boxes } from "lucide-react";
 import { Toaster } from "sonner";
 import Dashboard from "@/pages/Dashboard";
 import Portfolio from "@/pages/Portfolio";
 import Reports from "@/pages/Reports";
 import SettingsPage from "@/pages/Settings";
+import StrategyCenter from "@/pages/StrategyCenter";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
 import AccountOverlay from "@/components/AccountOverlay";
-import anantaEmblem from "@/assets/ananta-emblem.png";
+import AnantaLogo from "@/components/AnantaLogo";
 import { useAuth } from "@/context/AuthContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
 const TABS = [
     { id: "dashboard", label: "Cockpit", icon: Activity, Component: Dashboard },
     { id: "portfolio", label: "Portfolio", icon: Briefcase, Component: Portfolio },
+    { id: "strategies", label: "Strategies", icon: Boxes, Component: StrategyCenter },
     { id: "reports", label: "Logs", icon: Database, Component: Reports },
     { id: "settings", label: "Research Lab", icon: FlaskConical, Component: SettingsPage },
 ];
@@ -139,8 +141,9 @@ function TopHeader({ active, ready, isOwner, hidden }) {
                         title="Account & privacy"
                         className="flex items-center gap-2 shrink-0 -ml-1.5 pl-1.5 pr-2.5 py-1 rounded-lg border border-transparent hover:border-atlas-border hover:bg-atlas-panelHover active:scale-95 transition-all group"
                     >
-                        <img src={anantaEmblem} alt="Ananta" data-testid="ananta-emblem"
-                            className="h-7 w-7 md:h-9 md:w-9 object-contain select-none transition-transform group-hover:scale-105" draggable={false} />
+                        <span className="text-atlas-text" data-testid="ananta-emblem">
+                            <AnantaLogo className="h-7 w-7 md:h-9 md:w-9 select-none transition-transform group-hover:scale-105" />
+                        </span>
                         <span className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</span>
                     </button>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -204,8 +207,10 @@ function ContextInfo({ active, portfolio }) {
         );
     }
 
-    const title = id === "reports" ? "Logs / Reports" : "Research Lab";
-    const subtitle = id === "reports" ? "Reasons, Reports, & Reasoning Analytics" : "Strategy validation · optimization sandbox · engine config";
+    const title = id === "reports" ? "Logs / Reports" : id === "strategies" ? "Strategy Center" : "Research Lab";
+    const subtitle = id === "reports" ? "Reasons, Reports, & Reasoning Analytics"
+        : id === "strategies" ? "Every strategy · lifecycle, validation & AI optimization"
+            : "Strategy validation · optimization sandbox · engine config";
     return (
         <div data-testid={`context-${id}`}>
             <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
@@ -229,7 +234,7 @@ function Metric({ label, value, sub, cls = "text-atlas-text", big = false }) {
 function BottomNav({ active, onSelect }) {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-atlas-bg/95 backdrop-blur-xl border-t border-atlas-border shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.9)]" data-testid="bottom-nav">
-            <div className="max-w-[1600px] mx-auto grid grid-cols-4">
+            <div className="max-w-[1600px] mx-auto grid grid-cols-5">
                 {TABS.map((t, i) => {
                     const Icon = t.icon;
                     const on = active === i;
@@ -242,7 +247,7 @@ function BottomNav({ active, onSelect }) {
                             className="relative flex flex-col items-center justify-center gap-1 pt-2 pb-2.5 transition-colors"
                         >
                             {on && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 rounded-full bg-atlas-cyan" />}
-                            <span className={`flex items-center justify-center rounded-full transition-all duration-200 ${on ? "bg-atlas-cyan/20 px-5 py-1.5" : "px-5 py-1.5"}`}>
+                            <span className={`flex items-center justify-center rounded-full transition-all duration-200 ${on ? "bg-atlas-cyan/20 px-3.5 py-1.5" : "px-3.5 py-1.5"}`}>
                                 <Icon
                                     className={`transition-all ${on ? "w-[22px] h-[22px] text-atlas-cyan" : "w-5 h-5 text-atlas-textTertiary"}`}
                                     strokeWidth={on ? 2.4 : 1.8}

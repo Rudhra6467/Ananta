@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import HelpHint from "@/components/lab/HelpHint";
 
 const STRATS = [
     { id: "hunter", label: "Hunter" },
@@ -18,11 +19,12 @@ const ORIGIN_CLS = {
 
 // Saved Configs — surfaces the versioned strategy_configs (created by the lab-bridge or
 // by hand), with rating, delete and a schema-driven dynamic parameter editor (Phase 2).
-export default function SavedConfigsPanel({ isOwner }) {
+export default function SavedConfigsPanel({ isOwner, only }) {
     const [schemas, setSchemas] = useState({}); // key -> schema
     const [configs, setConfigs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [openId, setOpenId] = useState(null);
+    const strats = only ? STRATS.filter((s) => s.id === only) : STRATS;
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -85,7 +87,7 @@ export default function SavedConfigsPanel({ isOwner }) {
             </div>
 
             <div className="p-4 space-y-4">
-                {STRATS.map((st) => {
+                {strats.map((st) => {
                     const rows = configs.filter((c) => c.strategy_key === st.id);
                     return (
                         <div key={st.id} data-testid={`saved-group-${st.id}`}>
@@ -211,7 +213,10 @@ function ConfigEditor({ cfg, schema, isOwner, onSaved }) {
                         {ps.map((p) => (
                             <div key={p.id} data-testid={`param-${p.id}`}>
                                 <div className="flex items-center justify-between gap-2">
-                                    <label className="font-mono text-[10px] text-atlas-textSecondary" title={p.help || ""}>{p.label}{p.unit ? ` (${p.unit})` : ""}</label>
+                                    <label className="font-mono text-[10px] text-atlas-textSecondary flex items-center gap-1">
+                                        {p.label}{p.unit ? ` (${p.unit})` : ""}
+                                        <HelpHint text={p.help} title={p.label} />
+                                    </label>
                                     {vals[p.id] !== p.default && <span className="font-mono text-[8px] text-atlas-cyan">override</span>}
                                 </div>
                                 {p.type === "bool" ? (

@@ -189,6 +189,15 @@ body {
     animation: pageInLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@keyframes helpFade {
+    from { opacity: 0; transform: translate(-50%, 4px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+.help-fade {
+    animation: helpFade 0.16s ease-out;
+}
+
+
 
 /* tab style override */
 .atlas-tabs [data-state="active"] {

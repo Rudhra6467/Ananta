@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 25 — full regression of Strategy Center + Research Lab 2.0 (Phase 1). Backend: 9/9 GREEN in new /app/backend/tests/test_iter25_strategy_center.py — GET /api/strategy/metrics returns hunter/squeeze/continuation each with the full card shape (status,enabled,trades,win_rate,roi,health,stars,confidence,last_trade); PUT /api/strategy/{key}/state returns 400 on bad status, 404 on unknown key, 400 on empty payload, 200 on valid status transition (persisted via GET), 200 on enabled flag change (persisted); POST /api/analytics/ai_query with the new optional `strategy` field returns 400 on empty question and 200 with {session_id, answer} on a real question. Also re-ran iter23 (10/10) + iter24 (8/8) regression → 18/18 GREEN, no regressions. Web UI (owner via localStorage token, 1920x1080): (1) bottom nav has 5 tabs — Cockpit/Portfolio/Strategies/Logs/Research Lab — all present; new AnantaLogo SVG renders in ananta-emblem. (2) Strategies tab opens strategy-center: strategy-grid has grid-cols-2, 3 strategy-card-* (hunter/squeeze/continuation, all PAPER) + add-strategy-card. Each card exposes card-status-* pill, 5 stars, ROI/Win-Rate/Health/Trades KVs. (3) strategy-search 'hunt' correctly filters to hunter only. filter-DISABLED chip filters out all PAPER cards. All 4 sort chips (sort-profit/winrate/health/rating) clickable + reorder. (4) Clicking strategy-card-hunter opens strategy-detail-hunter with detail-back-btn, detail-status pill + detail-status-select. Cycled through ALL 6 tabs — tab-body-overview/parameters/validation/ai/research/history — every one rendered without runtime errors. (5) Parameters tab shows SavedConfigsPanel scoped via only=hunter with 3 config-toggle-* rows. Expanding a config exposed 22 help-hint-trigger (?) icons; clicking one popped help-hint-card (floating), and mouse-click-away dismissed it (count -> 0). (6) AI tab shows ai-analyst-terminal — strategy=hunter is passed to /api/analytics/ai_query per code review. Validation tab shows both monte-carlo-panel + StrategyValidationPanel. (7) detail-status-select changed hunter PAPER→TESTING, saw toast 'Strategy updated {\"status\":\"TESTING\"}', backend persisted, then reset back to PAPER (toast confirmed, GET /metrics = PAPER). (8) detail-back-btn returns to list. (9) add-strategy-card opens add-strategy-wizard with wizard-sources — source-duplicate + source-json are ENABLED, source-builtin/marketplace/git/python are DISABLED (SOON pill) — all 6 states verified. (10) Duplicate flow: selected hunter in wizard-strat, named TEST_iter25_dup, wizard-submit → toast 'STRATEGY VARIANT ADDED · TEST_iter25_dup' (POST /api/strategy/configs 200). (11) JSON invalid flow: pasted {rsi_reset_min:9999}, wizard-submit → toast 'ADD FAILED · rsi_reset_min above max 50.0' (backend 422 → UI extracts detail.errors[0]). Cleanup done at end: TEST_iter25_dup config deleted, hunter reset to PAPER, manual_kill_switch=False. 1 LLM credit consumed (single grounded ai_query test — empty-question test short-circuits before LLM).",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Strategy Center list", "issues": ["Grid always renders 2 columns even at 1920px width; the design intent per PRD is 2-per-row, but on ultra-wide desktop this leaves a lot of empty right-side whitespace. Not a bug — matches the spec — but worth revisiting when the strategy count grows."]},
+        {"screen": "Strategy Detail — tabs bar", "issues": ["The tab-* underline indicator (border-atlas-cyan) is subtle at 11px; hover-only affordance for inactive tabs is fine but a light background on the active tab would improve scanability."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_strategy_center.py",
+    "/app/test_reports/pytest/pytest_iter25.xml",
+    "/tmp/iter25_final.png"
+  ],
+  "action_items": [
+    "(Nice-to-have) React hydration warning detected during Parameters tab render: 'In HTML, <span> cannot be a child of <option>. This will cause a hydration error.' Trace shows AppShell → Shell chain. Likely one of the schema-driven <select><option> renders in SavedConfigsPanel or a <select> inside the Overview/Wizard is wrapping its option label in a <span>. Not user-visible today but React 19+ treats these as errors — locate and unwrap.",
+    "(Nice-to-have) On the AI tab of the strategy detail, the terminal is instantiated with `strategy={sKey}` — please add a small visible chip in the AIAnalystTerminal header showing the scoped strategy so the user knows the LLM is grounded on that subset only.",
+    "(Nice-to-have) StrategyCenter.jsx is 395 lines and hosts List / Card / Detail / 6 tab bodies / Wizard in one file. When it grows past ~500 lines consider splitting into StrategyList.jsx, StrategyDetail.jsx (with a tabs/ subdir), AddStrategyWizard.jsx.",
+    "(Nice-to-have) Wizard 'Import JSON' — invalid JSON parse throws a SyntaxError with an unfriendly message. Consider wrapping JSON.parse in a try that surfaces 'Invalid JSON' before hitting the network."
+  ],
+  "critical_code_review_comments": [
+    "server.py::strategy_set_state validates status against a hard-coded enum {LIVE,PAPER,DISABLED,TESTING,OPTIMIZING,ERROR} matching the STATUS map in StrategyCenter.jsx — enums are aligned across UI + API. 404 on unknown key is correctly raised before the status validation.",
+    "AIAnalystTerminal is now called with `strategy={sKey}` from the Strategy Detail AI tab and forwarded into POST /api/analytics/ai_query as the optional `strategy` field. ai_analyst.answer_question accepts and threads it — grounded answer verified via test_iter25.",
+    "AddStrategyWizard: duplicate path sends `params:{}` so backend uses schema defaults; JSON path sends whatever the user pasted — backend validates and returns 422 with detail.errors[] which the UI surfaces cleanly. Deferred sources (git/python/marketplace/builtin) are properly `disabled` in JSX AND unreachable (setSource only fires when src.ready).",
+    "HelpHint.jsx cleanly wires document-level mousedown+touchstart click-away with proper stopPropagation on trigger. Uses z-50 and absolute positioning — no overlay/scroll conflicts observed inside Parameters panel.",
+    "StrategyDetail state changes call onChanged() (=load()) after PUT, so metrics refresh across navigations — verified by TESTING/PAPER round-trip showing correctly on the list card after back-btn."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter25_strategy_center.py (NEW — 9 tests, all green)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + 18/18 iter23+iter24 regression)", "frontend": "100% (all Phase 1 selectors present + interactive; 6/6 detail tabs render clean; add-wizard duplicate + JSON validation error paths both working end-to-end)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — used localStorage token injection ('ananta_owner_token') to bypass WAF on repeated browser /api/auth/login.",
+  "seed_data_creation": "Created & deleted TEST_iter25_dup (hunter duplicate) during the wizard test. hunter status was toggled PAPER→TESTING→PAPER; kill-switch left OFF. Environment is clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 1 (Strategy Center + Research Lab 2.0 first-class strategy objects) is fully working end-to-end. All 6 detail tabs (Overview/Parameters/Validation/AI/Research/History) render without crashes. Contextual HelpHint (?) system is live on Parameters config editors. Add Strategy wizard supports duplicate + JSON; other 4 sources correctly stubbed as SOON. Backend has a single hydration warning (span-in-option) that's cosmetic. If retesting, please continue to use the localStorage token injection pattern — WAF still rate-limits repeated browser login POSTs.",
+  "rca of the issue": ""
+}

@@ -74,8 +74,8 @@ export const api = {
             .get(`/analytics/performance?exclude_synthetic=${excludeSynthetic ? "true" : "false"}`)
             .then((r) => r.data),
     analyticsGraduation: () => client.get("/analytics/graduation").then((r) => r.data),
-    analyticsAiQuery: (question, sessionId) =>
-        client.post("/analytics/ai_query", { question, session_id: sessionId }).then((r) => r.data),
+    analyticsAiQuery: (question, sessionId, strategy) =>
+        client.post("/analytics/ai_query", { question, session_id: sessionId, strategy }).then((r) => r.data),
     pendingOrders: () => client.get("/pending_orders").then((r) => r.data),
     getEnvironment: () => client.get("/environment").then((r) => r.data),
     setEnvironment: (mode) => client.post(`/environment/${mode}`).then((r) => r.data),
@@ -111,6 +111,9 @@ export const api = {
     labMonteCarlo: (payload) => client.post("/lab/monte_carlo", payload).then((r) => r.data),
     // --- Strategy Config Engine (schemas + configs) ---
     strategyRegistry: () => client.get("/strategy/registry").then((r) => r.data),
+    strategyMetrics: () => client.get("/strategy/metrics").then((r) => r.data),
+    strategySetState: (key, payload) => client.put(`/strategy/${key}/state`, payload).then((r) => r.data),
+    strategySchema: (key) => client.get(`/strategy/${key}/schema`).then((r) => r.data),
     strategyConfigs: (key) => client.get(`/strategy/configs${key ? `?strategy_key=${key}` : ""}`).then((r) => r.data),
     strategyConfigGet: (id) => client.get(`/strategy/configs/${id}`).then((r) => r.data),
     strategyConfigCreate: (payload) => client.post("/strategy/configs", payload).then((r) => r.data),

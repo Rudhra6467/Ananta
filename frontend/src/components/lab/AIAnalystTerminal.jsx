@@ -13,7 +13,7 @@ const SUGGESTIONS = [
 
 // AI Quant Analyst terminal — plain-English interrogation of the reasoning log &
 // trade ledger. Grounded server-side; owner-only. Multi-turn via a session id.
-export default function AIAnalystTerminal({ isOwner }) {
+export default function AIAnalystTerminal({ isOwner, strategy }) {
     const [messages, setMessages] = useState([]); // {role, content}
     const [q, setQ] = useState("");
     const [busy, setBusy] = useState(false);
@@ -32,7 +32,7 @@ export default function AIAnalystTerminal({ isOwner }) {
         setQ("");
         setBusy(true);
         try {
-            const res = await api.analyticsAiQuery(text, sessionRef.current);
+            const res = await api.analyticsAiQuery(text, sessionRef.current, strategy);
             sessionRef.current = res.session_id;
             setMessages((m) => [...m, { role: "assistant", content: res.answer }]);
         } catch (e) {
