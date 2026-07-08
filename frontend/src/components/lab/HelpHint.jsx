@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { HelpCircle } from "lucide-react";
+import { Info } from "lucide-react";
 
-// Minimalist contextual help — a small (?) that pops a lightweight, non-blocking floating
-// card beside the control (Notion / Stripe / Linear style). Click-away closes it.
+// Minimalist contextual help — a small circled (i) that pops a lightweight, non-blocking
+// floating card beside the control (Notion / Stripe / Linear style). Click-away closes it.
 export default function HelpHint({ text, title, className = "", side = "top" }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -22,7 +22,7 @@ export default function HelpHint({ text, title, className = "", side = "top" }) 
         <span ref={ref} className={`relative inline-flex ${className}`}>
             <button type="button" data-testid="help-hint-trigger" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
                 className="text-atlas-textTertiary hover:text-atlas-cyan transition-colors" aria-label="Help">
-                <HelpCircle className="w-3.5 h-3.5" />
+                <Info className="w-3.5 h-3.5" />
             </button>
             {open && (
                 <span data-testid="help-hint-card"

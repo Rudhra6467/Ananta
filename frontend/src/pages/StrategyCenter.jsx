@@ -13,6 +13,7 @@ import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import HelpHint from "@/components/lab/HelpHint";
+import StrategyArchitect from "@/pages/StrategyArchitect";
 import { useAuth } from "@/context/AuthContext";
 
 const ICONS = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
@@ -54,7 +55,7 @@ export default function StrategyCenter() {
     return (
         <>
             <StrategyList metrics={metrics} onOpen={setSelected} onAdd={() => setAddOpen(true)} />
-            <AddStrategyWizard open={addOpen} onOpenChange={setAddOpen} registry={registry} isOwner={isOwner}
+            <StrategyArchitect open={addOpen} onOpenChange={setAddOpen} registry={registry} isOwner={isOwner}
                 onCreated={() => { setAddOpen(false); load(); }} />
         </>
     );
@@ -299,99 +300,5 @@ function History({ metric }) {
                 Version-tagged run history coming with the optimization engine.
             </div>
         </div>
-    );
-}
-
-/* ---------------- Add Strategy wizard ---------------- */
-const SOURCES = [
-    { id: "duplicate", label: "Copy Existing Strategy", icon: Copy, ready: true, desc: "Clone a built-in as a new tunable config variant." },
-    { id: "json", label: "Import JSON Configuration", icon: FileJson, ready: true, desc: "Paste a validated config JSON." },
-    { id: "builtin", label: "Built-in Strategies", icon: Boxes, ready: false, desc: "All built-ins are already active." },
-    { id: "marketplace", label: "Community Marketplace", icon: Store, ready: false, desc: "Coming soon." },
-    { id: "git", label: "Git Repository", icon: GitBranch, ready: false, desc: "Coming soon." },
-    { id: "python", label: "Upload Python Strategy", icon: Code, ready: false, desc: "Sandboxed execution — coming soon." },
-];
-
-function AddStrategyWizard({ open, onOpenChange, registry, isOwner, onCreated }) {
-    const [source, setSource] = useState(null);
-    const [strat, setStrat] = useState("hunter");
-    const [name, setName] = useState("");
-    const [json, setJson] = useState("");
-    const [busy, setBusy] = useState(false);
-    const keys = Object.keys(registry);
-
-    const reset = () => { setSource(null); setName(""); setJson(""); };
-
-    const submit = async () => {
-        if (!isOwner) { toast.error("Owner login required"); return; }
-        setBusy(true);
-        try {
-            let payload;
-            if (source === "duplicate") {
-                payload = { strategy_key: strat, params: {}, origin: "user", name: name.trim() || `${registry[strat]?.name || strat} · variant` };
-            } else {
-                let parsed;
-                try { parsed = JSON.parse(json); }
-                catch { toast.error("Invalid JSON", { description: "Check the syntax and try again." }); setBusy(false); return; }
-                if (!parsed.strategy_key) { toast.error("Missing strategy_key", { description: 'JSON must include a "strategy_key".' }); setBusy(false); return; }
-                payload = { strategy_key: parsed.strategy_key, params: parsed.params || {}, origin: "user", name: (parsed.name || name.trim() || "Imported config") };
-            }
-            const res = await api.strategyConfigCreate(payload);
-            toast.success("STRATEGY VARIANT ADDED", { description: res.config.name });
-            reset(); onCreated();
-        } catch (e) {
-            toast.error("ADD FAILED", { description: String(e?.response?.data?.detail?.errors?.join?.(", ") || e?.response?.data?.detail || e?.message) });
-        } finally { setBusy(false); }
-    };
-
-    return (
-        <LabModal open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }} testid="add-strategy-wizard"
-            icon={Sparkles} accent="cyan" title="Add Strategy" subtitle="Choose a source">
-            {!source ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="wizard-sources">
-                    {SOURCES.map((src) => {
-                        const SIcon = src.icon;
-                        return (
-                            <button key={src.id} data-testid={`source-${src.id}`} disabled={!src.ready} onClick={() => src.ready && setSource(src.id)}
-                                className={`text-left p-4 rounded-xl border transition-all ${src.ready ? "border-atlas-border hover:border-atlas-cyan/50 hover:bg-atlas-panelHover" : "border-atlas-border/50 opacity-50 cursor-not-allowed"}`}>
-                                <SIcon className={`w-5 h-5 mb-2 ${src.ready ? "text-atlas-cyan" : "text-atlas-textTertiary"}`} />
-                                <div className="font-mono text-sm font-bold text-atlas-text flex items-center gap-2">{src.label}{!src.ready && <span className="text-[8px] text-atlas-textTertiary border border-atlas-border rounded px-1 py-0.5">SOON</span>}</div>
-                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-1">{src.desc}</div>
-                            </button>
-                        );
-                    })}
-                </div>
-            ) : (
-                <div className="space-y-4" data-testid={`wizard-form-${source}`}>
-                    <button onClick={() => setSource(null)} className="flex items-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-text">
-                        <ArrowLeft className="w-3.5 h-3.5" /> CHANGE SOURCE
-                    </button>
-                    {source === "duplicate" && (
-                        <div>
-                            <div className="label-tag mb-2">BASE STRATEGY</div>
-                            <select data-testid="wizard-strat" value={strat} onChange={(e) => setStrat(e.target.value)}
-                                className="w-full bg-atlas-panel border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text">
-                                {keys.map((k) => <option key={k} value={k}>{registry[k]?.name || k}</option>)}
-                            </select>
-                        </div>
-                    )}
-                    {source === "json" && (
-                        <div>
-                            <div className="label-tag mb-2">CONFIG JSON</div>
-                            <textarea data-testid="wizard-json" value={json} onChange={(e) => setJson(e.target.value)} rows={7}
-                                placeholder='{"strategy_key":"hunter","name":"My variant","params":{"rsi_reset_min":28}}'
-                                className="w-full atlas-input rounded-lg font-mono text-[11px] p-3" />
-                        </div>
-                    )}
-                    <div>
-                        <div className="label-tag mb-2">NAME (optional)</div>
-                        <Input data-testid="wizard-name" value={name} onChange={(e) => setName(e.target.value)} className="atlas-input rounded-lg font-mono text-sm" placeholder="Auto-generated if blank" />
-                    </div>
-                    <Button data-testid="wizard-submit" onClick={submit} disabled={busy || !isOwner} className="w-full gap-2">
-                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} ADD STRATEGY
-                    </Button>
-                </div>
-            )}
-        </LabModal>
     );
 }

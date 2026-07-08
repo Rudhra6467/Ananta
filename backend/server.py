@@ -1668,6 +1668,30 @@ async def strategy_schema_endpoint(key: str, version: str | None = Query(None)):
     return s.model_dump()
 
 
+class ArchitectChat(BaseModel):
+    message: str
+    session_id: str | None = None
+    history: list[dict] = []
+
+
+@api_router.post("/strategy/architect/chat", dependencies=[Depends(require_owner)])
+async def strategy_architect_chat(payload: ArchitectChat):
+    """AI Strategy Architect turn — interviews the user and finally emits a validated,
+    deployable strategy design. Owner-only (consumes LLM credits)."""
+    import architect  # noqa: PLC0415
+    msg = (payload.message or "").strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="message is required")
+    session_id = payload.session_id or f"architect-{uuid.uuid4().hex[:12]}"
+    try:
+        data = await architect.architect_reply(session_id, payload.history or [], msg)
+    except Exception as e:  # noqa: BLE001
+        logger.error("architect chat failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Architect error: {e}")
+    return {"session_id": session_id, **data}
+
+
+
 @api_router.get("/strategy/configs")
 async def strategy_list_configs(strategy_key: str | None = Query(None)):
     q: dict = {"tenant_id": _OWNER_TENANT}
@@ -1705,6 +1729,7 @@ async def strategy_create_config(payload: dict):
         tenant_id=_OWNER_TENANT, strategy_key=key, strategy_version=schema.version,
         name=(payload.get("name") or f"{schema.name} config"),
         params=params, parent_config_id=parent_id, origin=payload.get("origin", "user"),
+        meta=payload.get("meta") or {},
     )
     await db.strategy_configs.insert_one(cfg.model_dump())
     return {"config": cfg.model_dump()}

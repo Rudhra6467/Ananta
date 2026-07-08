@@ -121,7 +121,8 @@ class StrategyConfig(BaseModel):
     name: str
     params: dict = Field(default_factory=dict)   # SPARSE overrides only (inheritance-friendly)
     parent_config_id: str | None = None          # inheritance chain
-    origin: str = "user"                          # builtin | user | marketplace | optimizer
+    origin: str = "user"                          # builtin | user | marketplace | optimizer | architect
+    meta: dict = Field(default_factory=dict)      # free-form (e.g. AI Strategy Architect card + param reasons)
     rating: dict | None = None                    # institutional score (Phase 3): stars/PF/dd/confidence/...
     validation_status: str = "unvalidated"        # unvalidated | passed | failed (Phase 3 promotion gate)
     created_at: str = Field(default_factory=now_iso)

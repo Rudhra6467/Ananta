@@ -114,6 +114,8 @@ export const api = {
     strategyMetrics: () => client.get("/strategy/metrics").then((r) => r.data),
     strategySetState: (key, payload) => client.put(`/strategy/${key}/state`, payload).then((r) => r.data),
     strategySchema: (key) => client.get(`/strategy/${key}/schema`).then((r) => r.data),
+    strategyArchitectChat: (message, sessionId, history) =>
+        client.post("/strategy/architect/chat", { message, session_id: sessionId, history }).then((r) => r.data),
     strategyConfigs: (key) => client.get(`/strategy/configs${key ? `?strategy_key=${key}` : ""}`).then((r) => r.data),
     strategyConfigGet: (id) => client.get(`/strategy/configs/${id}`).then((r) => r.data),
     strategyConfigCreate: (payload) => client.post("/strategy/configs", payload).then((r) => r.data),
