@@ -1,3 +1,25 @@
+## 2026-07-08 (iter28) — 5-tab "Workspaces" navigation restructure (web, tested all-green)
+
+Adopted the user's workspaces-not-pages model. Navigation is now the monitor → create → validate → trade → manage journey:
+**Cockpit · Trade · Strategy · Research · Workspace** (was Cockpit · Portfolio · Strategies · Logs · Research Lab).
+
+- **Trade** (NEW `pages/Trade.jsx`): Paper/Live toggle + Emergency Stop workspace bar; sub-tabs Positions / Orders /
+  History / Performance. Absorbs the old Portfolio page (deleted `pages/Portfolio.jsx`) + pending orders + analytics.
+- **Research** (NEW `pages/Research.jsx`): strategy-first validation lab. Sub-tabs Validate (strategy dropdown →
+  Saved Configs / Monte Carlo / Strategy Validation) and AI Analysis (AI Analyst terminal + the former Logs/Reports
+  page — reasoning timeline, counterfactual engine, attrition funnel, analytics).
+- **Workspace** (NEW `pages/Workspace.jsx`): Engine & Risk (the settings page, now Exit-Engine + Risk-Monitor only),
+  Learn & Compete (Academy + Competition Demo as "coming soon" placeholders — built in Phase 2/3), System Health
+  (Backend/Mode/Gate), About + owner logout.
+- **Settings.jsx** stripped: removed the Strategy-Validation (Q2) and Analytics (Q4) quadrants + `deriveValidation`/
+  `diversify` (moved to Research), leaving a clean engine/risk config consumed inside Workspace.
+- **Cockpit** unchanged (Dashboard); **Strategy** unchanged (Strategy Center with health + timeline from iter27).
+- Every page keeps its cyan "one question per page" line.
+- Tested: testing_agent iter28 web frontend — all nav/pages/sub-tabs/owner flows green; backend unchanged (iter27).
+  Lint clean. Non-blocking: a dev-console hydration warning on MonteCarloPanel; Emergent widget overlaps the
+  rightmost tab hit-area at desktop width (JS clicks fine).
+
+
 ## 2026-07-08 (iter27) — Phase 1 "The Spine": OS-workflow framing + Strategy Center as the heart (web+backend, tested all-green)
 
 Competition-focused UX transformation (web only; /app/mobile untouched). Turned Ananta's deep engine
