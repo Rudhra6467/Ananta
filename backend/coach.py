@@ -142,3 +142,50 @@ def validate_apply(setting_key: str, value) -> float | int:
     lo, hi, _ = APPLYABLE[setting_key]
     clamped = max(lo, min(hi, value))
     return int(clamped) if isinstance(APPLYABLE[setting_key][0], int) else float(clamped)
+
+
+
+TRADES_REVIEW_PROMPT = (
+    "You are Ananta's AI Trading Coach reviewing a batch of CLOSED trades. Use ONLY the DATA SNAPSHOT. "
+    "Write a concise, plain-English performance review (4-7 short sentences or bullets): overall result, "
+    "what worked, the biggest recurring weakness, and one concrete suggestion. Cite real numbers. "
+    "No preamble, no disclaimers."
+)
+
+
+async def trades_review(db, mode: str) -> dict:
+    """AI-written review of the closed trades for a given book ('paper' | 'live')."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise RuntimeError("EMERGENT_LLM_KEY not configured")
+
+    m = (mode or "paper").lower()
+    mode_q = {"$in": ["PAPER", "DRY_RUN"]} if m == "paper" else "LIVE"
+    trades = await db.trades.find(
+        {"side": "SELL", "pnl": {"$ne": None}, "mode": mode_q}, {"_id": 0},
+    ).sort("timestamp", -1).limit(300).to_list(300)
+
+    if not trades:
+        return {"mode": m, "trades": 0, "review": f"No closed {m} trades yet — run the engine to build a history to analyse."}
+
+    wins = [t for t in trades if (t.get("pnl") or 0) > 0]
+    total = round(sum((t.get("pnl") or 0) for t in trades), 2)
+    wr = round(100 * len(wins) / len(trades), 1)
+    per_strat: dict[str, dict] = {}
+    exits: dict[str, int] = {}
+    for t in trades:
+        s = per_strat.setdefault(t.get("strategy") or "unknown", {"n": 0, "pnl": 0.0})
+        s["n"] += 1
+        s["pnl"] += t.get("pnl") or 0
+        exits[t.get("exit_reason") or "-"] = exits.get(t.get("exit_reason") or "-", 0) + 1
+
+    snapshot = (
+        f"DATA SNAPSHOT ({m.upper()} book, {len(trades)} closed trades):\n"
+        f"net_pnl=${total} win_rate={wr}% wins={len(wins)} losses={len(trades)-len(wins)}\n"
+        "PER-STRATEGY: " + "; ".join(f"{k}: n={v['n']} pnl=${round(v['pnl'],2)}" for k, v in per_strat.items()) + "\n"
+        "EXIT REASONS: " + "; ".join(f"{k}={n}" for k, n in sorted(exits.items(), key=lambda kv: -kv[1])[:6])
+    )
+    chat = LlmChat(api_key=api_key, session_id=f"trades-review-{m}-{datetime.now(UTC).date()}",
+                   system_message=TRADES_REVIEW_PROMPT).with_model(MODEL_PROVIDER, MODEL_NAME)
+    text = await chat.send_message(UserMessage(text=snapshot + "\n\nWrite the review now."))
+    return {"mode": m, "trades": len(trades), "win_rate": wr, "net_pnl": total, "review": str(text)}

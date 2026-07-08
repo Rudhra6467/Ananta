@@ -19,7 +19,7 @@ export default function ResearchWizard() {
     const [assets, setAssets] = useState([]);
     const [strat, setStrat] = useState("hunter");
     const [picked, setPicked] = useState([]);
-    const [period, setPeriod] = useState("3m");
+    const [period, setPeriod] = useState("1m");
     const [runMC, setRunMC] = useState(true);
     const [phase, setPhase] = useState("idle"); // idle | running | done | error
     const [progress, setProgress] = useState(0);
@@ -30,7 +30,10 @@ export default function ResearchWizard() {
         api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
         api.labCoverage().then((c) => {
             const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
-            setAssets(avail); setPicked(avail.slice(0, 3));
+            setAssets(avail);
+            // Fast demo default: just BTC (single asset finishes in seconds), judges can add more.
+            const btc = avail.find((a) => a.startsWith("BTC"));
+            setPicked(btc ? [btc] : avail.slice(0, 1));
         }).catch(() => {});
     }, []);
 

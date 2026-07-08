@@ -78,6 +78,16 @@ function Shell() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
+    // Cross-page navigation bus (e.g. Workspace "Analyse" → Research tab).
+    useEffect(() => {
+        const onNav = (e) => {
+            const idx = TABS.findIndex((t) => t.id === e.detail?.tabId);
+            if (idx >= 0) go(idx);
+        };
+        window.addEventListener("ananta:navigate", onNav);
+        return () => window.removeEventListener("ananta:navigate", onNav);
+    }, [active]);
+
     const onTouchStart = (e) => {
         const t = e.touches[0];
         touch.current = { x: t.clientX, y: t.clientY };

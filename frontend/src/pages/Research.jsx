@@ -9,6 +9,7 @@ import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import ResearchWizard from "@/components/lab/ResearchWizard";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import TradingCoach from "@/components/lab/TradingCoach";
+import ClosedTradesAnalysis from "@/components/lab/ClosedTradesAnalysis";
 import Reports from "@/pages/Reports";
 
 export default function Research() {
@@ -16,6 +17,7 @@ export default function Research() {
     const [strategies, setStrategies] = useState([]);
     const [sel, setSel] = useState("");
     const [advanced, setAdvanced] = useState(false);
+    const [sub, setSub] = useState("validate");
 
     useEffect(() => {
         api.strategyRegistry().then((d) => {
@@ -23,14 +25,19 @@ export default function Research() {
             setStrategies(list);
             if (list.length) setSel(list[0].key);
         }).catch(() => {});
+        // deep-link from Workspace "Analyse" → jump to the Closed Trades sub-tab
+        const onClosed = () => setSub("closed");
+        window.addEventListener("ananta:research-closed", onClosed);
+        return () => window.removeEventListener("ananta:research-closed", onClosed);
     }, []);
 
     return (
         <div className="space-y-5" data-testid="research-page">
-            <Tabs defaultValue="validate" className="atlas-tabs">
+            <Tabs value={sub} onValueChange={setSub} className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
                     <SubTab value="validate" label="VALIDATE" icon={ShieldCheck} />
                     <SubTab value="analyze" label="AI ANALYSIS" icon={Brain} />
+                    <SubTab value="closed" label="CLOSED TRADES" icon={ShieldCheck} />
                 </TabsList>
 
                 <TabsContent value="validate" className="m-0 space-y-4">
@@ -65,6 +72,10 @@ export default function Research() {
                     <TradingCoach isOwner={isOwner} />
                     <AIAnalystTerminal isOwner={isOwner} strategy={sel} />
                     <Reports />
+                </TabsContent>
+
+                <TabsContent value="closed" className="m-0 space-y-4">
+                    <ClosedTradesAnalysis isOwner={isOwner} />
                 </TabsContent>
             </Tabs>
         </div>

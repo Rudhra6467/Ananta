@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import {
     SlidersHorizontal, GraduationCap, Trophy, Activity, Info, LogOut, CheckCircle2, XCircle, ChevronRight,
-    Play, RotateCcw, Loader2, Rocket,
+    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useAppData } from "@/context/AppDataContext";
 import SettingsPage from "@/pages/Settings";
 import { AcademyModal } from "@/components/Academy";
 
 export default function Workspace() {
     const { isOwner, owner, logout } = useAuth();
+    const { trades } = useAppData();
     const [health, setHealth] = useState(null);
     const [academyOpen, setAcademyOpen] = useState(false);
 
@@ -50,6 +52,11 @@ export default function Workspace() {
             </Section>
             <AcademyModal open={academyOpen} onOpenChange={setAcademyOpen} />
 
+            {/* Closed Trades History */}
+            <Section icon={Archive} title="Closed Trades History" subtitle="Your completed round-trips">
+                <ClosedTradesHistory trades={trades} />
+            </Section>
+
             {/* System Health */}
             <Section icon={Activity} title="System Health" subtitle="Live platform status">
                 <div className="panel border-atlas-border rounded-xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="ws-system-health">
@@ -81,6 +88,38 @@ export default function Workspace() {
                     </div>
                 </div>
             </Section>
+        </div>
+    );
+}
+
+function ClosedTradesHistory({ trades }) {
+    const closed = (trades || []).filter((t) => t.side === "SELL" && (t.status || "FILLED") === "FILLED" && t.pnl != null).slice(0, 12);
+    const goAnalyse = () => {
+        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
+        window.dispatchEvent(new Event("ananta:research-closed"));
+    };
+    return (
+        <div className="panel border-atlas-border rounded-xl p-5" data-testid="ws-closed-history">
+            {closed.length === 0 ? (
+                <div className="py-6 text-center font-mono text-[11px] text-atlas-textTertiary">No closed trades yet.</div>
+            ) : (
+                <div className="rounded-lg border border-atlas-border divide-y divide-atlas-border max-h-64 overflow-y-auto atlas-scroll">
+                    {closed.map((t) => (
+                        <div key={t.id} className="px-3 py-2 flex items-center justify-between font-mono text-[11px]" data-testid="ws-closed-row">
+                            <span className="text-atlas-text font-bold w-14">{(t.symbol || "").split("/")[0]}</span>
+                            <span className="text-atlas-textTertiary text-[9px] uppercase">{["PAPER", "DRY_RUN"].includes(t.mode) ? "paper" : "live"}</span>
+                            <span className="text-atlas-textTertiary truncate mx-2 flex-1 text-right">{t.exit_reason || "-"}</span>
+                            <span className={`tabular-nums font-bold w-20 text-right ${t.pnl > 0 ? "text-atlas-positive" : t.pnl < 0 ? "text-atlas-negative" : "text-atlas-textSecondary"}`}>{t.pnl >= 0 ? "+" : ""}${(t.pnl || 0).toFixed(2)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <div className="flex justify-end mt-3">
+                <button data-testid="ws-analyse-btn" onClick={goAnalyse}
+                    className="flex items-center gap-2 rounded-lg bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-4 py-2.5 transition-colors">
+                    <Sparkles className="w-3.5 h-3.5" /> ANALYSE
+                </button>
+            </div>
         </div>
     );
 }

@@ -592,6 +592,21 @@ class CoachApply(BaseModel):
     value: float
 
 
+class TradesReviewReq(BaseModel):
+    mode: str = "paper"
+
+
+@api_router.post("/coach/trades-review", dependencies=[Depends(require_owner)])
+async def coach_trades_review(payload: TradesReviewReq):
+    """AI-written review of closed paper or live trades. Owner-only (consumes LLM credits)."""
+    import coach  # noqa: PLC0415
+    try:
+        return await coach.trades_review(db, payload.mode)
+    except Exception as e:  # noqa: BLE001
+        logger.error("trades review failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI coach error: {e}")
+
+
 @api_router.post("/coach/weekly-review", dependencies=[Depends(require_owner)])
 async def coach_weekly_review():
     """AI Trading Coach — a proactive 7-day performance review + one applyable tweak.
@@ -1382,9 +1397,11 @@ async def report_full_pdf():
 async def report_trades_pdf(
     start: str | None = Query(None, description="Inclusive start date YYYY-MM-DD (UTC)"),
     end: str | None = Query(None, description="Inclusive end date YYYY-MM-DD (UTC)"),
+    mode: str | None = Query(None, description="Filter by book: 'paper' | 'live' | 'all'"),
+    inline: bool = Query(False, description="Open in-browser instead of downloading"),
 ):
     """Unified Trade-History export: a clean, chronological printout of EXECUTED
-    (FILLED) trades, optionally filtered to an inclusive calendar date range."""
+    (FILLED) trades, optionally filtered to a date range and a paper/live book."""
     from pdf_report import build_trades_report
 
     query: dict = {"status": {"$in": ["FILLED", None]}}
@@ -1395,6 +1412,11 @@ async def report_trades_pdf(
         ts_filter["$lte"] = f"{end}T23:59:59.999999+00:00"
     if ts_filter:
         query["timestamp"] = ts_filter
+    m = (mode or "all").lower()
+    if m == "paper":
+        query["mode"] = {"$in": ["PAPER", "DRY_RUN"]}
+    elif m == "live":
+        query["mode"] = "LIVE"
 
     trades = await db.trades.find(query, {"_id": 0}).sort("timestamp", 1).to_list(5000)
     # only real executions (defensive: drop any cancelled/aborted rows if present)
@@ -1407,12 +1429,13 @@ async def report_trades_pdf(
     except Exception as e:
         logger.exception("Trade-history PDF build failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to build PDF: {e}") from e
-    suffix = f"{start or 'all'}_{end or 'now'}"
+    suffix = f"{m}_{start or 'all'}_{end or 'now'}"
     filename = f"ananta-trades-{suffix}.pdf"
+    disposition = "inline" if inline else "attachment"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
     )
 
 

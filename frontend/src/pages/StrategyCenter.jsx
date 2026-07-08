@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -240,6 +240,15 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                 )}
                 {tab === "History" && <History metric={metric} />}
             </div>
+
+            {/* floating Edit Strategy action (owner-only) */}
+            {isOwner && tab !== "Parameters" && (
+                <button data-testid="edit-strategy-fab" onClick={() => { setTab("Parameters"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="fixed bottom-24 right-5 md:bottom-8 md:right-8 z-40 flex items-center gap-2 rounded-full bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-3 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.9)] transition-colors"
+                    title="Edit this strategy's parameters">
+                    <Pencil className="w-4 h-4" strokeWidth={2.4} /> EDIT STRATEGY
+                </button>
+            )}
         </div>
     );
 }
