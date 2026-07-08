@@ -330,7 +330,10 @@ function AddStrategyWizard({ open, onOpenChange, registry, isOwner, onCreated })
             if (source === "duplicate") {
                 payload = { strategy_key: strat, params: {}, origin: "user", name: name.trim() || `${registry[strat]?.name || strat} · variant` };
             } else {
-                const parsed = JSON.parse(json);
+                let parsed;
+                try { parsed = JSON.parse(json); }
+                catch { toast.error("Invalid JSON", { description: "Check the syntax and try again." }); setBusy(false); return; }
+                if (!parsed.strategy_key) { toast.error("Missing strategy_key", { description: 'JSON must include a "strategy_key".' }); setBusy(false); return; }
                 payload = { strategy_key: parsed.strategy_key, params: parsed.params || {}, origin: "user", name: (parsed.name || name.trim() || "Imported config") };
             }
             const res = await api.strategyConfigCreate(payload);

@@ -1,3 +1,34 @@
+## 2026-07-08 — Strategy Center + Research Lab 2.0 · PHASE 1 (web, tested iter25 all-green)
+
+Strategies are now first-class objects. New **"Strategies"** bottom-nav tab (nav is now 5 tabs).
+
+- **Strategy Center** (`pages/StrategyCenter.jsx`): strategy cards **2-per-row** (Hunter / Volatility Squeeze /
+  Continuation) with status badge, star rating, ROI / win-rate / health / trades — all real, from the new
+  `GET /api/strategy/metrics` (derived from the closed-trade ledger + config ratings + state). Search box +
+  status filter chips (LIVE/PAPER/DISABLED) + sort chips (Most Profitable / Highest Win Rate / Healthiest /
+  Top Rated). An `+ Add Strategy` card opens a wizard.
+- **Strategy Detail** page with tabs: **Overview** (How-it-works + Strategy DNA + Live Snapshot),
+  **Parameters** (schema-driven editor filtered to that strategy, with contextual help), **Validation**
+  (Monte Carlo + lab), **AI** (analyst scoped to the strategy via the new `strategy` field on `ai_query`),
+  **Research**, **History**. Status selector persists via `PUT /api/strategy/{key}/state` (enum-validated;
+  new `strategy_meta` collection).
+- **Add Strategy wizard**: safe sources ENABLED — Copy Existing (clone a built-in as a tunable config
+  variant) and Import JSON (validated). Git / Python / Pine / Marketplace / Built-in shown as disabled
+  "SOON" — deliberately NOT built (executing uploaded code / external import needs security + arch design).
+- **Contextual Help** (`components/lab/HelpHint.jsx`): minimalist (?) → non-blocking floating card,
+  click-away close; wired onto every parameter label in the editor.
+- **New logo** (`components/AnantaLogo.jsx`): scalable SVG emblem — ring + trident tines + sharp central
+  "A" + upward chart arrow + constellation nodes; replaces the PNG in the header.
+
+**Backend:** `GET /api/strategy/metrics`, `PUT /api/strategy/{key}/state`, `strategy` scope on
+`POST /api/analytics/ai_query`. Tests: `backend/tests/test_iter25_strategy_center.py` (9/9). Regression
+iter23+iter24 still green (18/18).
+
+**DEFERRED (need product/security decisions before building):** sandboxed Python/Pine/Git/URL/ZIP strategy
+import, community marketplace, full version-control (branch/merge/rollback/compare), per-strategy run-history
+timeline with version tags, auto Research-Lab registration of imported strategies.
+
+
 ## 2026-07-07 (batch 2) — AI Quant Analyst + Saved Configs (dynamic schema editor) + Monte Carlo (web, tested)
 
 Three backlog features shipped autonomously on top of the 2×2 cockpit.
