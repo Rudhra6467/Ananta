@@ -370,6 +370,32 @@ async def admin_fresh_start():
     }
 
 
+@api_router.get("/admin/demo/status")
+async def admin_demo_status():
+    import demo_seed  # noqa: PLC0415
+    return await demo_seed.demo_status(db)
+
+
+@api_router.post("/admin/demo/load", dependencies=[Depends(require_owner)])
+async def admin_demo_load():
+    """Owner-only: load the curated Competition Demo Workspace (rich preview data
+    across the 3 real strategies) so judges see every screen alive instantly."""
+    import demo_seed  # noqa: PLC0415
+    out = await demo_seed.load_demo(db)
+    global _RESEARCH_CACHE, _RESEARCH_CACHE_TS
+    _RESEARCH_CACHE = {}
+    _RESEARCH_CACHE_TS = 0.0
+    logger.info("Competition Demo loaded by owner: %s", out)
+    return {"ok": True, **out}
+
+
+@api_router.post("/admin/demo/reset", dependencies=[Depends(require_owner)])
+async def admin_demo_reset():
+    """Owner-only: clear the demo (and any) data back to a clean $1200 paper book."""
+    return await admin_fresh_start()
+
+
+
 @api_router.get("/trades")
 async def get_trades(limit: int = Query(50, le=500)):
     cursor = db.trades.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
@@ -559,6 +585,40 @@ async def analytics_ai_query(payload: AiQuery):
         logger.error("ai_query failed: %s", e)
         raise HTTPException(status_code=502, detail=f"AI analyst error: {e}")
     return {"session_id": session_id, "answer": answer}
+
+
+class CoachApply(BaseModel):
+    setting_key: str
+    value: float
+
+
+@api_router.post("/coach/weekly-review", dependencies=[Depends(require_owner)])
+async def coach_weekly_review():
+    """AI Trading Coach — a proactive 7-day performance review + one applyable tweak.
+    Owner-only (consumes LLM credits)."""
+    import coach  # noqa: PLC0415
+    settings = await load_settings(db)
+    try:
+        review = await coach.weekly_review(db, settings)
+    except Exception as e:  # noqa: BLE001
+        logger.error("coach review failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI coach error: {e}")
+    return review
+
+
+@api_router.post("/coach/apply", dependencies=[Depends(require_owner)])
+async def coach_apply(payload: CoachApply):
+    """Apply a Coach-recommended parameter change (clamped to a safe whitelist)."""
+    import coach  # noqa: PLC0415
+    try:
+        clamped = coach.validate_apply(payload.setting_key, payload.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    settings = await load_settings(db)
+    setattr(settings, payload.setting_key, clamped)
+    await save_settings(db, settings)
+    return {"ok": True, "setting_key": payload.setting_key, "applied_value": clamped}
+
 
 
 class MonteCarloRequest(BaseModel):

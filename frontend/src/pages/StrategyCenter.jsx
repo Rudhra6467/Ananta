@@ -16,6 +16,7 @@ import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import HelpHint from "@/components/lab/HelpHint";
 import StrategyArchitect from "@/pages/StrategyArchitect";
 import { useAuth } from "@/context/AuthContext";
+import MetricExplainer from "@/components/MetricExplainer";
 
 const ICONS = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
 const STATUS = {
@@ -325,6 +326,7 @@ function HealthCard({ metric }) {
             <div className="flex items-center gap-2 mb-4">
                 <HeartPulse className="w-4 h-4 text-atlas-cyan" />
                 <span className="label-tag">STRATEGY HEALTH</span>
+                <MetricExplainer metric="health" value={score} side="bottom" />
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-6">
                 {/* radial gauge */}
@@ -350,7 +352,7 @@ function HealthCard({ metric }) {
                     {comps.map((c) => (
                         <div key={c.key} className="group" title={c.detail} data-testid={`health-comp-${c.key}`}>
                             <div className="flex items-center justify-between font-mono text-[10px] mb-0.5">
-                                <span className="text-atlas-textSecondary">{c.label}</span>
+                                <span className="text-atlas-textSecondary flex items-center gap-1">{c.label}{(c.key === "win_rate" || c.key === "risk") && <MetricExplainer metric={c.key === "risk" ? "roi" : "win_rate"} value={c.score} />}</span>
                                 <span className={`tabular-nums font-bold ${healthColor(c.score)}`}>{c.score}</span>
                             </div>
                             <div className="h-1.5 rounded-full bg-atlas-panel overflow-hidden">

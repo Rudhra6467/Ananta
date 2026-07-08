@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 29 — Phase 2+3 Competition/Coach/Onboarding features fully verified on web. Backend: 12/12 pytest passes for demo endpoints (status/load/reset), owner-gating (403 without token), curated seed shape (42 trades = 18 hunter + 14 squeeze + 10 continuation, 5 configs, 2 lab runs, 3 strategy_meta), and coach endpoints (weekly-review + apply, whitelist enforcement, clamp, persistence). /api/strategy/metrics correctly reflects the seeded profile — hunter LIVE 55.6% health=78 (healthiest), squeeze PAPER 50.0%, continuation DISABLED 40.0% health=55 (weakest). Frontend: onboarding pipeline appears on clean localStorage, animates to onboarding-finale + onboarding-enter, dismiss sets ananta_onboarded=1, re-launch via ws-tour-replay works. Workspace ws-demo card owner-gated, load button flips status from 'Not loaded' → 'Loaded · 42 trades'; reset button present. Academy modal opens with 10 lesson toggles that expand/collapse. Research Wizard 5-step stepper (wizard-step-0..4) fully wired: hunter→BTC→3m→MC toggle→RUN VALIDATION enters wizard-running with progress. AI Trading Coach: switch OFF disables Generate; switch ON + owner enables it; generate produced a real Claude Sonnet review in ~12s with coach-review + coach-recommendation (squeeze_vol_expansion_min 1.5→1.9); coach-apply-btn worked and turned to APPLIED with toast. Metric explainers on Strategy detail Overview render metric-explainer-{health,win_rate,roi} and open metric-explainer-card-* with definition + bands + your value. Regression: 5-tab nav intact, page-question copy exact per spec on every tab, Trade sub-tabs (positions/orders/history/performance) all mount.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Research Wizard step 3 (Validation)", "issues": ["Real backtest (hunter · BTC · 3m + MC) did not complete within the 60s test cap in the preview (still in wizard-running state). Not a bug per spec (\"real backtest may take 15-60s; if it times out that's acceptable\"), but user-facing wait can feel long — consider a background progress ETA or partial-result streaming."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": ["/app/backend/tests/test_iter29_demo_coach.py", "/app/test_reports/pytest/iter29_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "demo_seed.load_demo is well-scoped and idempotent — wipes 13 transient collections then seeds a deterministic (random.Random(1337)) set. Note: it wipes strategy_configs/strategy_meta/lab_runs unconditionally on every call; if a user has non-demo saved configs they will be lost. UX-safe today (owner-triggered) but consider a soft-merge or explicit confirmation on the frontend (the ws-demo card already says 'Overwrites current preview data. Preview only — not production.', which is good).",
+    "coach.py: APPLYABLE whitelist + clamp is correctly enforced both in weekly_review (sanitize before returning) and in coach_apply (validate_apply raising ValueError → 400). Emergent LLM key is read at call time, so rotating .env doesn't require restart.",
+    "coach.weekly_review persists every review into db.coach_reviews with a ts — good for audit; no PII concerns. However rec.suggested_value clamp uses `if isinstance(val, (int, float))` — a JSON number that comes back as a string would silently make it non-applyable rather than 4xx. Acceptable defensive behaviour; consider logging when this happens.",
+    "server.py demo_status route is public (no auth) — that's intentional (frontend uses it to show badge to anonymous visitors). Confirmed only returns counts/loaded booleans, no PII.",
+    "ResearchWizard.jsx uses STEPS.length = 5 for the stepper header (wizard-step-0..4) but the step body only has cases for step 0..3, with step 3 rendering the RUN button. This mismatch is intentional (step 4 = 'running' state) but slightly confusing — an inline comment near the STEPS array would help future maintainers.",
+    "TradingCoach.jsx correctly gates coach-generate-btn on `aiOn && isOwner` — matches the 'credits switch OFF by default' directive across all AI surfaces."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter29_demo_coach.py"],
+  "success_rate": {"backend": "100% (12/12 iter29 tests)", "frontend": "100% on iter29 spec (onboarding, ws-demo, ws-tour-replay, academy, wizard 5-step + advanced, coach full flow, metric-explainers, 5-tab regression, trade sub-tabs). Wizard real backtest is slow-running (unfinished in 60s) — acceptable per spec."},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (preview). Token injected via page.request.post to bypass WAF login rate-limits.",
+  "seed_data_creation": "Competition Demo was loaded and reset multiple times during pytest, then re-loaded in the last frontend phase — final state: DEMO seed loaded (42 trades, hunter LIVE / squeeze PAPER / continuation DISABLED). min_confidence setting was persisted at 0.95 by the coach clamp test. If main agent wants a clean book, call POST /api/admin/demo/reset (owner).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter29 selectors confirmed working: onboarding-pipeline / onboarding-step-* / onboarding-finale / onboarding-enter / onboarding-skip; ws-demo + ws-demo-status + ws-demo-load + ws-demo-reset (owner-gated); ws-tour-replay; ws-academy + academy-modal + academy-lessons + academy-toggle-*; research-wizard with wizard-step-0..4, wizard-strat-*, wizard-asset-* (BTC/ETH/SOL/LINK/AAVE + shadow variants — 10 total), wizard-period-3m, wizard-toggle-mc, wizard-next / wizard-run / wizard-running / wizard-results / wizard-result-{SYM} / wizard-error; research-advanced-toggle reveals research-strategy-select + saved-configs-panel + monte-carlo-panel; trading-coach + coach-ai-switch + coach-generate-btn + coach-review + coach-recommendation + coach-apply-btn; metric-explainer-health / metric-explainer-win_rate / metric-explainer-roi + metric-explainer-card-* on Strategy detail. Note wizard has 5 stepper markers (0..4) but step body only covers 0..3 — the 5th tick corresponds to the running phase (intentional). LLM coach responds in ~10-15s via Claude Sonnet Emergent key. Real backtests may take >60s. Backend regression file: /app/backend/tests/test_iter29_demo_coach.py.",
+  "rca of the issue": "N/A — no bugs found. One minor UX note: real hunter+MC backtest didn't complete within 60s Playwright cap (spec-permitted). No blockers."
+}

@@ -79,6 +79,13 @@ export const api = {
     pendingOrders: () => client.get("/pending_orders").then((r) => r.data),
     getEnvironment: () => client.get("/environment").then((r) => r.data),
     setEnvironment: (mode) => client.post(`/environment/${mode}`).then((r) => r.data),
+    // --- Competition Demo Workspace ---
+    demoStatus: () => client.get("/admin/demo/status").then((r) => r.data),
+    demoLoad: () => client.post("/admin/demo/load").then((r) => r.data),
+    demoReset: () => client.post("/admin/demo/reset").then((r) => r.data),
+    // --- AI Trading Coach ---
+    coachReview: () => client.post("/coach/weekly-review").then((r) => r.data),
+    coachApply: (setting_key, value) => client.post("/coach/apply", { setting_key, value }).then((r) => r.data),
     // --- auth (Phase 3.5) ---
     login: (email, password) => client.post("/auth/login", { email, password }).then((r) => r.data),
     logout: () => client.post("/auth/logout").then((r) => r.data),

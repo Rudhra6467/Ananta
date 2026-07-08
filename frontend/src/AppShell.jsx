@@ -11,6 +11,7 @@ import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
 import AccountOverlay from "@/components/AccountOverlay";
 import AnantaLogo from "@/components/AnantaLogo";
+import OnboardingPipeline from "@/components/OnboardingPipeline";
 import { useAuth } from "@/context/AuthContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
@@ -59,6 +60,16 @@ function Shell() {
     const [dir, setDir] = useState(1);
     const touch = useRef(null);
     const hidden = useHideOnScroll(60);
+    const [tourOpen, setTourOpen] = useState(false);
+
+    // First-visit onboarding gate (shows once); re-launchable via the 'ananta:tour' event.
+    useEffect(() => {
+        if (!localStorage.getItem("ananta_onboarded")) setTourOpen(true);
+        const onTour = () => setTourOpen(true);
+        window.addEventListener("ananta:tour", onTour);
+        return () => window.removeEventListener("ananta:tour", onTour);
+    }, []);
+    const closeTour = () => { localStorage.setItem("ananta_onboarded", "1"); setTourOpen(false); };
 
     const go = (i) => {
         if (i < 0 || i >= TABS.length || i === active) return;
@@ -100,6 +111,9 @@ function Shell() {
             </main>
 
             <BottomNav active={active} onSelect={go} />
+
+            <OnboardingPipeline open={tourOpen} onClose={closeTour} />
+
 
             <Toaster
                 position="top-right"
