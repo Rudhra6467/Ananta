@@ -1,3 +1,35 @@
+## 2026-07-08 (iter29) — Phase 2 "judge wow" + Phase 3 "depth & delight" (web, tested all-green 12/12 backend + full frontend)
+
+Competition-focused feature wave. Web only. Every AI surface has a visible credits switch.
+
+### Phase 2 — the judge wow
+- **Interactive onboarding pipeline** (`components/OnboardingPipeline.jsx`): CI/CD-style animated first-login gate
+  (Account→Connect Exchange→Verify→Import→Choose Strategy→Validate→AI Review→Paper→Ready for Live) ending with a
+  "trading OS is ready · 4-minute setup" finale. Shows once (localStorage `ananta_onboarded`); re-launchable from
+  Workspace "Replay Tour" via the `ananta:tour` window event.
+- **Competition Demo Workspace** (`backend/demo_seed.py` + `/api/admin/demo/{load,reset,status}`, owner-only):
+  one click seeds a curated preview across the 3 REAL strategies — 42 trades, 5 saved configs, 2 completed lab runs,
+  varied statuses (hunter LIVE / squeeze PAPER / continuation DISABLED). Deterministic; hunter is the healthiest
+  (health 78, 55.6% wr), continuation weakest. Wired in Workspace (`ws-demo` Load/Reset + status).
+
+### Phase 3 — depth & delight
+- **AI Trading Coach** (`backend/coach.py` + `/api/coach/weekly-review` & `/api/coach/apply`, owner, Claude Sonnet):
+  proactive 7-day review (summary, best/worst strategy, common mistake, ONE applyable tweak, estimated impact,
+  confidence). `apply` clamps to a safe whitelist (min_confidence, max_daily_loss_pct, max_concurrent_positions,
+  max_spread_pct, squeeze_vol_expansion_min, rsi_reset_max). UI (`components/lab/TradingCoach.jsx`) in Research →
+  AI Analysis with a credits switch + 1-click Apply.
+- **Visual Research Lab wizard** (`components/lab/ResearchWizard.jsx`): guided Strategy→Dataset→Period→Validation→Run
+  stepper on the Research Validate tab, driving a real `/api/lab/runs` backtest (+ optional Monte Carlo), with a
+  progress animation and a per-symbol results dashboard + verdict. Legacy panels tucked behind "Show advanced tools".
+- **Academy** (`components/Academy.jsx`): education hub modal with 10 curated lessons (Getting Started, Trading Basics,
+  Risk Management, How Hunter/Squeeze work, How AI Thinks, Walk-Forward, Monte Carlo, Paper vs Live, FAQ). Opens from
+  Workspace `ws-academy`.
+- **Clickable metric explainers** (`components/MetricExplainer.jsx`): tap the (i) on Health / Win Rate / ROI to see a
+  definition + quality bands + where your value lands. Wired into the Strategy Health card.
+- Tested: testing_agent iter29 — backend 12/12 (tests/test_iter29_demo_coach.py), frontend 100% of spec. No bugs.
+  Note: full hunter backtest is slow in preview (>60s); wizard shows progress and is spec-permitted to time out.
+
+
 ## 2026-07-08 (iter28) — 5-tab "Workspaces" navigation restructure (web, tested all-green)
 
 Adopted the user's workspaces-not-pages model. Navigation is now the monitor → create → validate → trade → manage journey:
