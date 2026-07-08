@@ -1,3 +1,29 @@
+## 2026-07-08 (iter27) — Phase 1 "The Spine": OS-workflow framing + Strategy Center as the heart (web+backend, tested all-green)
+
+Competition-focused UX transformation (web only; /app/mobile untouched). Turned Ananta's deep engine
+into a coherent, guided AI-native trading OS narrative.
+
+- **Strategy lifecycle gate wired into the live engine** (carried-over task): `trading_engine.load_strategy_states`
+  + `strategy_entry_allowed`; a strategy set to DISABLED/ERROR (or toggled off) in the Strategy Center opens
+  NO new entries — gated at all 3 executors (hunter primary BUY, squeeze, continuation). Open positions still
+  managed by the exit engine. Hunter block emits reason `STRATEGY_DISABLED`. Unit tests: tests/test_strategy_gate.py (5).
+- **Transparent Strategy Health Score** (`server._health_breakdown`): headline 0-100 = rounded mean of 6
+  component scores (Win Rate, Risk-Adjusted, Recent Form, Consistency, Sample Confidence, Owner Rating). No
+  "magic" number. Frontend radial gauge + component bars in StrategyCenter Overview (HealthCard).
+- **Per-strategy Lifecycle Timeline** (`server._strategy_timeline`): Created → Last Optimized → Validation
+  → First Paper Trade → Live → Latest Trade, derived from configs + validation gate + trade ledger. New
+  Timeline tab + TimelinePanel in StrategyCenter.
+- **"One question per page"** framing (AppShell.ContextInfo `page-question`): Cockpit "What is happening now?",
+  Portfolio "How much am I making?", Strategies "What strategies do I own?", Logs "Why am I winning or losing?",
+  Research Lab "Does my strategy actually work?".
+- **Post-deployment test scenarios** for the user: /app/memory/POST_DEPLOYMENT_TESTS.md (3 e2e scenarios).
+- Tested: testing_agent iter27 — backend 23/23 pytest (18 new HTTP in tests/test_iter27_spine.py + 5 gate unit),
+  web frontend all UI spec items pass. All strategies reset to PAPER+enabled post-test. Lint clean.
+- BACKLOG (agreed roadmap, not yet built): Phase 2 = interactive onboarding pipeline + Demo/Competition Workspace;
+  Phase 3 = visual Research Lab wizard, AI Trading Coach (weekly review), Academy, clickable metric explainers,
+  per-page AI assistant. Every AI surface must ship with a visible credits switch (user directive).
+
+
 ## 2026-07-08 (batch 2) — Strategy Architect: AI-designed strategies from the "+" (web, tested iter26 all-green)
 
 The Strategy Center "+" is now the **Strategy Architect** — an AI quant strategist that interviews the
