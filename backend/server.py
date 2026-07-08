@@ -1572,14 +1572,72 @@ from strategy import (  # noqa: E402
 _OWNER_TENANT = "owner"  # single-tenant today; every row is already tenant-scoped for the future.
 
 
-def _strategy_health(win_rate: float, roi: float, trades: int, stars: int) -> int:
-    """Composite 0-100 health from win-rate, ROI, sample size and star rating."""
-    score = 0.0
-    score += min(35.0, win_rate * 0.7)            # up to 35 for a 50%+ win rate
-    score += 25.0 if roi > 0 else max(0.0, 25.0 + roi)  # ROI% contribution (clamped)
-    score += min(20.0, trades * 2.0)              # sample-size confidence
-    score += stars * 4.0                          # up to 20 from rating
-    return int(max(1, min(100, round(score))))
+def _health_breakdown(ts: list[dict], win_rate: float, roi: float, trades: int, stars: int) -> list[dict]:
+    """Transparent sub-scores behind the single Health number — each 0-100 so the
+    Strategy Center can render 'why' cards (win rate / risk / consistency / form / …)."""
+    import statistics  # noqa: PLC0415
+
+    recent = ts[-10:]
+    rwins = sum(1 for t in recent if (t.get("pnl") or 0) > 0)
+    recent_wr = round(100 * rwins / len(recent), 0) if recent else 0.0
+
+    rets = [t.get("return_pct") for t in ts if t.get("return_pct") is not None]
+    consistency = None
+    if len(rets) >= 3:
+        mean = statistics.mean(rets)
+        sd = statistics.pstdev(rets)
+        cv = abs(sd / mean) if mean else 999.0
+        consistency = round(max(0.0, min(100.0, 100.0 - cv * 20.0)), 0)
+
+    risk_adj = round(max(0.0, min(100.0, 50.0 + roi * 2.0)), 0)
+    sample = round(min(100.0, trades * 5.0), 0)
+    rating_score = round(min(100.0, stars * 20.0), 0)
+
+    comps = [
+        {"key": "win_rate", "label": "Win Rate", "score": round(min(100.0, win_rate), 0),
+         "detail": f"{win_rate}% of trades profitable"},
+        {"key": "risk", "label": "Risk-Adjusted", "score": risk_adj, "detail": f"ROI {roi}%"},
+        {"key": "recent", "label": "Recent Form", "score": recent_wr,
+         "detail": f"last {len(recent)} trades" if recent else "no recent trades"},
+        {"key": "sample", "label": "Sample Confidence", "score": sample, "detail": f"{trades} closed trades"},
+        {"key": "rating", "label": "Owner Rating", "score": rating_score, "detail": f"{stars}/5 stars"},
+    ]
+    if consistency is not None:
+        comps.insert(3, {"key": "consistency", "label": "Consistency", "score": consistency,
+                         "detail": "per-trade return stability"})
+    return comps
+
+
+def _strategy_timeline(schema, cfgs: list[dict], ts: list[dict], status: str) -> list[dict]:
+    """Lifecycle milestones (Created → Optimized → Validated → Paper → Live → Latest)
+    derived from configs, the validation gate and the live trade ledger."""
+    created_at = None
+    if cfgs:
+        created_at = min((c.get("created_at") for c in cfgs if c.get("created_at")), default=None)
+    events = [{"key": "created", "label": "Created", "ts": created_at, "done": True,
+               "detail": f"{getattr(schema, 'name', 'Strategy')} registered"}]
+    if cfgs:
+        latest = max(cfgs, key=lambda c: c.get("updated_at") or "")
+        events.append({"key": "optimized", "label": "Last Optimized", "ts": latest.get("updated_at"),
+                       "done": True, "detail": f"{len(cfgs)} saved config(s)"})
+        validated = any((c.get("validation_status") == "passed") for c in cfgs)
+        events.append({"key": "validated", "label": "Validation Passed", "ts": None, "done": validated,
+                       "detail": "Walk-forward / backtest gate" if validated else "Not yet validated"})
+    else:
+        events.append({"key": "validated", "label": "Validation Passed", "ts": None, "done": False,
+                       "detail": "Run a backtest in the Research Lab"})
+    if ts:
+        events.append({"key": "paper", "label": "First Paper Trade", "ts": ts[0].get("timestamp"),
+                       "done": True, "detail": "Paper-traded live"})
+    else:
+        events.append({"key": "paper", "label": "First Paper Trade", "ts": None, "done": False,
+                       "detail": "Awaiting first entry"})
+    events.append({"key": "live", "label": "Live Trading", "ts": None, "done": status == "LIVE",
+                   "detail": "Deployed to live" if status == "LIVE" else "Not deployed live"})
+    if ts:
+        events.append({"key": "last_trade", "label": "Latest Trade", "ts": ts[-1].get("timestamp"),
+                       "done": True, "detail": f"{len(ts)} trades total"})
+    return events
 
 
 async def _compute_strategy_metrics() -> dict:
@@ -1590,7 +1648,10 @@ async def _compute_strategy_metrics() -> dict:
         {"pnl": {"$ne": None}, "note": {"$ne": "DEMO_SEED"}},
         {"_id": 0, "strategy": 1, "pnl": 1, "return_pct": 1, "timestamp": 1},
     ).sort("timestamp", 1).to_list(4000)
-    configs = await db.strategy_configs.find({"tenant_id": _OWNER_TENANT}, {"_id": 0, "strategy_key": 1, "rating": 1}).to_list(1000)
+    configs = await db.strategy_configs.find(
+        {"tenant_id": _OWNER_TENANT},
+        {"_id": 0, "strategy_key": 1, "rating": 1, "created_at": 1, "updated_at": 1, "validation_status": 1},
+    ).to_list(1000)
     meta = {m["key"]: m for m in await db.strategy_meta.find({}, {"_id": 0}).to_list(200)}
 
     by_strat: dict[str, list[dict]] = {}
@@ -1613,13 +1674,19 @@ async def _compute_strategy_metrics() -> dict:
         stars = stars_by.get(key, 0)
         last_ts = ts[-1]["timestamp"] if ts else None
         m = meta.get(key, {})
+        status = m.get("status", "PAPER")
+        cfgs = [c for c in configs if c["strategy_key"] == key]
+        breakdown = _health_breakdown(ts, win_rate, roi, n, stars)
+        health = int(round(sum(c["score"] for c in breakdown) / len(breakdown))) if breakdown else 0
         out[key] = {
             "key": key, "name": schema.name, "category": (schema.dna or {}).get("family") if isinstance(schema.dna, dict) else None,
-            "status": m.get("status", "PAPER"), "enabled": m.get("enabled", True),
+            "status": status, "enabled": m.get("enabled", True),
             "trades": n, "win_rate": win_rate, "roi": roi, "total_pnl": total_pnl,
             "stars": stars, "confidence": min(99, int(win_rate)) if n else 0,
-            "health": _strategy_health(win_rate, roi, n, stars),
-            "last_trade": last_ts, "config_count": sum(1 for c in configs if c["strategy_key"] == key),
+            "health": health,
+            "health_breakdown": breakdown,
+            "timeline": _strategy_timeline(schema, cfgs, ts, status),
+            "last_trade": last_ts, "config_count": len(cfgs),
         }
     return out
 

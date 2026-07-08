@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
+    CheckCircle2, Circle, Clock, HeartPulse,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -161,7 +162,7 @@ function Kv({ label, value, cls = "text-atlas-text" }) {
 }
 
 /* ---------------- Detail view ---------------- */
-const TABS = ["Overview", "Parameters", "Validation", "AI", "Research", "History"];
+const TABS = ["Overview", "Parameters", "Validation", "AI", "Research", "Timeline", "History"];
 
 function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
     const [tab, setTab] = useState("Overview");
@@ -228,6 +229,7 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                 {tab === "Parameters" && <SavedConfigsPanel isOwner={isOwner} only={sKey} />}
                 {tab === "Validation" && <div className="space-y-4"><MonteCarloPanel /><StrategyValidationPanel /></div>}
                 {tab === "AI" && <AIAnalystTerminal isOwner={isOwner} strategy={sKey} />}
+                {tab === "Timeline" && <TimelinePanel metric={metric} />}
                 {tab === "Research" && (
                     <div className="panel border-atlas-border rounded-xl p-5 space-y-3">
                         <div className="flex items-center gap-2"><FlaskIcon /> <span className="font-heading font-medium text-atlas-text">Research & Backtesting</span></div>
@@ -257,6 +259,7 @@ function Overview({ schema, metric }) {
     const dnaRows = Object.entries(dna).filter(([, v]) => typeof v !== "object");
     return (
         <div className="space-y-4">
+            <HealthCard metric={metric} />
             <div className="panel border-atlas-border rounded-xl p-5">
                 <div className="label-tag mb-2">HOW IT WORKS</div>
                 <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed">{schema?.description || "No description available for this strategy."}</p>
@@ -298,6 +301,104 @@ function History({ metric }) {
             <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-atlas-textTertiary">
                 <HelpHint text="Per-strategy run history with version tagging & compare is on the roadmap. Runs currently live in the Research Lab." title="Run History" side="bottom" />
                 Version-tagged run history coming with the optimization engine.
+            </div>
+        </div>
+    );
+}
+
+/* ---------------- Health Score (transparent breakdown) ---------------- */
+function healthColor(v) {
+    return v >= 60 ? "text-atlas-positive" : v >= 35 ? "text-atlas-warning" : "text-atlas-negative";
+}
+function healthBar(v) {
+    return v >= 60 ? "bg-atlas-positive" : v >= 35 ? "bg-atlas-warning" : "bg-atlas-negative";
+}
+
+function HealthCard({ metric }) {
+    const score = metric?.health ?? 0;
+    const comps = metric?.health_breakdown || [];
+    const stars = Math.round(score / 20);
+    // gauge geometry
+    const R = 42, C = 2 * Math.PI * R, pct = Math.max(0, Math.min(100, score));
+    return (
+        <div className="panel border-atlas-border rounded-xl p-5" data-testid="strategy-health-card">
+            <div className="flex items-center gap-2 mb-4">
+                <HeartPulse className="w-4 h-4 text-atlas-cyan" />
+                <span className="label-tag">STRATEGY HEALTH</span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+                {/* radial gauge */}
+                <div className="relative shrink-0" style={{ width: 108, height: 108 }}>
+                    <svg width="108" height="108" className="-rotate-90">
+                        <circle cx="54" cy="54" r={R} fill="none" stroke="currentColor" strokeWidth="9" className="text-atlas-border" />
+                        <circle cx="54" cy="54" r={R} fill="none" strokeWidth="9" strokeLinecap="round"
+                            className={healthColor(score)} stroke="currentColor"
+                            strokeDasharray={C} strokeDashoffset={C - (pct / 100) * C}
+                            style={{ transition: "stroke-dashoffset 0.8s ease" }} />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className={`font-heading font-bold text-3xl tabular-nums ${healthColor(score)}`} data-testid="health-score-value">{score}</span>
+                        <span className="font-mono text-[8px] text-atlas-textTertiary uppercase tracking-wider">/ 100</span>
+                    </div>
+                </div>
+                {/* stars + component bars */}
+                <div className="flex-1 w-full space-y-2.5">
+                    <div className="flex items-center gap-1 mb-1">
+                        {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-4 h-4 ${n <= stars ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                        <span className="font-mono text-[10px] text-atlas-textTertiary ml-1.5">{score >= 60 ? "Healthy" : score >= 35 ? "Needs work" : "At risk"}</span>
+                    </div>
+                    {comps.map((c) => (
+                        <div key={c.key} className="group" title={c.detail} data-testid={`health-comp-${c.key}`}>
+                            <div className="flex items-center justify-between font-mono text-[10px] mb-0.5">
+                                <span className="text-atlas-textSecondary">{c.label}</span>
+                                <span className={`tabular-nums font-bold ${healthColor(c.score)}`}>{c.score}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-atlas-panel overflow-hidden">
+                                <div className={`h-full rounded-full ${healthBar(c.score)}`} style={{ width: `${Math.max(2, c.score)}%`, transition: "width 0.6s ease" }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ---------------- Lifecycle Timeline ---------------- */
+function fmtTs(ts) {
+    if (!ts) return null;
+    try { return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); }
+    catch { return null; }
+}
+
+function TimelinePanel({ metric }) {
+    const events = metric?.timeline || [];
+    if (!events.length) {
+        return <div className="panel border-atlas-border rounded-xl p-5 font-mono text-[11px] text-atlas-textTertiary">No lifecycle data yet.</div>;
+    }
+    return (
+        <div className="panel border-atlas-border rounded-xl p-5" data-testid="strategy-timeline">
+            <div className="flex items-center gap-2 mb-5"><GitBranch className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">LIFECYCLE TIMELINE</span></div>
+            <div className="relative pl-6">
+                <div className="absolute left-[9px] top-1 bottom-1 w-px bg-atlas-border" />
+                {events.map((e, i) => {
+                    const done = !!e.done;
+                    const Icon = done ? CheckCircle2 : Circle;
+                    return (
+                        <div key={e.key} className="relative pb-5 last:pb-0" data-testid={`timeline-${e.key}`}>
+                            <span className={`absolute -left-[23px] top-0.5 grid place-items-center w-[19px] h-[19px] rounded-full bg-atlas-bg ${done ? "text-atlas-cyan" : "text-atlas-textTertiary"}`}>
+                                <Icon className="w-[15px] h-[15px]" strokeWidth={done ? 2.4 : 1.8} fill={done ? "currentColor" : "none"} fillOpacity={done ? 0.15 : 0} />
+                            </span>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className={`font-heading text-sm ${done ? "text-atlas-text" : "text-atlas-textTertiary"}`}>{e.label}</span>
+                                {fmtTs(e.ts) && (
+                                    <span className="flex items-center gap-1 font-mono text-[9px] text-atlas-textTertiary"><Clock className="w-3 h-3" />{fmtTs(e.ts)}</span>
+                                )}
+                            </div>
+                            <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{e.detail}</div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

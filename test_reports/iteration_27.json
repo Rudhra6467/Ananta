@@ -1,0 +1,47 @@
+{
+  "summary": "Iter 27 — Phase 1 'The Spine' backend + web verified GREEN. Backend: 23/23 pytest tests pass (18 new HTTP tests in /app/backend/tests/test_iter27_spine.py covering state persistence for all 6 statuses LIVE/PAPER/DISABLED/TESTING/OPTIMIZING/ERROR + enabled toggle, owner-gate 403 for anon via urllib.request, invalid-status 400, empty-body 400, unknown-key 404; metrics endpoint shape+fields+timeline+breakdown; health == round(avg(breakdown)) validated per-strategy; DISABLED-state persistence and cycle stays healthy while DISABLED; plus 5 pre-existing gate unit tests in test_strategy_gate.py all green). Frontend (web, 1920x1080, owner via localStorage token injection): 'one question per page' cyan question renders on all 5 nav tabs — dashboard 'What is happening right now?', portfolio 'How much am I making?', strategies 'What strategies do I own?', reports 'Why am I winning or losing?', settings 'Does my strategy actually work?'. Strategy Center grid renders 3 cards (hunter/squeeze/continuation). Opening Hunter shows all 7 tabs (Overview/Parameters/Validation/AI/Research/Timeline/History). Overview tab: strategy-health-card + health-score-value=36 + 6 health-comp-* (win_rate 30, risk 49, recent 30, consistency 0, sample 50, rating 60 — math checks out: round(mean)=36). Timeline tab: strategy-timeline visible with 6 lifecycle events (timeline-created, timeline-optimized, timeline-validated, timeline-paper, timeline-live [open circle — not deployed], timeline-last_trade) — all required keys created/validated/paper/live present. Squeeze detail also renders health-card + timeline. Environment cleanup: hunter/squeeze/continuation all reset to PAPER + enabled=True (verified via /api/strategy/metrics post-run).",
+  "platforms_tested": ["web"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter27_spine.py",
+    "/app/backend/tests/test_strategy_gate.py",
+    "/app/test_reports/pytest/pytest_iter27.xml",
+    "/tmp/iter27_overview.png",
+    "/tmp/iter27_timeline.png"
+  ],
+  "action_items": [
+    "(No blockers.) All Phase-1 spec items pass end-to-end.",
+    "(Testing infra note, not a bug) conftest.py autouse fixture monkey-patches requests.Session.request to auto-inject the owner Bearer token on all mutating requests targeting BASE_URL. Anon-403 tests via `requests.Session()` are therefore silently authenticated and always get 200. Options: (a) opt-out via header sentinel like 'X-Skip-Auth-Inject: 1', or (b) let tests bypass via urllib/http.client as done in iter27. Non-blocking but worth a short docstring note in conftest.",
+    "(Nice-to-have) The STRATEGY_DISABLED gate at trading_engine.py:863 fires only after the Hunter would return BUY, so an HTTP integration test on POST /api/cycle/run/{symbol} needs a symbol/state that actually triggers a BUY to observe the reason string. The pure gate function is unit-tested in test_strategy_gate.py (5 tests) which is fine; a synthetic evaluate_symbol harness (with a stubbed hunter setup) would let us assert the STRATEGY_DISABLED reason end-to-end in future iterations.",
+    "(Nice-to-have) `settings` tab reuses page-question 'Does my strategy actually work?' even though the tab label is 'Research Lab' — copy is fine, but if the tab is ever repurposed to true settings, the question line should track."
+  ],
+  "critical_code_review_comments": [
+    "trading_engine.strategy_entry_allowed correctly defaults to True when no meta row exists (backwards-compatible), and treats both 'DISABLED' and 'ERROR' as blocking + honors enabled=False. Called at 3 places in evaluate_symbol (hunter L863, squeeze L1244, continuation L1332) — full coverage of new-entry sites. Exit-engine path is NOT gated, so open positions still get managed (documented intent).",
+    "server.PUT /api/strategy/{key}/state validates status against the exact 6-status set, returns 400 for empty body, 404 for unknown key, upserts by key. Depends(require_owner) enforces owner-gate — verified via urllib (403 anon, 200 authed).",
+    "server._compute_strategy_metrics computes health as int(round(mean(component_scores))) with 5 baseline components + optional 'consistency' when >=3 return_pct samples exist. Hunter has 6 components (baseline+consistency); squeeze/continuation have 5. Math verified live: hunter breakdown [30,49,30,0,50,60] mean 36.5 -> round 36 == UI display. Timeline lifecycle events are deterministic and include the four required milestones plus optional Last Optimized + Latest Trade.",
+    "StrategyCenter.jsx HealthCard renders radial gauge + component bars keyed on `c.key` (data-testid=health-comp-<key>) with color scale + title tooltip carrying the breakdown detail — good UX, transparent scoring. TimelinePanel renders every event with a done/open circle + optional timestamp, matching the backend schema.",
+    "AppShell.ContextInfo renders <div data-testid='page-question'> on all 5 tabs (dashboard/portfolio/strategies/reports/settings) with cyan/70 accent — the 'one question per page' framing is consistent."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter27_spine.py (NEW — 18 HTTP tests, 23 passed with existing gate unit tests)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% (all iter27 selectors present + correct values; health math verified; timeline lifecycle correct; page-question on all 5 tabs)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (preview) — Playwright's page.request.post() succeeded for /api/auth/login and token was injected via localStorage['ananta_owner_token'] to bypass WAF rate-limits on repeated login POSTs. Standard iter25/26 pattern reused.",
+  "seed_data_creation": "None. State toggles during test cleaned up by the module-scoped `owner` fixture teardown (hunter/squeeze/continuation reset to PAPER + enabled=True). Verified post-run via /api/strategy/metrics.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter27 (Phase 1 The Spine — DISABLED gate in evaluate_symbol, Strategy Health 0-100 with breakdown, per-strategy Timeline, one-question-per-page copy) is fully green on backend + web. Test file /app/backend/tests/test_iter27_spine.py runs in ~7-11s and is safe to re-run: teardown always resets the three built-in strategies. NOTE for future testers: conftest.py monkey-patches requests.Session.request to inject the owner token on all mutating calls; if you need to test the 403 owner-gate, use urllib.request or http.client (see TestStrategyState.test_anonymous_is_403 pattern). The STRATEGY_DISABLED blocked_reasons string only appears when Hunter would otherwise BUY — quiet markets short-circuit to HOLD before the gate. For a true end-to-end gate assertion, either stub the Hunter setup or force a scenario. Frontend token injection pattern: localStorage.setItem('ananta_owner_token', <token>) + reload. WAF may 403 repeated /api/auth/login POSTs from headless — use Playwright's page.request.post() which routes through the browser stack.",
+  "rca of the issue": "N/A — no bugs found."
+}

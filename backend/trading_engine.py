@@ -127,6 +127,31 @@ async def load_settings(db: AsyncIOMotorDatabase) -> RiskSettings:
     return RiskSettings(**doc)
 
 
+async def load_strategy_states(db: AsyncIOMotorDatabase) -> dict[str, dict]:
+    """Read the per-strategy lifecycle status set in the Strategy Center.
+    Returns {key: {"status": str, "enabled": bool}}. Missing rows default to
+    an enabled PAPER strategy so behaviour is unchanged until an owner toggles it."""
+    states: dict[str, dict] = {}
+    with contextlib.suppress(Exception):
+        rows = await db.strategy_meta.find({}, {"_id": 0, "key": 1, "status": 1, "enabled": 1}).to_list(200)
+        for r in rows:
+            k = r.get("key")
+            if k:
+                states[k] = {"status": r.get("status", "PAPER"), "enabled": r.get("enabled", True)}
+    return states
+
+
+def strategy_entry_allowed(states: dict[str, dict], key: str) -> bool:
+    """A strategy may open NEW positions unless it is explicitly DISABLED/ERROR
+    or toggled off. LIVE/PAPER/TESTING/OPTIMIZING all permit entries (paper book)."""
+    st = states.get(key)
+    if not st:
+        return True  # default-on until an owner sets a state
+    if st.get("enabled") is False:
+        return False
+    return st.get("status") not in ("DISABLED", "ERROR")
+
+
 async def save_settings(db: AsyncIOMotorDatabase, settings: RiskSettings) -> RiskSettings:
     settings.updated_at = datetime.now(UTC).isoformat()
     await db.settings.replace_one({"id": "singleton"}, settings.model_dump(), upsert=True)
@@ -574,6 +599,7 @@ async def _record_live_sell(
 # ---------- single evaluation cycle for one symbol ----------
 async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     settings = await load_settings(db)
+    strategy_states = await load_strategy_states(db)
     portfolio = _ensure_day_start(await load_portfolio(db))
 
     # Vault Engine: source deployable capital (live balance capped by override).
@@ -830,6 +856,15 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                 f"{reserve_note}; queueing this signal for next cycle."
             )
             decision = "HOLD"
+
+    # --- Strategy Center gate: the Hunter (primary entry driver) must be enabled ---
+    # DISABLED/ERROR (or an explicit off-toggle) blocks NEW Hunter entries; open
+    # positions are still managed by the exit engine. Set in the Strategy Center UI.
+    if decision == "BUY" and not strategy_entry_allowed(strategy_states, "hunter"):
+        _hstate = strategy_states.get("hunter", {}).get("status", "DISABLED")
+        blocked.append(f"STRATEGY_DISABLED hunter status={_hstate}")
+        fusion_summary = f"HOLD - Hunter strategy is {_hstate} in the Strategy Center; no new entries."
+        decision = "HOLD"
 
     # --- per-symbol cooldown gate (no revenge trades after SL, momentum reset after trail) ---
     if decision == "BUY" and not has_position:
@@ -1206,6 +1241,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and not _hard_killed
             and breaker_state != "VETO"
             and settings.trading_mode in ("PAPER", "DRY_RUN")
+            and strategy_entry_allowed(strategy_states, "squeeze")
             and squeeze_allowed(getattr(asset_regime, "regime", None))
         )
         if squeeze_eligible:
@@ -1293,6 +1329,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and breaker_state != "VETO"
             and settings.trading_mode in ("PAPER", "DRY_RUN")
             and getattr(settings, "continuation_enabled", True)
+            and strategy_entry_allowed(strategy_states, "continuation")
             and continuation_allowed(getattr(asset_regime, "regime", None))
         )
         if cont_eligible:

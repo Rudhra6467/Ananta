@@ -174,6 +174,13 @@ function TopHeader({ active, ready, isOwner, hidden }) {
 
 function ContextInfo({ active, portfolio }) {
     const id = TABS[active].id;
+    const QUESTION = {
+        dashboard: "What is happening right now?",
+        portfolio: "How much am I making?",
+        strategies: "What strategies do I own?",
+        reports: "Why am I winning or losing?",
+        settings: "Does my strategy actually work?",
+    };
 
     if (id === "dashboard") {
         const equity = portfolio?.equity ?? 0;
@@ -181,12 +188,15 @@ function ContextInfo({ active, portfolio }) {
         const slots = portfolio?.slots_used ?? 0;
         const dailyPct = portfolio?.daily_pnl_pct ?? 0;
         return (
-            <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll" data-testid="context-cockpit">
-                <Metric label="ACCOUNT VALUE" value={`$${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} big />
-                <Metric label="DEPLOYED" value={`$${deployed.toFixed(2)}`} sub={`(${slots})`} />
-                <Metric label="DAILY P&L"
-                    value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`}
-                    cls={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"} />
+            <div data-testid="context-cockpit">
+                <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1.5" data-testid="page-question">{QUESTION.dashboard}</div>
+                <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll">
+                    <Metric label="ACCOUNT VALUE" value={`$${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} big />
+                    <Metric label="DEPLOYED" value={`$${deployed.toFixed(2)}`} sub={`(${slots})`} />
+                    <Metric label="DAILY P&L"
+                        value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`}
+                        cls={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"} />
+                </div>
             </div>
         );
     }
@@ -199,22 +209,22 @@ function ContextInfo({ active, portfolio }) {
         const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
         const cls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-text";
         return (
-            <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll" data-testid="context-portfolio">
-                <Metric label="INVESTED" value={invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} big />
-                <Metric label="CURRENT" value={current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
-                <Metric label="P&L" value={`${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`} sub={`${pnl >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} cls={cls} />
+            <div data-testid="context-portfolio">
+                <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1.5" data-testid="page-question">{QUESTION.portfolio}</div>
+                <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll">
+                    <Metric label="INVESTED" value={invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} big />
+                    <Metric label="CURRENT" value={current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
+                    <Metric label="P&L" value={`${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`} sub={`${pnl >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} cls={cls} />
+                </div>
             </div>
         );
     }
 
     const title = id === "reports" ? "Logs / Reports" : id === "strategies" ? "Strategy Center" : "Research Lab";
-    const subtitle = id === "reports" ? "Reasons, Reports, & Reasoning Analytics"
-        : id === "strategies" ? "Every strategy · lifecycle, validation & AI optimization"
-            : "Strategy validation · optimization sandbox · engine config";
     return (
         <div data-testid={`context-${id}`}>
+            <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1" data-testid="page-question">{QUESTION[id]}</div>
             <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
-            <div className="label-tag mt-1.5 text-[9px] text-atlas-textTertiary">{subtitle}</div>
         </div>
     );
 }
