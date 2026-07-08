@@ -1,3 +1,18 @@
+## 2026-07-08 (iter30) — Strategy Edit + Closed-Trades Analysis + wizard speed (web, tested green; 1 race fixed)
+
+- **Strategy "Edit Strategy" FAB** (`StrategyCenter`): owner-only floating bottom-right button on the strategy detail;
+  jumps to the Parameters editor. Hidden for non-owners. Metric explainers added to the Health card (Win Rate / ROI).
+- **Closed-Trades Analysis** (`components/lab/ClosedTradesAnalysis.jsx`) as a new **Research → Closed Trades** sub-tab:
+  two boxes — **Closed Paper Trades** & **Closed Live Trades** — each listing trades with an **Analyse Trades** button
+  that opens a report modal: an **AI-written review** (`POST /api/coach/trades-review`, Claude) + **Download PDF** +
+  **Open on Web** (`/api/report/trades.pdf?mode=paper|live&inline=`). Backend PDF endpoint gained `mode` + `inline` params.
+- **Workspace → Closed Trades History** section with an **Analyse** button that deep-links to the Research Closed-Trades
+  sub-tab (via `ananta:navigate` + a persisted `ananta_research_sub` flag — fixes a mount race the tester caught).
+- **Research wizard** now defaults to **BTC + 1-month** so a judge's backtest finishes in seconds.
+- Tested: testing_agent iter30 — backend 7/7, frontend all flows; the deep-link race was fixed and self-verified
+  (`research-subtab-closed[data-state=active]`).
+
+
 ## 2026-07-08 (iter29) — Phase 2 "judge wow" + Phase 3 "depth & delight" (web, tested all-green 12/12 backend + full frontend)
 
 Competition-focused feature wave. Web only. Every AI surface has a visible credits switch.

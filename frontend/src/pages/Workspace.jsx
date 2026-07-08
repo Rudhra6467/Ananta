@@ -95,6 +95,7 @@ export default function Workspace() {
 function ClosedTradesHistory({ trades }) {
     const closed = (trades || []).filter((t) => t.side === "SELL" && (t.status || "FILLED") === "FILLED" && t.pnl != null).slice(0, 12);
     const goAnalyse = () => {
+        localStorage.setItem("ananta_research_sub", "closed");
         window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
         window.dispatchEvent(new Event("ananta:research-closed"));
     };

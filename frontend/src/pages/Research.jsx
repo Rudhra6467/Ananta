@@ -17,7 +17,11 @@ export default function Research() {
     const [strategies, setStrategies] = useState([]);
     const [sel, setSel] = useState("");
     const [advanced, setAdvanced] = useState(false);
-    const [sub, setSub] = useState("validate");
+    const [sub, setSub] = useState(() => {
+        const pending = localStorage.getItem("ananta_research_sub");
+        if (pending) { localStorage.removeItem("ananta_research_sub"); return pending; }
+        return "validate";
+    });
 
     useEffect(() => {
         api.strategyRegistry().then((d) => {
@@ -28,6 +32,9 @@ export default function Research() {
         // deep-link from Workspace "Analyse" → jump to the Closed Trades sub-tab
         const onClosed = () => setSub("closed");
         window.addEventListener("ananta:research-closed", onClosed);
+        // consume a pending deep-link target set just before this component mounted
+        const pending = localStorage.getItem("ananta_research_sub");
+        if (pending) { localStorage.removeItem("ananta_research_sub"); setSub(pending); }
         return () => window.removeEventListener("ananta:research-closed", onClosed);
     }, []);
 
