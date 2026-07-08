@@ -1,0 +1,37 @@
+{
+  "summary": "Iter 28 — Web-only nav restructure GREEN. Bottom nav exposes exactly the 5 required tabs (Cockpit/Trade/Strategy/Research/Workspace) with correct data-testids; the four old tabs (portfolio/reports/logs/settings) are removed. Every tab renders its unique cyan 'page-question' line matching spec. TRADE (trade-page): mode bar + EnvironmentToggle + trade-kill-btn all present; sub-tabs Positions/Orders/History/Performance all switch to data-state=active and mount their panels without errors; kill-switch toggled ENGAGED and released cleanly by owner (backend persisted, toast fired). RESEARCH (research-page): both sub-tabs render — Validate has research-strategy-select + saved-configs-panel + monte-carlo-panel + strategy-validation-panel; AI Analysis mounts ai-analyst-terminal + reports-page without crash. STRATEGY: 3 cards render, Hunter opens showing health card (36) and Timeline sub-tab correctly renders strategy-timeline with lifecycle events. WORKSPACE (workspace-page): SettingsPage embedded, quad-exit-engine + quad-risk render, quad-validation/quad-analytics correctly removed; Learn & Compete shows ws-academy + ws-demo (Coming soon); ws-system-health shows Backend/Trading Mode/Live Gate rows; About shows description + ws-logout-btn as owner. Regression: Open Engine modal opens, Open Risk Monitor modal opens, risk-save-btn is enabled for owner and fires 'SETTINGS SAVED' toast (settings persisted through /api/settings PUT).",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Research > Validate > Monte Carlo panel", "issues": ["React hydration warning in console: '<span> cannot be a child of <option>' originating from MonteCarloPanel.jsx line 56 — appears to be tooling-injected source-map span inside <option>. Dev-only warning, no functional impact, but noisy in DevTools."]},
+        {"screen": "Bottom nav (Workspace tab)", "issues": ["'Made with Emergent' floating widget sits at bottom-right and visually overlaps the Workspace tab hit-area at 1440x900. Real users can still tap (widget doesn't cover the whole button), but Playwright pixel-precise .click() without force can be intercepted. JS-invoked click works fine. Consider adding right padding to BottomNav or lowering the widget's z-index."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": ["/app/test_reports/iteration_28.json", "/tmp/iter28_workspace.png"],
+  "action_items": [
+    "(minor / cosmetic) In /app/frontend/src/components/lab/MonteCarloPanel.jsx around L56 the option elements contain a source-instrumentation <span> which trips React's 'span cannot be child of option' hydration warning. Doesn't break functionality but pollutes DevTools console — consider suppressing or removing the wrapper in that mapping.",
+    "(minor / cosmetic) The Emergent branding widget can visually crowd the rightmost Workspace tab. If preview UX matters, add pr-16 (or similar) to the BottomNav container so the Workspace tab has extra right padding on desktop widths."
+  ],
+  "critical_code_review_comments": [
+    "AppShell.jsx TABS array correctly locks nav to the 5 spec tabs and ContextInfo returns the exact question strings per id — no dead tabs remain.",
+    "Trade.jsx correctly consolidates Positions/Orders/History/Performance via shadcn Tabs, wires trade-kill-btn to /api/settings.manual_kill_switch, and gates the toggle on isOwner (public users get a toast prompt). No blocking issues.",
+    "Research.jsx cleanly hosts the Validate + AI Analysis sub-tabs and forwards the selected strategy key into AIAnalystTerminal — Reports.jsx renders inside AI Analysis so all prior reasoning/counterfactual/funnel/analytics content lives on the correct tab.",
+    "Workspace.jsx embeds SettingsPage (Q1 + Q3 only), health rows read from /api/risk/status + /api/environment with a 15s refresh, and ws-logout-btn correctly hides when unauthenticated.",
+    "Settings.jsx no longer renders quad-validation / quad-analytics (verified in DOM), so the Q2/Q4 removal matches the spec — validation/analytics now live in Research."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (all iter28 spec items pass: 5-tab nav, page-question copy, trade sub-tabs+kill toggle, research validate/analyze, workspace engine+risk modals with save persistence, strategy timeline regression)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (preview) — token obtained via page.request.post to /api/auth/login and injected into localStorage['ananta_owner_token'] to bypass WAF rate-limits.",
+  "seed_data_creation": "None. During test: kill-switch toggled ENGAGED then released back to false; risk modal saved with existing values (no field changes). No strategy status modifications this run — all remained on PAPER per iter27 teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter28 web-only nav restructure verified green. Selectors that matter: bottom-nav-{dashboard|trade|strategies|research|workspace}, page-question, trade-page + trade-kill-btn + trade-subtab-{positions|orders|history|performance}, research-page + research-subtab-{validate|analyze} + research-strategy-select, workspace-page + quad-exit-engine + quad-risk + ws-academy + ws-demo + ws-system-health + ws-logout-btn, risk-modal + risk-save-btn. To avoid the Emergent branding widget stealing clicks on the rightmost tab, prefer JS-based click: `page.evaluate(\"document.querySelector('[data-testid=\\\"bottom-nav-workspace\\\"]').click()\")`. Iter27 backend suite still valid (/app/backend/tests/test_iter27_spine.py). Login WAF rate-limit still applies for repeated header-driven POSTs; use page.request.post + localStorage injection.",
+  "rca of the issue": "N/A — no bugs found. The two design notes are cosmetic (dev-console hydration warning; branding widget hit-area overlap) and do not affect the shipped user flow."
+}

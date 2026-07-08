@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-    Save, ShieldOff, Key, AlertTriangle, Zap, Info, TrendingUp, ShieldCheck, Shield,
-    BarChart3, Layers, Gauge, Percent, Target, CheckCircle2, Loader2, Power,
+    Save, Key, Zap, Info, TrendingUp, Shield,
+    Layers, Gauge, Percent, Target, Loader2, Power,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -12,17 +12,12 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import KillSwitchPanel from "@/components/KillSwitchPanel";
-import AnalyticsPanel from "@/components/AnalyticsPanel";
-import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import QuadrantCard from "@/components/lab/QuadrantCard";
 import LabModal from "@/components/lab/LabModal";
 import ExitEngineModal from "@/components/lab/ExitEngineModal";
-import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
-import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
-import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
 import { useAuth } from "@/context/AuthContext";
 
-// Cache the settings payload so re-opening the Research Lab renders instantly from cache.
+// Cache the settings payload so re-opening renders instantly from cache.
 let _settingsCache = null;
 
 export default function SettingsPage() {
@@ -31,10 +26,7 @@ export default function SettingsPage() {
     const [risk, setRisk] = useState(null);
     const [running, setRunning] = useState(false);
     const [lastRun, setLastRun] = useState(null);
-    const [analytics, setAnalytics] = useState(null);
-    const [excludeSynthetic, setExcludeSynthetic] = useState(false);
-    const [validation, setValidation] = useState(null); // derived lab-readiness face data
-    const [openModal, setOpenModal] = useState(null); // 'exit' | 'validation' | 'risk' | 'analytics'
+    const [openModal, setOpenModal] = useState(null); // 'exit' | 'risk'
     const { isOwner } = useAuth();
 
     const applyS = (v) => { _settingsCache = v; setS(v); };
@@ -45,15 +37,6 @@ export default function SettingsPage() {
         const t = setInterval(() => { api.riskStatus().then(setRisk).catch(() => {}); }, 12000);
         return () => clearInterval(t);
     }, []);
-
-    useEffect(() => {
-        api.analyticsPerformance(excludeSynthetic).then(setAnalytics).catch(() => {});
-        const t = setInterval(() => { api.analyticsPerformance(excludeSynthetic).then(setAnalytics).catch(() => {}); }, 15000);
-        return () => clearInterval(t);
-    }, [excludeSynthetic]);
-
-    // Derive the Strategy-Validation face from the latest completed lab runs (real data).
-    useEffect(() => { deriveValidation().then(setValidation).catch(() => setValidation({ empty: true })); }, []);
 
     const upd = (patch) => setS((cur) => ({ ...cur, ...patch }));
 
@@ -107,7 +90,7 @@ export default function SettingsPage() {
     if (!s) {
         return (
             <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary" data-testid="settings-loading">
-                <span className="blink-cursor">LOADING RESEARCH LAB</span>
+                <span className="blink-cursor">LOADING ENGINE CONFIG</span>
             </div>
         );
     }
@@ -117,13 +100,6 @@ export default function SettingsPage() {
     const hunterMult = s.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
     const killed = !!s.manual_kill_switch;
     const safe = risk?.status?.overall_safe !== false;
-    const win = analytics?.rolling_24h || {};
-    const closed = win.closed_trades || 0;
-    const expectancy = win.expectancy_usd;
-    const health = closed === 0 ? { t: "Warming up", dot: "muted" }
-        : expectancy > 0 ? { t: "Good", dot: "good" }
-            : { t: "Caution", dot: "warn" };
-    const diversification = diversify(analytics?.sector_exposure?.counts);
 
     return (
         <TooltipProvider delayDuration={120}>
@@ -145,8 +121,8 @@ export default function SettingsPage() {
                     </button>
                 </div>
 
-                {/* 2×2 cockpit grid */}
-                <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="lab-grid">
+                {/* engine + risk config grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5" data-testid="lab-grid">
                     {/* Q1 — Entry & Exit Engine */}
                     <QuadrantCard
                         testid="quad-exit-engine" icon={TrendingUp} accent="cyan"
@@ -158,22 +134,6 @@ export default function SettingsPage() {
                             { testid: "face-stop", icon: Shield, label: "Hard Stop-Loss", value: `${s.stop_loss_pct}%` },
                         ]}
                         cta="Open Engine" onOpen={() => setOpenModal("exit")}
-                    />
-
-                    {/* Q2 — Strategy Validation */}
-                    <QuadrantCard
-                        testid="quad-validation" icon={ShieldCheck} accent="violet"
-                        title="Strategy Validation" subtitle="Stress Tester"
-                        stats={[
-                            { testid: "face-readiness", label: "Model Readiness", value: validation?.readiness != null ? `${validation.readiness}%` : "—", valueCls: "text-violet-400" },
-                            { testid: "face-overfit", label: "Overfitting Risk", value: validation?.overfit?.t || "—", valueCls: "text-atlas-text", dot: validation?.overfit?.dot },
-                        ]}
-                        rows={[
-                            { testid: "face-wfa", icon: CheckCircle2, label: "Walk-Forward", value: validation?.wfa || "—", valueCls: validation?.wfa === "Passed" ? "text-atlas-positive" : "text-atlas-textTertiary" },
-                            { testid: "face-mc", icon: Layers, label: "Monte Carlo", value: validation?.monteCarlo || "—", valueCls: validation?.monteCarlo === "ROBUST" ? "text-atlas-positive" : validation?.monteCarlo === "ACCEPTABLE" ? "text-atlas-warning" : validation?.monteCarlo ? "text-atlas-negative" : "text-atlas-textTertiary" },
-                            { testid: "face-sens", icon: Gauge, label: "Sensitivity", value: validation?.sensitivity || "—", valueCls: validation?.sensitivity === "Stable" ? "text-atlas-positive" : "text-atlas-textTertiary" },
-                        ]}
-                        cta="Open Validation" onOpen={() => setOpenModal("validation")}
                     />
 
                     {/* Q3 — Risk Monitor */}
@@ -189,23 +149,6 @@ export default function SettingsPage() {
                         ]}
                         cta="Open Risk Monitor" onOpen={() => setOpenModal("risk")}
                     />
-
-                    {/* Q4 — Analytics Engine */}
-                    <QuadrantCard
-                        testid="quad-analytics" icon={BarChart3} accent="green"
-                        title="Analytics Engine" subtitle="AI Reasoning Portal"
-                        stats={[
-                            { testid: "face-health", label: "Portfolio Health", value: health.t, valueCls: "text-atlas-text", dot: health.dot },
-                            { testid: "face-diversification", label: "Diversification", value: diversification != null ? `${diversification}%` : "—", valueCls: "text-atlas-positive" },
-                        ]}
-                        rows={[
-                            { testid: "face-winrate", icon: Percent, label: "Win Rate", value: closed ? `${win.win_rate_pct ?? 0}%` : "—" },
-                            { testid: "face-pf", icon: Gauge, label: "Profit Factor", value: closed ? (win.profit_factor ?? "—") : "—" },
-                            { testid: "face-expectancy", icon: Target, label: "Expectancy", value: closed ? `${(expectancy ?? 0) >= 0 ? "+" : ""}$${Number(expectancy ?? 0).toFixed(2)}` : "—", valueCls: (expectancy ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative" },
-                            { testid: "face-open-pos", icon: Layers, label: "Open Positions", value: Array.isArray(analytics?.open_positions) ? analytics.open_positions.length : (analytics?.open_positions ?? "—") },
-                        ]}
-                        cta="Open Analytics" onOpen={() => setOpenModal("analytics")}
-                    />
                 </div>
 
                 {/* ---- Q1 modal ---- */}
@@ -213,15 +156,6 @@ export default function SettingsPage() {
                     open={openModal === "exit"} onOpenChange={(o) => setOpenModal(o ? "exit" : null)}
                     settings={s} onPersist={persistPatch} isOwner={isOwner}
                 />
-
-                {/* ---- Q2 modal ---- */}
-                <LabModal open={openModal === "validation"} onOpenChange={(o) => setOpenModal(o ? "validation" : null)}
-                    testid="validation-modal" icon={ShieldCheck} accent="violet"
-                    title="Strategy Validation" subtitle="Walk-Forward · Sensitivity · Stress Tester">
-                    <SavedConfigsPanel isOwner={isOwner} />
-                    <MonteCarloPanel onResult={(r) => r?.ok && setValidation((v) => ({ ...(v || {}), monteCarlo: r.verdict }))} />
-                    <StrategyValidationPanel />
-                </LabModal>
 
                 {/* ---- Q3 modal ---- */}
                 <LabModal open={openModal === "risk"} onOpenChange={(o) => setOpenModal(o ? "risk" : null)}
@@ -256,78 +190,9 @@ export default function SettingsPage() {
                     </div>
                     <ApiKeys s={s} upd={upd} />
                 </LabModal>
-
-                {/* ---- Q4 modal ---- */}
-                <LabModal open={openModal === "analytics"} onOpenChange={(o) => setOpenModal(o ? "analytics" : null)}
-                    testid="analytics-modal" icon={BarChart3} accent="green"
-                    title="Analytics Engine" subtitle="Performance Diagnostics · AI Reasoning">
-                    <AIAnalystTerminal isOwner={isOwner} />
-                    <AnalyticsPanel analytics={analytics} excludeSynthetic={excludeSynthetic} onToggleSynthetic={setExcludeSynthetic} />
-                </LabModal>
             </div>
         </TooltipProvider>
     );
-}
-
-// Diversification index (0–100) via Herfindahl on sector counts. 1 position => 0%.
-function diversify(counts) {
-    if (!counts || typeof counts !== "object") return null;
-    const vals = Object.values(counts).map(Number).filter((n) => n > 0);
-    const total = vals.reduce((a, b) => a + b, 0);
-    if (total <= 1) return total === 1 ? 0 : null;
-    const hhi = vals.reduce((a, n) => a + (n / total) ** 2, 0);
-    return Math.round((1 - hhi) * 100);
-}
-
-// Derive validation face data from the latest completed lab runs (real, defensive).
-async function deriveValidation() {
-    const { runs = [] } = await api.labRuns(20);
-    // Monte Carlo verdict from live closed trades (credit-free) — powers the Q2 face tile.
-    const out = {};
-    try {
-        const mc = await api.labMonteCarlo({ source: "live", iterations: 1500, ruin_threshold_pct: 25 });
-        if (mc?.ok) out.monteCarlo = mc.verdict;
-    } catch { /* noop */ }
-    const done = runs.filter((r) => r.status === "DONE");
-    if (!done.length) return { ...out, empty: true };
-    // walk-forward verdict (needs detail)
-    const wf = done.find((r) => r.kind === "walk_forward");
-    if (wf) {
-        try {
-            const d = await api.labRun(wf.id);
-            const v = d?.result?.verdict || "";
-            out.wfa = /ROBUST/i.test(v) ? "Passed" : /OVERFIT|NO-IN-SAMPLE|WEAK/i.test(v) ? "Weak" : "Mixed";
-            const eff = Number(d?.result?.wfa_efficiency);
-            out.overfit = Number.isFinite(eff)
-                ? (eff >= 0.7 ? { t: "Low", dot: "good" } : eff >= 0.4 ? { t: "Medium", dot: "warn" } : { t: "High", dot: "bad" })
-                : { t: "—", dot: "muted" };
-        } catch { /* noop */ }
-    }
-    const sens = done.find((r) => r.kind === "sensitivity");
-    if (sens) {
-        try {
-            const d = await api.labRun(sens.id);
-            out.sensitivity = /ROBUST/i.test(d?.result?.verdict || "") ? "Stable" : "Fragile";
-        } catch { /* noop */ }
-    }
-    // readiness from the latest backtest metrics
-    const bt = done.find((r) => r.kind === "backtest");
-    if (bt) {
-        try {
-            const d = await api.labRun(bt.id);
-            const per = Object.values(d?.result?.per_symbol || {}).filter((m) => !m.error);
-            if (per.length) {
-                const avg = (k) => per.reduce((a, m) => a + (Number(m[k]) || 0), 0) / per.length;
-                const pf = avg("profit_factor"), ret = avg("total_return_pct"), dd = Math.abs(avg("max_drawdown_pct"));
-                let score = 40;
-                score += pf >= 1.5 ? 30 : pf >= 1.1 ? 18 : pf >= 1 ? 8 : 0;
-                score += ret > 0 ? 15 : 0;
-                score += dd <= 5 ? 15 : dd <= 12 ? 8 : 0;
-                out.readiness = Math.max(1, Math.min(99, Math.round(score)));
-            }
-        } catch { /* noop */ }
-    }
-    return out;
 }
 
 /* ---------------- Q3 modal sub-sections ---------------- */

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, Briefcase, Database, FlaskConical, Boxes } from "lucide-react";
+import { LayoutDashboard, CandlestickChart, Brain, FlaskConical, SlidersHorizontal } from "lucide-react";
 import { Toaster } from "sonner";
 import Dashboard from "@/pages/Dashboard";
-import Portfolio from "@/pages/Portfolio";
-import Reports from "@/pages/Reports";
-import SettingsPage from "@/pages/Settings";
+import Trade from "@/pages/Trade";
 import StrategyCenter from "@/pages/StrategyCenter";
+import Research from "@/pages/Research";
+import Workspace from "@/pages/Workspace";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
@@ -15,11 +15,11 @@ import { useAuth } from "@/context/AuthContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
 const TABS = [
-    { id: "dashboard", label: "Cockpit", icon: Activity, Component: Dashboard },
-    { id: "portfolio", label: "Portfolio", icon: Briefcase, Component: Portfolio },
-    { id: "strategies", label: "Strategies", icon: Boxes, Component: StrategyCenter },
-    { id: "reports", label: "Logs", icon: Database, Component: Reports },
-    { id: "settings", label: "Research Lab", icon: FlaskConical, Component: SettingsPage },
+    { id: "dashboard", label: "Cockpit", icon: LayoutDashboard, Component: Dashboard },
+    { id: "trade", label: "Trade", icon: CandlestickChart, Component: Trade },
+    { id: "strategies", label: "Strategy", icon: Brain, Component: StrategyCenter },
+    { id: "research", label: "Research", icon: FlaskConical, Component: Research },
+    { id: "workspace", label: "Workspace", icon: SlidersHorizontal, Component: Workspace },
 ];
 
 /* Native-feed header physics: hides on scroll-down, glides back on scroll-up. */
@@ -176,10 +176,10 @@ function ContextInfo({ active, portfolio }) {
     const id = TABS[active].id;
     const QUESTION = {
         dashboard: "What is happening right now?",
-        portfolio: "How much am I making?",
+        trade: "What am I trading right now?",
         strategies: "What strategies do I own?",
-        reports: "Why am I winning or losing?",
-        settings: "Does my strategy actually work?",
+        research: "Does my strategy actually work?",
+        workspace: "How is Ananta set up?",
     };
 
     if (id === "dashboard") {
@@ -201,7 +201,7 @@ function ContextInfo({ active, portfolio }) {
         );
     }
 
-    if (id === "portfolio") {
+    if (id === "trade") {
         const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
         const invested = positions.reduce((a, p) => a + (p.avg_cost || 0) * (p.quantity || 0), 0);
         const current = positions.reduce((a, p) => a + (p.market_value || (p.last_price || 0) * (p.quantity || 0)), 0);
@@ -209,8 +209,8 @@ function ContextInfo({ active, portfolio }) {
         const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
         const cls = pnl > 0 ? "text-atlas-positive" : pnl < 0 ? "text-atlas-negative" : "text-atlas-text";
         return (
-            <div data-testid="context-portfolio">
-                <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1.5" data-testid="page-question">{QUESTION.portfolio}</div>
+            <div data-testid="context-trade">
+                <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1.5" data-testid="page-question">{QUESTION.trade}</div>
                 <div className="flex items-center gap-5 md:gap-8 overflow-x-auto atlas-scroll">
                     <Metric label="INVESTED" value={invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} big />
                     <Metric label="CURRENT" value={current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
@@ -220,7 +220,7 @@ function ContextInfo({ active, portfolio }) {
         );
     }
 
-    const title = id === "reports" ? "Logs / Reports" : id === "strategies" ? "Strategy Center" : "Research Lab";
+    const title = id === "strategies" ? "Strategy Center" : id === "research" ? "Research Lab" : "Workspace";
     return (
         <div data-testid={`context-${id}`}>
             <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1" data-testid="page-question">{QUESTION[id]}</div>
