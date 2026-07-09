@@ -1,3 +1,29 @@
+## 2026-07-09 (iter31) — MOBILE full parity rebuild (Expo/React Native, tested all-green)
+
+Rebuilt the mobile app (/app/mobile) to match the web 5-tab "workspaces" model against the SAME shared FastAPI
+backend. Old tabs (portfolio/reports/settings) removed; new expo-router screens added.
+
+- **Navigation** ((tabs)/_layout.tsx): 5 tabs — Cockpit, Trade, Strategy, Research, Workspace — each with a
+  "one question per page" header (src/components/PageHeader.tsx).
+- **Cockpit** (index.tsx, existing): portfolio, watchlist, engine status, AI decisions.
+- **Trade** (trade.tsx, NEW): Paper/Live mode segmented + Emergency Stop; Positions / Orders / History sub-tabs.
+  Fixed the `{items}` response shape (was crashing on `.filter`).
+- **Strategy** (strategy.tsx + strategy/[id].tsx rewrite): cards from /strategy/metrics → detail with health score +
+  breakdown bars, lifecycle timeline, and an owner status editor (LIVE/PAPER/DISABLED via PUT /strategy/{key}/state).
+- **Research** (research.tsx, NEW): Validate wizard (BTC + period → real /lab/runs backtest → results), AI Coach
+  (credits switch + weekly review + 1-tap apply), Closed Trades (paper/live → AI review + open PDF via Linking).
+- **Workspace** (workspace.tsx, NEW): editable engine/risk settings, Competition Demo load/reset, Academy (10 lessons
+  in a modal), System health, Replay Guided Tour, logout.
+- **Onboarding** (onboarding.tsx, NEW): animated first-launch pipeline gated by AsyncStorage 'ananta_onboarded';
+  root _layout.tsx redirects owner→/onboarding on first launch, re-launchable from Workspace.
+- **API client** (src/api.ts): added strategyMetrics/registry/setState, lab coverage/runs/monteCarlo, coach
+  review/apply/trades-review, demo status/load/reset, tradesPdfUrl. Uses EXPO_PUBLIC_BACKEND_URL + '/api'.
+- Tested: testing_agent iter31 (mobile, Expo web preview) — login, onboarding, all 5 tabs, strategy status round-trip,
+  wizard/coach/closed wiring, demo, academy, logout — ALL GREEN, no red screens. Backend left clean (demo loaded).
+- Non-blocking: RN-web `pointerEvents` deprecation warning; expo-notifications web warning (harmless).
+- NOTE: mobile is validated on Expo web preview; features needing a native build (push) require Publish + a build.
+
+
 ## 2026-07-08 (iter30) — Strategy Edit + Closed-Trades Analysis + wizard speed (web, tested green; 1 race fixed)
 
 - **Strategy "Edit Strategy" FAB** (`StrategyCenter`): owner-only floating bottom-right button on the strategy detail;
