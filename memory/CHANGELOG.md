@@ -1,3 +1,15 @@
+## 2026-07-09 (iter37) — P3 Phase A: PER-STRATEGY ENGINE CONFIGS (backend + web + mobile, tested)
+
+Migrated the live/paper trading engine from a single GLOBAL `RiskSettings` singleton to PER-STRATEGY config resolution. Fully backward-compatible + PAPER-only — zero behaviour change until an owner activates a config. Fixes the historical bug where activating one strategy's config clobbered fields shared by all strategies.
+
+- **`backend/strategy_runtime.py` (NEW):** `resolve_active_params(db)` → {strategy_key: clamped engine params} for strategies with an active config; `overlay_settings(base, params)` returns a per-strategy COPY of RiskSettings with strategy-level params applied. `ACCOUNT_LEVEL_FIELDS` set enforces the config split — per-strategy configs can NEVER override account-level risk (max_concurrent_positions, max_daily_loss_pct, max_spread_pct, fees, slippage, vault ceiling, min_confidence).
+- **Engine wiring (`trading_engine.evaluate_symbol`):** resolves per-strategy effective settings once per cycle; hunter→`evaluate_primary`, squeeze→`evaluate_squeeze`, continuation→`evaluate_continuation` each get their own overlaid settings + per-strategy lot size. `squeeze.evaluate_squeeze()` extended to accept a config-driven `vol_expansion_min` (was a hardcoded constant).
+- **Endpoints:** `POST /strategy/configs/{id}/activate` NO LONGER writes to global RiskSettings — it records the active config per strategy (returns applied/applied_params/ignored_account_level). NEW `POST /strategy/{key}/deactivate` (revert to global baseline) and `GET /strategy/{key}/effective` (shows exactly what the engine uses now). `/strategy/metrics` now also exposes `active_config_name`.
+- **UI:** web Research Lab → Saved Configs panel: ACTIVATE + LIVE badge + new REVERT button, accurate toast ("N strategy params now live · M account-level ignored"). Mobile strategy detail: ACTIVATE + REVERT with a platform-aware `confirmAction` (window.confirm on RN-web, Alert on native — fixes multi-button Alert no-op on web).
+- **Tests:** `tests/test_iter37_per_strategy_configs.py` (6 unit) + testing-agent `tests/test_iter37_per_strategy_configs_http.py` (9 HTTP integration). Backend 32/32 green (incl. iter36 regression). Verified: activating hunter config w/ normal_lot_usd=150 left global settings at 75 & max_concurrent_positions at 8 (no clobber); effective flips on activate/deactivate; activate blocked when not validated.
+- **Next (P3 leftover, low priority):** the Research Lab backtest still reads global settings (not per-strategy) — could unify later. **Phase B (next):** generic declarative executor to wire simple indicator catalog strategies (EMA Cross, Supertrend, RSI Momentum…) to the engine.
+
+
 ## 2026-07-09 (iter36) — P2 Strategy Import Pipeline SHIPPED (backend + web + mobile, tested all-green)
 
 Full "Strategy Import Pipeline" — import external strategies, AI-extract into Ananta's schema, validate, review/edit, approve into the Strategy Library. Cross-platform parity (web + mobile), all mutations owner-gated, AI via Emergent LLM key (Claude sonnet-4-6).

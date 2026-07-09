@@ -1,5 +1,11 @@
 # Ananta — Unified Roadmap (VALIDATION-FIRST ARCHITECTURE)
 
+> **P3 UPDATE (2026-07-09, iter37):** ✅ Phase A — per-strategy engine configs SHIPPED. Engine resolves each
+> strategy's params from its active config (account-level risk stays global); activation no longer clobbers
+> the global RiskSettings. Web + mobile activate/revert UI + backend tested (32/32). See CHANGELOG iter37.
+> **NEXT — Phase B:** generic declarative executor to wire simple indicator catalog strategies (EMA Cross,
+> Supertrend, RSI Momentum, Bollinger MR, MACD…) to the live/paper engine, gated by strategy_meta + shared
+> risk budget; imported free-text strategies stay catalog-only until mapped to codeable rules.
 > **P2 UPDATE (2026-07-09):** ✅ Strategy Import Pipeline SHIPPED (import Pine Script/Freqtrade/Jesse/JSON →
 > AI-extract → validate → review/edit → approve into Library; web+mobile parity, owner-gated). See CHANGELOG iter36.
 > **NEXT P2:** wire the remaining catalog library strategies (incl. imported ones) to the LIVE trading engine

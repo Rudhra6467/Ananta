@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Modal, Alert, TextInput, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Modal, Alert, TextInput, ActivityIndicator, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +14,20 @@ import { LoadingView, ErrorView } from "../../src/components/StateView";
 import { STRATEGY_LESSON, lessonByKey } from "../../src/academy";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { pct } from "../../src/format";
+
+/** Confirm dialog that works on native (Alert) AND react-native-web (window.confirm),
+ * since multi-button Alert.alert is a no-op on web. */
+function confirmAction(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+  if (Platform.OS === "web") {
+    // eslint-disable-next-line no-alert
+    if (typeof window !== "undefined" && window.confirm(`${title}\n\n${message}`)) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    { text: confirmLabel, onPress: onConfirm },
+  ]);
+}
 
 const STATUS_TONE: Record<string, any> = { LIVE: "teal", PAPER: "amber", DISABLED: "muted", ERROR: "red" };
 const healthColor = (v: number) => (v >= 60 ? colors.teal : v >= 35 ? colors.amber : colors.red);
@@ -148,28 +162,22 @@ function StrategyConfigs({ sKey, activeId, isOwner, onChanged }: { sKey: string;
   const activate = (cfg: any) => {
     if (!isOwner) return Alert.alert("Owner login required");
     if (cfg.validation_status !== "passed") return Alert.alert("Validation required", "This config must pass validation before it can go live.");
-    Alert.alert("Activate config", `Make "${cfg.name}" the live config for this strategy? Its parameters will drive the engine.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Activate", onPress: async () => {
-        setBusy(cfg.id);
-        try { const r = await api.strategyConfigActivate(cfg.id); const ig = (r.ignored_account_level || []).length; Alert.alert("Activated", `${r.applied} strategy params now live${ig ? ` · ${ig} account-level ignored` : ""}`); load(); onChanged(); }
-        catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
-        finally { setBusy(""); }
-      } },
-    ]);
+    confirmAction("Activate config", `Make "${cfg.name}" the live config for this strategy? Its parameters will drive the engine.`, "Activate", async () => {
+      setBusy(cfg.id);
+      try { const r = await api.strategyConfigActivate(cfg.id); const ig = (r.ignored_account_level || []).length; Alert.alert("Activated", `${r.applied} strategy params now live${ig ? ` · ${ig} account-level ignored` : ""}`); load(); onChanged(); }
+      catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
+      finally { setBusy(""); }
+    });
   };
 
   const deactivate = (key: string) => {
     if (!isOwner) return Alert.alert("Owner login required");
-    Alert.alert("Revert to default", "This strategy will go back to the global baseline params.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Revert", onPress: async () => {
-        setBusy("deactivate");
-        try { await api.strategyDeactivate(key); load(); onChanged(); }
-        catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
-        finally { setBusy(""); }
-      } },
-    ]);
+    confirmAction("Revert to default", "This strategy will go back to the global baseline params.", "Revert", async () => {
+      setBusy("deactivate");
+      try { await api.strategyDeactivate(key); load(); onChanged(); }
+      catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
+      finally { setBusy(""); }
+    });
   };
 
   const doImport = async () => {
