@@ -1,0 +1,35 @@
+{
+  "summary": "Mobile-only regression for iteration 31 (full-parity rebuild). Verified owner login, first-launch animated onboarding (steps 0-8 → finale → ENTER), 5-tab bottom nav (Cockpit / Trade / Strategy / Research / Workspace), and every critical testID listed in the review request on the Expo web preview at mobile viewport (375x667). All flows render without red-screen or 'filter is not a function' crashes. Backend state (hunter LIVE / squeeze PAPER / continuation DISABLED, 42 demo trades) was left intact after a PAPER→LIVE round-trip on hunter. No blocking issues found. Two console warnings from React Native Web are non-blocking. Backend testing intentionally skipped (already validated iters 27–30).",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": [
+        {"component": "pointerEvents prop", "issue": "React-Native-Web warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' – emitted several times during onboarding animation and page transitions. Non-blocking but should be migrated to style.pointerEvents to future-proof. Likely originating from a shared Pressable/Card wrapper."},
+        {"component": "expo-notifications (web)", "issue": "'Listening to push token changes is not yet fully supported on web.' – expected on Expo web preview; harmless on device. No action needed unless push testing is required on the web preview."}
+      ]
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "(Nice-to-have) Migrate `pointerEvents` prop usages to `style.pointerEvents` on Pressable/View wrappers to silence deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "src/api.ts:6 – EXPO_PUBLIC_BACKEND_URL is read at module init; if it's ever undefined the client silently prefixes 'undefined/api'. Consider a fail-fast guard at boot (or a runtime error banner) so a broken .env is obvious.",
+    "app/(tabs)/trade.tsx:52 – `closed` filter relies on `t.side==='SELL'` AND `pnl != null`; if backend ever returns closed rows without a `side` field they will be dropped silently. Consider treating any row with realized pnl as closed.",
+    "app/(tabs)/workspace.tsx:44 – `NumRow.onSave` swallows NaN silently (no user feedback). If owner types a non-numeric value the field visually reverts on next fetch with no explanation. A small inline error would help.",
+    "app/(tabs)/research.tsx:47 – Backtest polling is a fixed 40×1.5s (60s hard cap). Backend backtests can exceed 60s on cold caches; a slightly longer cap + progress hint would reduce false 'timed out' errors."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (all critical testIDs + flows verified on mobile)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (verified working on preview)",
+  "seed_data_creation": "None. Demo state (hunter LIVE / squeeze PAPER / continuation DISABLED, 42 trades) confirmed intact after test run via /api/admin/demo/status and /api/strategy/metrics.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile app is stable at iteration 31. Full-parity 5-tab shell verified. When retesting: (1) clear localStorage before testing onboarding so the 'ananta_onboarded' flag is unset, (2) mobile viewport 375x667 and use the *.expo.preview.* host (NOT the API host), (3) all interactive elements are on data-testid attrs (mapped from React Native testID), (4) alert-based confirm dialogs are handled by page.on('dialog', ...) auto-accept in Playwright – on the strategy detail screen, PUT /api/strategy/{key}/state fires immediately after auto-accept. Restore demo defaults after any strategy status change by tapping Workspace → LOAD DEMO or via curl POST /api/admin/demo/load.",
+  "rca of the issue": "N/A – no bugs found."
+}

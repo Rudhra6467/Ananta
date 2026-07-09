@@ -19,36 +19,28 @@ export default function TabsLayout() {
           paddingTop: 6,
           paddingBottom: Platform.OS === "ios" ? 28 : 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
       }}
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Cockpit",
-          tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} />,
-        }}
+        options={{ title: "Cockpit", tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} /> }}
       />
       <Tabs.Screen
-        name="portfolio"
-        options={{
-          title: "Portfolio",
-          tabBarIcon: ({ color, size }) => <Ionicons name="wallet" size={size} color={color} />,
-        }}
+        name="trade"
+        options={{ title: "Trade", tabBarIcon: ({ color, size }) => <Ionicons name="swap-horizontal" size={size} color={color} /> }}
       />
       <Tabs.Screen
-        name="reports"
-        options={{
-          title: "Reports",
-          tabBarIcon: ({ color, size }) => <Ionicons name="analytics" size={size} color={color} />,
-        }}
+        name="strategy"
+        options={{ title: "Strategy", tabBarIcon: ({ color, size }) => <Ionicons name="git-branch" size={size} color={color} /> }}
       />
       <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings-sharp" size={size} color={color} />,
-        }}
+        name="research"
+        options={{ title: "Research", tabBarIcon: ({ color, size }) => <Ionicons name="flask" size={size} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="workspace"
+        options={{ title: "Workspace", tabBarIcon: ({ color, size }) => <Ionicons name="options" size={size} color={color} /> }}
       />
     </Tabs>
   );

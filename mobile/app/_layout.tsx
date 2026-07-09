@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider, useAuth } from "../src/auth";
 import { registerForPushNotificationsAsync } from "../src/push";
+import { getItem } from "../src/storage";
 import { LoadingView } from "../src/components/StateView";
 import { LockScreen } from "../src/components/LockScreen";
 import { colors } from "../src/theme";
@@ -18,9 +19,14 @@ function RootNav() {
 
   useEffect(() => {
     if (!ready) return;
-    const inAuth = segments[0] === "login";
-    if (!isOwner && !inAuth) router.replace("/login");
-    else if (isOwner && inAuth) router.replace("/(tabs)");
+    (async () => {
+      const inAuth = segments[0] === "login";
+      const inOnboard = segments[0] === "onboarding";
+      if (!isOwner) { if (!inAuth) router.replace("/login"); return; }
+      const done = (await getItem("ananta_onboarded")) === "1";
+      if (!done && !inOnboard) { router.replace("/onboarding"); return; }
+      if (done && inAuth) router.replace("/(tabs)");
+    })();
   }, [ready, isOwner, segments]);
 
   // Register for push once owner session is active (no-op on Expo Go / web).
@@ -49,6 +55,7 @@ function RootNav() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="asset/[symbol]" options={{ presentation: "card", animation: "slide_from_right" }} />
         <Stack.Screen name="strategy/[id]" options={{ presentation: "card", animation: "slide_from_right" }} />

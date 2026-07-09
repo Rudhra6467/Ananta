@@ -77,6 +77,34 @@ export const api = {
   // watchlist
   watchlistValidate: () => get<any>("/watchlist/validate"),
 
+  // --- Strategy Center ---
+  strategyMetrics: () => get<any>("/strategy/metrics"),
+  strategyRegistry: () => get<any>("/strategy/registry"),
+  strategySetState: (key: string, status: string) => put<any>(`/strategy/${key}/state`, { status }),
+  strategyConfigs: (strategyKey?: string) =>
+    get<any>(`/strategy/configs${strategyKey ? `?strategy_key=${strategyKey}` : ""}`),
+
+  // --- Research Lab ---
+  labCoverage: () => get<any>("/lab/data/coverage"),
+  labCreateRun: (spec: any) => post<any>("/lab/runs", spec),
+  labRun: (id: string) => get<any>(`/lab/runs/${id}`),
+  labMonteCarlo: (payload: any) => post<any>("/lab/monte_carlo", payload),
+
+  // --- AI (owner, credits) ---
+  aiQuery: (question: string, sessionId: string, strategy?: string) =>
+    post<any>("/analytics/ai_query", { question, session_id: sessionId, strategy }),
+  coachReview: () => post<any>("/coach/weekly-review"),
+  coachApply: (setting_key: string, value: number) => post<any>("/coach/apply", { setting_key, value }),
+  coachTradesReview: (mode: string) => post<any>("/coach/trades-review", { mode }),
+
+  // --- Competition Demo (owner) ---
+  demoStatus: () => get<any>("/admin/demo/status"),
+  demoLoad: () => post<any>("/admin/demo/load"),
+  demoReset: () => post<any>("/admin/demo/reset"),
+
+  // Trade-history PDF url (open in browser via Linking)
+  tradesPdfUrl: (mode: string) => `${API}/report/trades.pdf?mode=${mode}&inline=true`,
+
   // push
   registerPushToken: (push_token: string, platform: string, prefs?: Record<string, boolean>) =>
     post<any>("/notifications/register", { push_token, platform, prefs }),
