@@ -607,6 +607,13 @@ async def coach_trades_review(payload: TradesReviewReq):
         raise HTTPException(status_code=502, detail=f"AI coach error: {e}")
 
 
+@api_router.get("/coach/headline")
+async def coach_headline():
+    """Credit-free headline for the Cockpit banner (reads the last stored review)."""
+    import coach  # noqa: PLC0415
+    return await coach.latest_headline(db)
+
+
 @api_router.post("/coach/weekly-review", dependencies=[Depends(require_owner)])
 async def coach_weekly_review():
     """AI Trading Coach — a proactive 7-day performance review + one applyable tweak.

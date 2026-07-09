@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
 import {
     Cell as RCell,
     Pie,
@@ -40,6 +40,7 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-6" data-testid="cockpit-page">
+            <CoachBanner />
             <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
@@ -47,6 +48,33 @@ export default function Dashboard() {
             <AnalyticsGroup summary={summary} trades={trades} />
             <ConsolidatedPositions portfolio={portfolio} onDone={refresh} />
         </div>
+    );
+}
+
+/* ---------------- AI Coach headline banner (credit-free) ---------------- */
+function CoachBanner() {
+    const [h, setH] = useState(null);
+    useEffect(() => { api.coachHeadline().then(setH).catch(() => {}); }, []);
+    if (!h) return null;
+    const goResearch = () => {
+        localStorage.setItem("ananta_research_sub", "analyze");
+        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
+    };
+    return (
+        <button data-testid="coach-banner" onClick={goResearch}
+            className="w-full text-left panel border-atlas-cyan/30 bg-atlas-cyan/5 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-atlas-cyan/60 transition-colors group">
+            <span className="w-8 h-8 rounded-lg grid place-items-center bg-atlas-cyan/15 shrink-0">
+                <Sparkles className="w-4 h-4 text-atlas-cyan" />
+            </span>
+            <div className="min-w-0 flex-1">
+                <div className="label-tag text-[9px] text-atlas-cyan/80">AI TRADING COACH</div>
+                <div className="font-mono text-[12px] text-atlas-text truncate">
+                    {h.has_review ? h.headline : h.headline}
+                    {h.impact ? <span className="text-atlas-positive"> · {h.impact}</span> : null}
+                </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:translate-x-0.5 transition-transform shrink-0" />
+        </button>
     );
 }
 

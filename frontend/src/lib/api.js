@@ -85,6 +85,7 @@ export const api = {
     demoReset: () => client.post("/admin/demo/reset").then((r) => r.data),
     // --- AI Trading Coach ---
     coachReview: () => client.post("/coach/weekly-review").then((r) => r.data),
+    coachHeadline: () => client.get("/coach/headline").then((r) => r.data),
     coachApply: (setting_key, value) => client.post("/coach/apply", { setting_key, value }).then((r) => r.data),
     coachTradesReview: (mode) => client.post("/coach/trades-review", { mode }).then((r) => r.data),
     // --- auth (Phase 3.5) ---

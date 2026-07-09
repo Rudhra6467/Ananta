@@ -189,3 +189,22 @@ async def trades_review(db, mode: str) -> dict:
                    system_message=TRADES_REVIEW_PROMPT).with_model(MODEL_PROVIDER, MODEL_NAME)
     text = await chat.send_message(UserMessage(text=snapshot + "\n\nWrite the review now."))
     return {"mode": m, "trades": len(trades), "win_rate": wr, "net_pnl": total, "review": str(text)}
+
+
+async def latest_headline(db) -> dict:
+    """Credit-free Cockpit headline: surfaces the most recent stored Coach review's
+    top recommendation. Does NOT call the LLM (safe to poll)."""
+    doc = await db.coach_reviews.find_one({}, sort=[("ts", -1)])
+    if not doc:
+        return {"has_review": False, "headline": "Run a weekly AI review in Research \u2192 AI to get proactive tuning advice.",
+                "impact": None, "confidence": None}
+    rec = doc.get("recommendation") or {}
+    title = rec.get("title") or doc.get("common_mistake") or "Review ready"
+    return {
+        "has_review": True,
+        "headline": title,
+        "impact": doc.get("estimated_impact"),
+        "confidence": doc.get("confidence"),
+        "setting_key": rec.get("setting_key") or "",
+        "applyable": bool(rec.get("applyable")),
+    }

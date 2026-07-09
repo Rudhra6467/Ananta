@@ -94,6 +94,7 @@ export const api = {
   aiQuery: (question: string, sessionId: string, strategy?: string) =>
     post<any>("/analytics/ai_query", { question, session_id: sessionId, strategy }),
   coachReview: () => post<any>("/coach/weekly-review"),
+  coachHeadline: () => get<any>("/coach/headline"),
   coachApply: (setting_key: string, value: number) => post<any>("/coach/apply", { setting_key, value }),
   coachTradesReview: (mode: string) => post<any>("/coach/trades-review", { mode }),
 
