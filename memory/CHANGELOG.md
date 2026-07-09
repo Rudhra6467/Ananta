@@ -1,3 +1,14 @@
+## 2026-07-09 (iter39) — Phase B COMPLETION: declarative exits + real backtest + Deploy/Backtest UI (tested, no LLM cost)
+
+Rounded out Phase B so wired catalog strategies trade their own logic end-to-end and carry real metrics.
+
+- **Declarative EXIT signals (`position_watcher.py`):** for positions opened by a declarative strategy, the watcher now honors the strategy's OWN exit rule as a SECONDARY trigger — universal safety exits (stops/kill/floors) keep top priority; only when the engine says "hold" does it consult the declarative exit spec (full exit on trigger).
+- **Real declarative backtest (`declarative_backtest.py` + `POST /api/library/{id}/backtest`):** replays a wireable strategy's spec over historical 1H OHLCV (ccxt via `fetch_history`, long-only, one position, spec exit + hard stop) and computes roi/win-rate/profit-factor/Sharpe/Sortino/max-DD/avg-trade/trade-count. Persists onto the library doc (`historical_results` + `backtested=true` + `backtest_meta`), replacing seeded numbers. Pure CPU, NO LLM credits. ~4s for 720 bars.
+- **UI (web CatalogDetail + mobile library detail):** wireable strategies get an engine panel — **Deploy(Paper)/Disable** toggle (arms the strategy to the paper engine in one tap), **Run Backtest** (updates the displayed metrics), **Manage in Engine**, and a live status pill.
+- **Tests:** testing-agent iter39 — backend 10/10 pytest (`tests/test_iter39_phase_b.py`), web + mobile parity verified (deploy toggle, backtest, manage routing); baseline restored; no LLM endpoints hit. All prior suites (iter36/37/38) still green.
+- **Remaining (cosmetic, non-blocking):** mobile RN-web `shadow*` deprecation warning (false positive on native — left to avoid breaking native shadows); web leaderboard `<span> in <option>` hydration warning (visual-editing tooling artifact).
+
+
 ## 2026-07-09 (iter38) — P2/P3 Phase B: DECLARATIVE ENGINE — catalog strategies wired to the engine (backend + web + mobile, tested)
 
 Wired the catalog Strategy Library strategies into the live/paper trading engine via a GENERIC declarative indicator/rule executor — no bespoke Python per strategy. Adding another indicator strategy = add one spec dict.
