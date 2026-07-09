@@ -84,6 +84,7 @@ export const api = {
   strategyConfigs: (strategyKey?: string) =>
     get<any>(`/strategy/configs${strategyKey ? `?strategy_key=${strategyKey}` : ""}`),
   strategyConfigActivate: (id: string) => post<any>(`/strategy/configs/${id}/activate`, {}),
+  strategyDeactivate: (key: string) => post<any>(`/strategy/${key}/deactivate`, {}),
   strategyConfigImport: (payload: any) => post<any>("/strategy/configs/import", payload),
   strategyConfigExport: (id: string) => get<any>(`/strategy/configs/${id}/export`),
   // Strategy Library (P1)

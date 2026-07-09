@@ -132,6 +132,8 @@ export const api = {
     strategyConfigDelete: (id) => client.delete(`/strategy/configs/${id}`).then((r) => r.data),
     strategyConfigFromLabRun: (payload) => client.post("/strategy/configs/from-lab-run", payload).then((r) => r.data),
     strategyConfigActivate: (id) => client.post(`/strategy/configs/${id}/activate`).then((r) => r.data),
+    strategyDeactivate: (key) => client.post(`/strategy/${key}/deactivate`).then((r) => r.data),
+    strategyEffective: (key) => client.get(`/strategy/${key}/effective`).then((r) => r.data),
     strategyConfigImport: (payload) => client.post("/strategy/configs/import", payload).then((r) => r.data),
     strategyConfigExport: (id) => client.get(`/strategy/configs/${id}/export`).then((r) => r.data),
     analyticsLeaderboard: (sort = "health", source = "all") => client.get(`/analytics/leaderboard?sort=${sort}&source=${source}`).then((r) => r.data),

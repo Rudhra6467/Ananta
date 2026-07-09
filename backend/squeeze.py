@@ -60,7 +60,9 @@ def _stdev(vals: list[float], period: int) -> list[float | None]:
     return out
 
 
-def evaluate_squeeze(bars_4h: list[list[float]]) -> SqueezeSignal:
+def evaluate_squeeze(bars_4h: list[list[float]], vol_expansion_min: float | None = None) -> SqueezeSignal:
+    # P3: breakout volume multiple is config-driven per strategy (falls back to the default).
+    vol_spike_mult = vol_expansion_min if vol_expansion_min is not None else VOL_SPIKE_MULT
     n = len(bars_4h or [])
     if n < BB_PERIOD + BREAKOUT_WINDOW + 2:
         return SqueezeSignal(False, None, None, {"reason": "insufficient_bars", "bars": n})
@@ -107,7 +109,7 @@ def evaluate_squeeze(bars_4h: list[list[float]]) -> SqueezeSignal:
         bu = bb_upper(i)
         if bu is None:
             continue
-        if closes[i] > bu and vols[i] > vol_avg * VOL_SPIKE_MULT:
+        if closes[i] > bu and vols[i] > vol_avg * vol_spike_mult:
             breakout_idx = i
             break
 

@@ -148,11 +148,24 @@ function StrategyConfigs({ sKey, activeId, isOwner, onChanged }: { sKey: string;
   const activate = (cfg: any) => {
     if (!isOwner) return Alert.alert("Owner login required");
     if (cfg.validation_status !== "passed") return Alert.alert("Validation required", "This config must pass validation before it can go live.");
-    Alert.alert("Activate config", `Make "${cfg.name}" the live config? Its parameters will drive the engine.`, [
+    Alert.alert("Activate config", `Make "${cfg.name}" the live config for this strategy? Its parameters will drive the engine.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Activate", onPress: async () => {
         setBusy(cfg.id);
-        try { const r = await api.strategyConfigActivate(cfg.id); Alert.alert("Activated", `${r.applied} params live · ${r.changes?.length || 0} changed`); load(); onChanged(); }
+        try { const r = await api.strategyConfigActivate(cfg.id); const ig = (r.ignored_account_level || []).length; Alert.alert("Activated", `${r.applied} strategy params now live${ig ? ` · ${ig} account-level ignored` : ""}`); load(); onChanged(); }
+        catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
+        finally { setBusy(""); }
+      } },
+    ]);
+  };
+
+  const deactivate = (key: string) => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    Alert.alert("Revert to default", "This strategy will go back to the global baseline params.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Revert", onPress: async () => {
+        setBusy("deactivate");
+        try { await api.strategyDeactivate(key); load(); onChanged(); }
         catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
         finally { setBusy(""); }
       } },
@@ -198,10 +211,15 @@ function StrategyConfigs({ sKey, activeId, isOwner, onChanged }: { sKey: string;
               </View>
               <Text style={type.small}>{c.origin} · {Object.keys(c.params || {}).length} overrides · {validated ? "validated" : "unvalidated"}</Text>
             </View>
-            {!isActive && (
+            {!isActive ? (
               <Pressable testID={`config-activate-${c.id.slice(0, 8)}`} onPress={() => activate(c)} disabled={!isOwner || !validated || !!busy}
                 style={[styles.activateBtn, (!isOwner || !validated) && { opacity: 0.35 }]}>
                 {busy === c.id ? <ActivityIndicator color={colors.teal} size="small" /> : (<><Ionicons name="flash" size={13} color={colors.teal} /><Text style={styles.activateTxt}>ACTIVATE</Text></>)}
+              </Pressable>
+            ) : (
+              <Pressable testID={`config-deactivate-${c.id.slice(0, 8)}`} onPress={() => deactivate(c.strategy_key)} disabled={!isOwner || !!busy}
+                style={[styles.activateBtn, { borderColor: colors.cardBorder }, !isOwner && { opacity: 0.35 }]}>
+                {busy === "deactivate" ? <ActivityIndicator color={colors.textMuted} size="small" /> : (<><Ionicons name="power" size={13} color={colors.textMuted} /><Text style={[styles.activateTxt, { color: colors.textMuted }]}>REVERT</Text></>)}
               </Pressable>
             )}
           </View>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Layers, Star, Trash2, Loader2, Save, Plus, ChevronDown, ChevronRight, RotateCcw, Zap, Upload, Copy, CheckCircle2 } from "lucide-react";
+import { Layers, Star, Trash2, Loader2, Save, Plus, ChevronDown, ChevronRight, RotateCcw, Zap, Upload, Copy, CheckCircle2, Power } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -50,9 +50,21 @@ export default function SavedConfigsPanel({ isOwner, only }) {
         if (!isOwner) { toast.error("Owner login required"); return; }
         try {
             const r = await api.strategyConfigActivate(cfg.id);
-            toast.success("Config activated", { description: `${r.applied} params live · ${r.changes?.length || 0} changed` });
+            const ignored = (r.ignored_account_level || []).length;
+            toast.success("Config activated", {
+                description: `${r.applied} strategy params now live${ignored ? ` · ${ignored} account-level ignored` : ""}`,
+            });
             await load();
         } catch (e) { toast.error("Activation failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+    };
+
+    const deactivate = async (key) => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        try {
+            await api.strategyDeactivate(key);
+            toast.success("Reverted to default", { description: `${key} now uses the global baseline` });
+            await load();
+        } catch (e) { toast.error("Deactivate failed", { description: String(e?.response?.data?.detail || e?.message) }); }
     };
 
     const exportCfg = async (cfg) => {
@@ -153,7 +165,7 @@ export default function SavedConfigsPanel({ isOwner, only }) {
                                         <ConfigRow key={c.id} cfg={c} schema={schemas[c.strategy_key]} isOwner={isOwner}
                                             isActive={active[c.strategy_key] === c.id}
                                             open={openId === c.id} onToggle={() => setOpenId(openId === c.id ? null : c.id)}
-                                            onRate={rate} onDelete={remove} onActivate={activate} onExport={exportCfg}
+                                            onRate={rate} onDelete={remove} onActivate={activate} onDeactivate={deactivate} onExport={exportCfg}
                                             onSaved={(u) => setConfigs((cs) => cs.map((x) => (x.id === u.id ? u : x)))} />
                                     ))}
                                 </div>
@@ -194,7 +206,7 @@ function Stars({ value = 0, onSet, disabled }) {
     );
 }
 
-function ConfigRow({ cfg, schema, isOwner, isActive, open, onToggle, onRate, onDelete, onActivate, onExport, onSaved }) {
+function ConfigRow({ cfg, schema, isOwner, isActive, open, onToggle, onRate, onDelete, onActivate, onDeactivate, onExport, onSaved }) {
     const stars = cfg.rating?.stars ?? 0;
     const oc = ORIGIN_CLS[cfg.origin] || ORIGIN_CLS.user;
     const validated = cfg.validation_status === "passed";
@@ -217,11 +229,17 @@ function ConfigRow({ cfg, schema, isOwner, isActive, open, onToggle, onRate, onD
                 </div>
                 <button data-testid={`config-export-${cfg.id.slice(0, 8)}`} onClick={() => onExport(cfg)} title="Copy config JSON"
                     className="text-atlas-textTertiary hover:text-atlas-cyan"><Copy className="w-3.5 h-3.5" /></button>
-                {!isActive && (
+                {!isActive ? (
                     <button data-testid={`config-activate-${cfg.id.slice(0, 8)}`} onClick={() => onActivate(cfg)} disabled={!isOwner || !validated}
-                        title={validated ? "Make this the live config" : "Validate this config first"}
+                        title={validated ? "Make this the live config for this strategy" : "Validate this config first"}
                         className="flex items-center gap-1 font-mono text-[9px] font-bold text-atlas-cyan hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed border border-atlas-cyan/30 rounded px-2 py-1">
                         <Zap className="w-3 h-3" /> ACTIVATE
+                    </button>
+                ) : (
+                    <button data-testid={`config-deactivate-${cfg.id.slice(0, 8)}`} onClick={() => onDeactivate(cfg.strategy_key)} disabled={!isOwner}
+                        title="Revert this strategy to the global default baseline"
+                        className="flex items-center gap-1 font-mono text-[9px] font-bold text-atlas-textSecondary hover:text-atlas-text disabled:opacity-30 border border-atlas-border rounded px-2 py-1">
+                        <Power className="w-3 h-3" /> REVERT
                     </button>
                 )}
                 <Stars value={stars} disabled={!isOwner} onSet={(n) => onRate(cfg, n)} />

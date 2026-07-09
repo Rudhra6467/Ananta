@@ -1818,6 +1818,7 @@ async def _compute_strategy_metrics() -> dict:
             "timeline": _strategy_timeline(schema, cfgs, ts, status),
             "last_trade": last_ts, "config_count": len(cfgs),
             "active_config_id": m.get("active_config_id"),
+            "active_config_name": m.get("active_config_name"),
         }
     return out
 
@@ -2122,12 +2123,16 @@ async def strategy_import_config(payload: dict):
 
 @api_router.post("/strategy/configs/{config_id}/activate", dependencies=[Depends(require_owner)])
 async def strategy_activate_config(config_id: str):
-    """Make a config the LIVE config for its strategy.
+    """Make a config the ACTIVE config for its strategy (P3 per-strategy resolution).
 
-    Resolves the config (defaults ← parent chain ← self), keeps only engine-backed
-    params, clamps them via settings_spec, writes them into RiskSettings, and records
-    the active config on strategy_meta. Requires a validated config (validation gate).
+    Resolves the config (defaults ← parent chain ← self) and keeps only engine-backed,
+    strategy-level params. Records the active config on strategy_meta; the live/paper
+    engine then resolves these params per strategy at evaluation time (strategy_runtime),
+    WITHOUT touching the global account-level RiskSettings. Requires a validated config.
     """
+    from strategy_runtime import ACCOUNT_LEVEL_FIELDS  # noqa: PLC0415
+    from settings_spec import clamp_value  # noqa: PLC0415
+
     row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT}, {"_id": 0})
     if not row:
         raise HTTPException(status_code=404, detail="config not found")
@@ -2141,18 +2146,11 @@ async def strategy_activate_config(config_id: str):
     resolved = resolve_config(row, by_id, schema)
     engine_params = engine_backed_params(schema, resolved)
 
-    from settings_spec import clamp_value  # noqa: PLC0415
-    settings = await load_settings(db)
-    changed: list[dict] = []
-    for field, val in engine_params.items():
-        if not hasattr(settings, field):
-            continue
-        clamped = clamp_value(field, val)
-        before = getattr(settings, field, None)
-        if before != clamped:
-            changed.append({"field": field, "from": before, "to": clamped})
-        setattr(settings, field, clamped)
-    await save_settings(db, settings)
+    # Split: strategy-level params drive THIS strategy; account-level ones are ignored
+    # (they stay owned by the global RiskSettings). Report both so the UI is transparent.
+    applied = {f: clamp_value(f, v) for f, v in engine_params.items()
+               if f not in ACCOUNT_LEVEL_FIELDS and v is not None}
+    ignored = [f for f in engine_params if f in ACCOUNT_LEVEL_FIELDS]
 
     await db.strategy_meta.update_one(
         {"key": key},
@@ -2161,9 +2159,36 @@ async def strategy_activate_config(config_id: str):
                   "activated_at": _strat_now_iso()}},
         upsert=True,
     )
-    return {"activated": config_id, "strategy_key": key, "applied": len(engine_params),
-            "changes": changed,
-            "note": "Live RiskSettings updated from this config. The engine reads RiskSettings only."}
+    return {"activated": config_id, "strategy_key": key, "applied": len(applied),
+            "applied_params": applied, "ignored_account_level": ignored,
+            "note": "This strategy now trades on its own config params (per-strategy). "
+                    "Account-level risk stays global; account-level fields in the config are ignored."}
+
+
+@api_router.post("/strategy/{key}/deactivate", dependencies=[Depends(require_owner)])
+async def strategy_deactivate_config(key: str):
+    """Clear a strategy's active config → it reverts to the global RiskSettings baseline."""
+    await db.strategy_meta.update_one(
+        {"key": key},
+        {"$set": {"active_config_id": None, "active_config_name": None,
+                  "deactivated_at": _strat_now_iso()}},
+        upsert=True,
+    )
+    return {"deactivated": key}
+
+
+@api_router.get("/strategy/{key}/effective")
+async def strategy_effective_params(key: str):
+    """The params the live/paper engine is actually using for this strategy right now:
+    global RiskSettings baseline overlaid with its active config (if any)."""
+    from strategy_runtime import resolve_active_params  # noqa: PLC0415
+    cfg = await resolve_active_params(db)
+    meta = await db.strategy_meta.find_one({"key": key}, {"_id": 0}) or {}
+    return {"strategy_key": key,
+            "active_config_id": meta.get("active_config_id"),
+            "active_config_name": meta.get("active_config_name"),
+            "overrides": cfg.get(key, {}),
+            "using_config": bool(cfg.get(key))}
 
 
 @api_router.get("/analytics/leaderboard")

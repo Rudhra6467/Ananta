@@ -41,6 +41,7 @@ from regime import classify_regime
 from router import continuation_allowed, route, squeeze_allowed
 from squeeze import evaluate_squeeze
 from continuation import evaluate_continuation
+from strategy_runtime import overlay_settings, resolve_active_params
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
@@ -607,6 +608,13 @@ async def _record_live_sell(
 async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     settings = await load_settings(db)
     strategy_states = await load_strategy_states(db)
+    # P3: per-strategy engine configs. Each strategy resolves its OWN entry/exit/lot
+    # params from its active config, overlaid on the global account-level baseline.
+    # With no active config the overlay is a no-op → identical behaviour.
+    _cfg_params = await resolve_active_params(db)
+    hunter_settings = overlay_settings(settings, _cfg_params.get("hunter"))
+    squeeze_settings = overlay_settings(settings, _cfg_params.get("squeeze"))
+    cont_settings = overlay_settings(settings, _cfg_params.get("continuation"))
     portfolio = _ensure_day_start(await load_portfolio(db))
 
     # Vault Engine: source deployable capital (live balance capped by override).
@@ -639,7 +647,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     if not _hard_killed and getattr(settings, "level_entry_enabled", True):
         try:
             zones_cache = await get_levels(symbol, settings)
-            _pp = evaluate_primary(symbol, snapshot.price, bars_1h, zones_cache, settings)
+            _pp = evaluate_primary(symbol, snapshot.price, bars_1h, zones_cache, hunter_settings)
             hunter_triggered = bool(_pp.triggered)
         except Exception as e:
             logger.warning("Early Hunter pre-check failed for %s: %s", symbol, e)
@@ -729,7 +737,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     if getattr(settings, "level_entry_enabled", True):
         try:
             zones = zones_cache if zones_cache is not None else await get_levels(symbol, settings)
-            primary = evaluate_primary(symbol, snapshot.price, bars_1h, zones, settings, regime=asset_regime, htf_trend_aligned=htf_trend_aligned)
+            primary = evaluate_primary(symbol, snapshot.price, bars_1h, zones, hunter_settings, regime=asset_regime, htf_trend_aligned=htf_trend_aligned)
             support_zone = primary.support_zone
             at_support = support_zone is not None
             structural_stop = primary.structural_stop
@@ -1084,7 +1092,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             usd_lot = settings.strong_lot_usd if setup_strength == "STRONG" else settings.normal_lot_usd
         if usd_lot is None and at_support:
             # Level-touch entry without a classified strong/breakout setup -> normal lot.
-            usd_lot = settings.normal_lot_usd
+            usd_lot = hunter_settings.normal_lot_usd
         qty_desired = position_size_quantity(
             decision, snapshot, portfolio, settings, macro.confidence, usd_lot=usd_lot,
         )
@@ -1252,7 +1260,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and squeeze_allowed(getattr(asset_regime, "regime", None))
         )
         if squeeze_eligible:
-            sq = evaluate_squeeze(bars_1h)
+            sq = evaluate_squeeze(bars_1h, vol_expansion_min=squeeze_settings.squeeze_vol_expansion_min)
             if sq.triggered and sq.stop_20ma and snapshot.price > sq.stop_20ma:
                 open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
                 pending_count = await db.pending_orders.count_documents({})
@@ -1269,7 +1277,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                         breakout_strength_pct=sqev.get("breakout_strength_pct"),
                         entry_profile=sq.entry_profile or "",
                     )
-                    qty_sq = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=settings.normal_lot_usd)
+                    qty_sq = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=squeeze_settings.normal_lot_usd)
                     if qty_sq > 0:
                         slip_pct = settings.breakout_paper_slippage_pct / 100.0
                         fill_price = snapshot.ask * (1.0 + slip_pct)
@@ -1340,14 +1348,14 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and continuation_allowed(getattr(asset_regime, "regime", None))
         )
         if cont_eligible:
-            ct = evaluate_continuation(bars_1h, settings, regime=asset_regime)
+            ct = evaluate_continuation(bars_1h, cont_settings, regime=asset_regime)
             if ct.triggered and ct.structural_stop and snapshot.price > ct.structural_stop:
                 open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
                 pending_count = await db.pending_orders.count_documents({})
                 cooldown = await get_symbol_cooldown(db, symbol)
                 spread_ok = bid_spread_pct <= settings.max_spread_pct
                 if open_count + pending_count < settings.max_concurrent_positions and not cooldown and spread_ok:
-                    qty_ct = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=settings.normal_lot_usd)
+                    qty_ct = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=cont_settings.normal_lot_usd)
                     if qty_ct > 0:
                         slip_pct = settings.breakout_paper_slippage_pct / 100.0
                         fill_price = snapshot.ask * (1.0 + slip_pct)
