@@ -1,0 +1,63 @@
+{
+  "summary": "P2/P3 Phase B declarative engine — verified end-to-end on both web + mobile. Backend: iter38 unit suite (8/8, tests/test_iter38_declarative_engine.py) + NEW iter38 HTTP integration suite (9/9, tests/test_iter38_declarative_engine_http.py) + iter37 HTTP regression (9/9) all PASS = 26/26 pytest green. Confirmed contract: (a) /api/strategy/registry returns 11 strategies including all 8 declarative keys (ema-cross, supertrend, rsi-momentum, macd-trend, bollinger-mr, donchian-breakout, atr-breakout, keltner-breakout), each with params schema; (b) /api/strategy/ema-cross/schema exposes ema_fast, ema_slow, normal_lot_usd, stop_loss_pct as params; (c) /api/strategy/metrics — ema-cross/supertrend/rsi-momentum default enabled=true+status=PAPER; other 5 default enabled=false+status=DISABLED; (d) /api/library returns the 8 with wireable=true and engine_key matching (supertrend.engine_key='supertrend', etc.); (e) PUT /api/strategy/macd-trend/state {enabled:true,status:'PAPER'} flips both fields correctly and reverting to {enabled:false,status:'DISABLED'} restores baseline; (f) full per-strategy config lifecycle for ema-cross: POST configs {params:{ema_fast:5,ema_slow:20,normal_lot_usd:50}} → PUT validation_status=passed → POST activate returns applied_params containing normal_lot_usd + ignored_account_level list; /strategy/ema-cross/effective flips using_config true→false via deactivate; DELETE config succeeds; (g) POST /api/cycle/run/BTC, /ETH, /SOL each return HTTP 200 with the 3 default declarative strategies enabled — no server tracebacks in backend logs (declarative execution path exercised even when no signal fires). WEB (viewport 1920x4000): Strategy Center → library-card-supertrend renders 'PAPER' engine pill (not CATALOG) → library-open-supertrend opens CatalogDetail with 'Manage in Engine' button (catalog-manage-engine) → click routes to StrategyDetail view (Overview/Parameters/Validation/AI/Research/Timeline/History tabs). MOBILE (viewport 390x844): Strategy tab → library-card-supertrend shows 'WIRED' pill → tapping opens library detail → 'Live-executable — manage in engine' button (catalog-manage-engine) → routes to /strategy/supertrend engine detail (PAPER pill, health, configs, LIVE/PAPER/OFF state control). Cleanup: deleted 1 leaked TEST_iter38_ema_cross config from an earlier failed test iteration, reset macd-trend to enabled=false+DISABLED, verified ema-cross using_config=false. Final baseline confirmed clean.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/strategy/{key}/state", "issue": "Response payload only echoes fields present in the input (e.g. {key,enabled}) — omits status when only enabled provided. Not a bug per se, but the returned object is not a full state snapshot; clients must re-fetch /strategy/metrics to see current status. Consider returning the merged state document for symmetry."},
+      {"endpoint": "GET /api/strategy/metrics", "issue": "It is possible for a strategy to end up with enabled=true but status='DISABLED' if state is toggled inconsistently (observed macd-trend in this state as residual from prior test runs). PUT accepts partial updates; there is no server-side invariant enforcing that status='DISABLED' implies enabled=false (or vice-versa). Recommend a normalisation guard in strategy_set_state."}
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Strategy Center → Leaderboard", "issues": ["React hydration warning: <span> child inside <option> element in Sort dropdown (StrategyCenter:216). Non-blocking but pollutes console. Cause is likely a Visual Editing wrapper injecting <span data-ve-dynamic> inside option text — verify StrategyLeaderboard.jsx sort <option> rendering."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter38_declarative_engine.py",
+    "/app/backend/tests/test_iter38_declarative_engine_http.py",
+    "/app/test_reports/pytest/iter38_http_results.xml",
+    "/tmp/web_strategy_center.png",
+    "/tmp/web_catalog_detail.png",
+    "/tmp/web_strategy_detail.png",
+    "/tmp/mobile_strategy.png",
+    "/tmp/mobile_library_detail.png",
+    "/tmp/mobile_after_manage.png"
+  ],
+  "action_items": [
+    "(LOW) Enforce state invariant in PUT /api/strategy/{key}/state — if payload sets status='DISABLED' auto-set enabled=false; if sets status in {LIVE,PAPER} auto-set enabled=true (unless explicitly overridden). Prevents macd-trend-style {enabled:true, status:DISABLED} drift.",
+    "(LOW) Make PUT /api/strategy/{key}/state response return the full state document (key+enabled+status) rather than only-fields-provided — improves client symmetry.",
+    "(LOW) Investigate <span> inside <option> hydration warning in StrategyCenter.jsx:216 sort dropdown (likely Emergent Visual Editing wrapper). Not user-visible but noisy in console."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1837-1852 PUT /strategy/{key}/state accepts partial updates and does not enforce enabled↔status invariant — see minor issue above.",
+    "declarative execution wired into cycle/run — cycle/run/BTC/ETH/SOL all 200; no tracebacks in backend logs. get_profile default profile for declarative keys verified reachable via cycle/run (would crash otherwise).",
+    "Library seeding correctly backfills engine_key + wireable=true on the 8 declarative catalog entries — verified via /api/library.",
+    "Per-strategy config activate/effective/deactivate route ordering is correct for declarative keys (ema-cross) — same behaviour as iter37 hunter/squeeze.",
+    "Registry (/api/strategy/registry) correctly returns 11 = 3 built-in (hunter/squeeze/continuation) + 8 declarative — schema params list is populated for each declarative key with proper types + defaults + min/max/step."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter38_declarative_engine_http.py (new — 9 HTTP integration tests, all pass)"
+  ],
+  "success_rate": {
+    "backend": "100% — 8/8 iter38 unit + 9/9 iter38 HTTP + 9/9 iter37 HTTP regression = 26/26 pytest pass",
+    "frontend": "web 100% (Strategy Center → supertrend PAPER pill → CatalogDetail → Manage in Engine → StrategyDetail navigation all verified). mobile 100% (Strategy tab → supertrend WIRED pill → library detail → Manage in engine → /strategy/supertrend routing all verified)"
+  },
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (unchanged, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "One TEST_iter38_ema_cross ema-cross config created + validated + activated + deactivated + DELETED during test_ema_cross_per_strategy_config_full_flow. Also deleted 1 residual TEST_iter38_ema_cross (id=33bcfef2-5b20-4eb4-b4d3-5a5372e0c7b7) that leaked from an earlier failed run before finally-block was correct. Final state: 0 TEST_ configs remaining, all 8 declarative baselines restored (ema-cross/supertrend/rsi-momentum = PAPER+enabled; other 5 = DISABLED+disabled), ema-cross.using_config=false.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter38 Phase B declarative engine is contract-complete end-to-end. Use tests/test_iter38_declarative_engine_http.py (9 tests, ~9s, calls /api/cycle/run/BTC once) as regression. Key contract details for future testers: (1) PUT /api/strategy/{key}/state field name is 'status' (not 'mode') — 'status' must be one of LIVE/PAPER/DISABLED/TESTING/OPTIMIZING/ERROR; (2) /api/strategy/metrics returns {'metrics': {key: {...}}} where metrics is a dict keyed by strategy key (not a list); (3) POST /api/strategy/configs returns {'config': {...}} nested; (4) /api/strategy/ema-cross/schema returns {'params': [{id,label,type,default,...}]} list of param specs — check by 'id' field. Do NOT run cycle/run more than 1-2 times per session (rate-limited via ccxt). Always cleanup any TEST_ configs after use.",
+  "rca of the issue": "N/A — no bugs found in Phase B declarative wiring. Two minor state-management observations noted under backend_issues.minor (state PUT invariant + response shape) as low-priority hardening items."
+}

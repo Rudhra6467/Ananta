@@ -93,3 +93,26 @@ def overlay_settings(base_settings, params: dict | None):
         return base_settings.model_copy(update=clean)
     except Exception:  # noqa: BLE001 — never let config resolution break a trading cycle
         return base_settings
+
+
+async def resolve_full_params(db: AsyncIOMotorDatabase, key: str,
+                              tenant_id: str = _OWNER_TENANT) -> dict:
+    """Full resolved param set (schema defaults ← parent chain ← active config) for a strategy.
+    Unlike resolve_active_params this keeps EVERY param (incl. non-engine-backed indicator
+    knobs) — needed to drive the declarative executor. Falls back to schema defaults."""
+    schema = get_schema(key)
+    defaults = schema.defaults() if schema else {}
+    try:
+        meta = await db.strategy_meta.find_one({"key": key}, {"_id": 0, "active_config_id": 1})
+        acid = (meta or {}).get("active_config_id")
+        if not acid:
+            return defaults
+        rows = await db.strategy_configs.find({"tenant_id": tenant_id}, {"_id": 0}).to_list(2000)
+        by_id = {r["id"]: r for r in rows}
+        cfg = by_id.get(acid)
+        if not cfg:
+            return defaults
+        return resolve_config(cfg, by_id, schema)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("resolve_full_params(%s) failed: %s", key, e)
+        return defaults

@@ -41,7 +41,9 @@ from regime import classify_regime
 from router import continuation_allowed, route, squeeze_allowed
 from squeeze import evaluate_squeeze
 from continuation import evaluate_continuation
-from strategy_runtime import overlay_settings, resolve_active_params
+from strategy_runtime import overlay_settings, resolve_active_params, resolve_full_params
+from declarative_engine import evaluate as decl_evaluate
+from strategy.declarative_defs import DECLARATIVE_KEYS, get_declarative_spec
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
@@ -1397,6 +1399,81 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                                 "CONTINUATION entry %s qty=%.8f @ %.6f stop=%.6f pullback=%s%%",
                                 symbol, qty_ct, fill_price, ct.structural_stop, ct.evidence.get("pullback_pct"),
                             )
+
+    # --- Declarative catalog strategies (Phase B) ---
+    # Generic indicator strategies (EMA Cross, Supertrend, RSI Momentum, MACD, Bollinger MR,
+    # Donchian, ATR/Keltner breakout) run from data via declarative_engine. They share the
+    # SAME book budget + guards as the built-in strategies and only fire on their own signal.
+    # Per-strategy configs (Phase A) tune their params + lot. PAPER/DRY_RUN only; universal
+    # exit engine (ATR trail + structural stop) manages exits.
+    with contextlib.suppress(Exception):
+        decl_eligible = (
+            decision != "BUY"
+            and not has_position
+            and trade_doc is None
+            and not _hard_killed
+            and breaker_state != "VETO"
+            and settings.trading_mode in ("PAPER", "DRY_RUN")
+            and bars_1h and len(bars_1h) >= 30
+        )
+        if decl_eligible:
+            for _dkey in DECLARATIVE_KEYS:
+                if trade_doc is not None:
+                    break
+                if not strategy_entry_allowed(strategy_states, _dkey):
+                    continue
+                spec = get_declarative_spec(_dkey)
+                dparams = await resolve_full_params(db, _dkey)
+                sig = decl_evaluate(spec, bars_1h, dparams)
+                if not sig.entry:
+                    continue
+                open_count = sum(1 for p in portfolio.positions if p.quantity > 0)
+                pending_count = await db.pending_orders.count_documents({})
+                cooldown = await get_symbol_cooldown(db, symbol)
+                spread_ok = bid_spread_pct <= settings.max_spread_pct
+                if open_count + pending_count >= settings.max_concurrent_positions or cooldown or not spread_ok:
+                    break  # book full / blocked → stop trying declarative strategies this cycle
+                dsettings = overlay_settings(settings, _cfg_params.get(_dkey))
+                usd_lot = getattr(dsettings, "normal_lot_usd", settings.normal_lot_usd)
+                qty_d = position_size_quantity("BUY", snapshot, portfolio, settings, 0.0, usd_lot=usd_lot)
+                if qty_d <= 0:
+                    continue
+                slip_pct = settings.breakout_paper_slippage_pct / 100.0
+                fill_price = snapshot.ask * (1.0 + slip_pct)
+                d_slip = (fill_price - snapshot.ask) * qty_d
+                notional, fee = _execute_buy(portfolio, symbol, qty_d, fill_price, settings.taker_fee_pct)
+                if notional <= 0:
+                    continue
+                stop_pct = getattr(dsettings, "stop_loss_pct", 8.0) / 100.0
+                struct_stop = round(fill_price * (1 - stop_pct), 8)
+                d_attr = {**entry_attribution, "strategy": _dkey, "declarative": True,
+                          "indicators": sig.indicators, "reason": sig.reason,
+                          "asset_regime": getattr(asset_regime, "regime", None)}
+                new_pos = next((p for p in portfolio.positions if p.symbol == symbol), None)
+                if new_pos is not None:
+                    new_pos.strategy = _dkey
+                    new_pos.regime_at_entry = getattr(asset_regime, "regime", None)
+                    new_pos.structural_stop = struct_stop
+                    new_pos.sector = entry_sector
+                    new_pos.atr_at_entry = entry_atr
+                    new_pos.atr_percentile_at_entry = entry_atr_pct
+                    new_pos.volatility_regime = entry_regime
+                    new_pos.entry_attribution = d_attr
+                d_trade = TradeLog(
+                    symbol=symbol, side="BUY", quantity=qty_d, price=fill_price,
+                    notional=notional, mode="PAPER", confidence=0.0,
+                    reasoning_id=reasoning.id, fee_usd=fee, slippage_usd=d_slip,
+                    note=f"[{_dkey.upper()} | {sig.reason} | stop {struct_stop}]",
+                    sector=entry_sector, atr_at_entry=entry_atr,
+                    atr_percentile_at_entry=entry_atr_pct, volatility_regime=entry_regime,
+                    entry_attribution=d_attr,
+                )
+                await db.trades.insert_one(d_trade.model_dump())
+                trade_doc = d_trade.model_dump()
+                await save_portfolio(db, portfolio)
+                await log_friction_tally(db, settings)
+                logger.info("DECLARATIVE(%s) entry %s qty=%.8f @ %.6f stop=%.6f reason=%s",
+                            _dkey, symbol, qty_d, fill_price, struct_stop, sig.reason)
 
     return {
         "symbol": symbol,

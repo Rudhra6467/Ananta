@@ -11,7 +11,7 @@ import { PageHeader } from "../../src/components/PageHeader";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { pct } from "../../src/format";
 
-const STATUS_TONE: Record<string, any> = { LIVE: "teal", PAPER: "amber", DISABLED: "muted", CATALOG: "neutral" };
+const STATUS_TONE: Record<string, any> = { LIVE: "teal", PAPER: "amber", DISABLED: "muted", CATALOG: "neutral", WIRED: "teal" };
 const GRADE_COLOR: Record<string, string> = { A: colors.teal, B: colors.teal, C: colors.amber, D: colors.amber, E: colors.red };
 const healthColor = (v: number) => (v >= 60 ? colors.teal : v >= 35 ? colors.amber : colors.red);
 
@@ -108,7 +108,7 @@ export default function StrategyLibrary() {
         </Card>
       ) : lib.map((s: any) => {
         const r = s.historical_results || {};
-        const status = s.internal ? "LIVE" : "CATALOG";
+        const status = s.internal ? "LIVE" : (s.wireable ? "WIRED" : "CATALOG");
         return (
           <Card key={s.id} testID={`library-card-${s.id}`} onPress={() => open(s)} style={{ marginBottom: spacing.sm }}>
             <View style={styles.rowBetween}>

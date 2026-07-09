@@ -162,7 +162,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
             ) : (
                 <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
                     {lib.map((s) => (
-                        <LibraryCard key={s.id} s={s} metric={s.internal ? metrics?.[s.engine_key] : null} isOwner={isOwner}
+                        <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
                             onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
                             onFav={() => api.libraryFavorite(s.id).then(load)} />
                     ))}
@@ -273,9 +273,10 @@ function FilterDrawer({ facets, filters, favOnly, activeCount, onToggle, onFav, 
 function LibraryCard({ s, metric, isOwner, onOpen, onFav }) {
     const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
     const r = s.historical_results || {};
+    const wired = !!(s.internal || (s.wireable && s.engine_key));
     const roi = metric ? metric.roi : r.roi;
     const roiCls = roi > 0 ? "text-atlas-positive" : roi < 0 ? "text-atlas-negative" : "text-atlas-text";
-    const status = s.internal ? (metric?.status || "PAPER") : "CATALOG";
+    const status = wired ? (metric?.status || "PAPER") : "CATALOG";
     return (
         <div data-testid={`library-card-${s.id}`}
             className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
@@ -631,6 +632,18 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                     </div>
                 </div>
                 <p className="font-mono text-xs text-atlas-textSecondary mt-3 leading-relaxed">{s.description}</p>
+                {s.wireable && s.engine_key && (
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5 px-3 py-2.5 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <Power className="w-4 h-4 text-atlas-cyan" />
+                            <span className="font-mono text-[11px] text-atlas-text">Live-executable — runs in the paper engine via the declarative executor.</span>
+                        </div>
+                        <button data-testid="catalog-manage-engine" onClick={() => onOpenInternal(s.engine_key)}
+                            className="font-mono text-[10px] font-bold text-atlas-cyan hover:text-cyan-300 border border-atlas-cyan/40 rounded px-3 py-1.5 whitespace-nowrap">
+                            Manage in Engine →
+                        </button>
+                    </div>
+                )}
                 <div className="flex flex-wrap gap-1.5 mt-3">
                     {(s.market_regimes || []).map((m) => <span key={m} className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-atlas-border text-atlas-textSecondary">{m}</span>)}
                     <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-atlas-border text-atlas-textSecondary">{s.risk}</span>

@@ -2254,6 +2254,25 @@ async def _seed_library_if_empty():
         await db.strategy_library.insert_many(library())
 
 
+async def _bootstrap_declarative():
+    """Idempotent Phase B bootstrap: (1) seed strategy_meta for each wireable declarative
+    strategy so only the default-enabled batch trades (others start DISABLED); owner
+    changes are preserved. (2) backfill engine_key/wireable on existing library docs."""
+    from strategy.declarative_defs import DECLARATIVE  # noqa: PLC0415
+    from library_seed import WIRED_ENGINE_KEYS  # noqa: PLC0415
+    for key, d in DECLARATIVE.items():
+        existing = await db.strategy_meta.find_one({"key": key}, {"_id": 1})
+        if not existing:
+            await db.strategy_meta.update_one(
+                {"key": key},
+                {"$set": {"key": key, "status": "PAPER" if d.get("default_enabled") else "DISABLED",
+                          "enabled": bool(d.get("default_enabled")), "active_config_id": None}},
+                upsert=True)
+    for lib_id, ekey in WIRED_ENGINE_KEYS.items():
+        await db.strategy_library.update_one(
+            {"id": lib_id}, {"$set": {"engine_key": ekey, "wireable": True}})
+
+
 @api_router.post("/library/seed", dependencies=[Depends(require_owner)])
 async def library_seed_endpoint(force: bool = Query(False)):
     from library_seed import library  # noqa: PLC0415
@@ -2547,6 +2566,7 @@ async def _deferred_startup():
             await seed_owner(db)
             await db.users.create_index("email", unique=True)
             await _seed_library_if_empty()
+            await _bootstrap_declarative()
             logger.info("Deferred DB bootstrap complete (attempt %d).", attempt)
             break
         except Exception as e:  # noqa: BLE001

@@ -25,7 +25,7 @@ def _entry(
     entry_rules, exit_rules, risk_management, parameters,
     ideal_conditions, avoid_conditions, results, ai_summary,
     ai_health_score, ai_confidence, rating,
-    timeframes=None, market_type=None, internal=False, engine_key=None,
+    timeframes=None, market_type=None, internal=False, engine_key=None, wireable=False,
 ) -> dict:
     now = datetime.now(UTC).isoformat()
     return {
@@ -57,12 +57,31 @@ def _entry(
         "favorite": False,
         "internal": internal,
         "engine_key": engine_key,
+        "wireable": wireable,
         "created_at": now,
         "updated_at": now,
     }
 
 
+# Catalog strategies wired to the live/paper engine via the declarative executor (Phase B).
+# id -> engine key (identical). Used to backfill engine_key/wireable on existing library docs.
+WIRED_ENGINE_KEYS = {
+    "ema-cross": "ema-cross", "supertrend": "supertrend", "rsi-momentum": "rsi-momentum",
+    "macd-trend": "macd-trend", "bollinger-mr": "bollinger-mr", "donchian-breakout": "donchian-breakout",
+    "atr-breakout": "atr-breakout", "keltner-breakout": "keltner-breakout",
+}
+
+
 def library() -> list[dict]:
+    entries = _library_entries()
+    for e in entries:
+        if e["id"] in WIRED_ENGINE_KEYS:
+            e["engine_key"] = WIRED_ENGINE_KEYS[e["id"]]
+            e["wireable"] = True
+    return entries
+
+
+def _library_entries() -> list[dict]:
     return [
         # ---------- Internal (live-executable) ----------
         _entry(

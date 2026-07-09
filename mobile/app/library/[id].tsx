@@ -67,6 +67,13 @@ export default function LibraryDetail() {
           </View>
         )}
         <Text style={[type.body, { marginTop: spacing.sm, lineHeight: 20 }]}>{s.description}</Text>
+        {s.wireable && s.engine_key && (
+          <Pressable testID="catalog-manage-engine" onPress={() => router.push(`/strategy/${s.engine_key}`)} style={styles.manageBtn}>
+            <Ionicons name="flash" size={13} color={colors.teal} />
+            <Text style={{ color: colors.teal, fontSize: 11, fontWeight: "700", flex: 1 }}>Live-executable — manage in engine</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.teal} />
+          </Pressable>
+        )}
         <View style={styles.tagWrap}>
           {(s.market_regimes || []).map((m: string) => <Pill key={m} label={m} tone="neutral" />)}
           <Pill label={s.risk} tone="neutral" />
@@ -160,6 +167,7 @@ const styles = StyleSheet.create({
   gradeTxt: { fontSize: 10, fontWeight: "800" },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
   importedBadge: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  manageBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 9 },
   indChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.bgElevated },
   perfGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   perfCell: { width: "47%", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, padding: spacing.sm, backgroundColor: colors.bgElevated },
