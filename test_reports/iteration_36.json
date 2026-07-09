@@ -1,0 +1,65 @@
+{
+  "summary": "P2 Strategy Import Pipeline verified end-to-end on backend (17/17 pytest), web (Import modal + review + approve + CatalogDetail imported view), and mobile (Import screen + all format chips + sample loader + CatalogDetail imported view). AI extraction ran once (LLM ~15s) — produced valid draft with entry_rules, exit_rules, indicators, direction=long, conversion_confidence=72, conversion_report text, validation={ready}. Route ordering verified (GET /api/library/imports is NOT shadowed by /api/library/{strategy_id}). Approve is correctly blocked (422) when entry_rules is emptied; short-only direction produces warning but does NOT block. Owner gating verified (401/403 on analyze + list drafts without token). Imported strategy landed in /api/library with imported=true, opened in web + mobile CatalogDetail, imported-badge + catalog-import-meta rendered on both surfaces. One parity gap: `build-strategy-card` is present on web (StrategyCenter.jsx:177) but MISSING on mobile /app/(tabs)/strategy.tsx.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "ImportStrategyModal", "issues": ["A11y: Radix DialogContent used without a DialogTitle -> React console error `DialogContent requires a DialogTitle for the component to be accessible for screen reader users`. Wrap the h2 heading in DialogTitle or add a VisuallyHidden DialogTitle. Reference: /app/frontend/src/components/ImportStrategyModal.jsx (DialogContent at line 75).", "A11y: Same DialogContent also emits `Missing Description or aria-describedby` warning. Add DialogDescription or aria-describedby={undefined}."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [
+        {"component": "StrategyCenter (mobile /app/(tabs)/strategy.tsx)", "issue": "The `build-strategy-card` testID/element is missing on mobile. Web renders a 'Build with AI' card next to Import Strategy button; mobile has no equivalent Build entrypoint. Reference: /app/mobile/app/(tabs)/strategy.tsx (no grep hit for build-strategy-card).", "testID": "build-strategy-card", "priority": "MEDIUM"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Strategy Center 'Build with AI' entry point", "platform": "mobile", "issue": "Web has build-strategy-card next to import-strategy-btn; mobile has import-strategy-btn only.", "expected": "build-strategy-card present on both surfaces (cross-platform parity requirement in problem statement)", "actual": "Only web has it"}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter36_strategy_import_e2e.py",
+    "/app/test_reports/pytest/iter36_results.xml",
+    "/tmp/web_imported_detail.png",
+    "/tmp/web_modal_chips.png",
+    "/tmp/mobile_import.png",
+    "/tmp/mobile_catalog_detail.png"
+  ],
+  "action_items": [
+    "(MEDIUM) Add build-strategy-card entry point on mobile /app/(tabs)/strategy.tsx for parity with web StrategyCenter.jsx:177 — should navigate to the AI Strategy Architect screen on mobile.",
+    "(LOW) Fix Radix Dialog a11y: wrap 'Strategy Import Pipeline' heading inside <DialogTitle> (and add DialogDescription) in /app/frontend/src/components/ImportStrategyModal.jsx around line 75-80.",
+    "(No action) Note: iter34 hydration warning `<span> child of <option>` in leaderboard-sort-select persists — already documented in iter34."
+  ],
+  "critical_code_review_comments": [
+    "server.py:2339-2350 formats + detect are public (no auth) — correct per spec (credit-free).",
+    "server.py:2384 GET /library/imports is declared BEFORE GET /library/{strategy_id} at :2451 — correct route ordering, verified live.",
+    "server.py:2437-2440 approve uses 422 with a joined 'error' severity issue message — good UX for the client to render actionable errors.",
+    "server.py:2408-2417 PUT accepts only a whitelisted set of editable fields + reruns validate_extraction on the merged doc — safe design, prevents arbitrary field injection.",
+    "strategy_import.build_draft correctly wires conversion.confidence_score -> conversion_confidence at the doc top-level and marks imported=True + status='draft'.",
+    "strategy_import.to_library_doc drops raw_source before inserting into strategy_library — good (keeps library docs light).",
+    "server.py:2442-2443 collision fallback appends 4-char uuid on id conflict — prevents unique-index style errors and preserves human-readable prefix.",
+    "server.py:2447 lib_doc.pop('_id', None) guards against MongoDB _id leak in response — good.",
+    "ImportStrategyModal.jsx is inside components/ but ~340+ lines — approaching the 700-line project split threshold; still fine, but review-step and edit-step could be extracted."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter36_strategy_import_e2e.py (new — 17 tests, 17 pass)"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17 pytest: formats, detect x4, route-ordering, auth-gating x2, analyze, get, list, put+revalidate, approve-blocked-on-no-entry, short-warns-not-blocks, approve-success, library-includes-imported, cleanup)",
+    "frontend": "web 100% (import modal opens with all 4 format chips, name/code/sample/analyze wired, review step shows confidence + validation + approve, CatalogDetail imported view shows imported-badge + catalog-import-meta with 72% confidence text); mobile 95% (Import screen /library/import fully wired; catalog detail imported-badge + catalog-import-meta present; ONLY parity gap is build-strategy-card missing on mobile)"
+  },
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — verified on both surfaces. Web token key `ananta_owner_token`; mobile uses UI login (Sign in + SKIP onboarding).",
+  "seed_data_creation": "1 LLM analyze call executed (TEST_ImportPine, pine_script). Draft created + edited + approved -> library entry `test-importpine-3755ee`. Web + mobile visited that library id to verify imported view. CLEANUP DONE: dropped the imported library entry and the draft via mongosh (deleteMany imported=true + id ~ /^test-importpine/). Final /api/library == 16 strategies, 0 imported — matches seed baseline.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter36 verified P2 Strategy Import Pipeline end-to-end. Backend contract is stable (17 pytest, 1 real LLM analyze call). Web + mobile UI wiring for import flow is stable. OUTSTANDING for next iter after E1 fix: (a) mobile parity — add build-strategy-card entry on /app/mobile/app/(tabs)/strategy.tsx that navigates to the AI Architect flow (whatever mobile route hosts the 'Build with AI' equivalent); (b) A11y warnings on Radix DialogContent in ImportStrategyModal.jsx (wrap title in DialogTitle + add DialogDescription). Do NOT re-run analyze on retest unless the code path itself changed — the deterministic pieces (detect, validate, build_draft, approve) already have pure-logic pytest coverage in tests/test_strategy_import.py (9 pass) and the HTTP paths in tests/test_iter36_strategy_import_e2e.py.",
+  "rca of the issue": "Parity gap RCA: /app/mobile/app/(tabs)/strategy.tsx defines only the import-strategy-btn chip (line 93) and does not render a companion 'Build with AI' card. Web StrategyCenter.jsx:177 renders build-strategy-card next to import-strategy-btn (calling `onBuild` prop). No functional bug — the mobile side just has not implemented this UI element yet. Fix is scoped: add a Pressable with testID='build-strategy-card' next to the import chip that navigates to the mobile AI Architect route."
+}

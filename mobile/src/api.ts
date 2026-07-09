@@ -96,6 +96,13 @@ export const api = {
   libraryFacets: () => get<any>("/library/facets"),
   libraryFavorite: (id: string) => post<any>(`/library/${id}/favorite`, {}),
   libraryAiGrade: (id: string) => post<any>(`/library/${id}/ai-grade`, {}),
+  // Strategy Import Pipeline (P2)
+  importFormats: () => get<any>("/library/import/formats"),
+  importDetect: (raw_content: string) => post<any>("/library/import/detect", { raw_content }),
+  importAnalyze: (payload: any) => post<any>("/library/import/analyze", payload),
+  importList: () => get<any>("/library/imports"),
+  importUpdate: (id: string, patch: any) => put<any>(`/library/imports/${id}`, { patch }),
+  importApprove: (id: string) => post<any>(`/library/imports/${id}/approve`, {}),
   analyticsLeaderboard: (sort = "health", source = "all") => get<any>(`/analytics/leaderboard?sort=${sort}&source=${source}`),
   watchlistSearch: (q = "") => get<any>(`/watchlist/search?q=${encodeURIComponent(q)}`),
   watchlistAdd: (symbol: string) => post<any>("/watchlist/add", { symbol }),

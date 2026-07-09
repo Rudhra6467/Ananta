@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil, Flame, SlidersHorizontal, Heart, X,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, Flame, SlidersHorizontal, Heart, X, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -15,6 +15,7 @@ import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import HelpHint from "@/components/lab/HelpHint";
 import StrategyArchitect from "@/pages/StrategyArchitect";
+import ImportStrategyModal from "@/components/ImportStrategyModal";
 import { useAuth } from "@/context/AuthContext";
 import MetricExplainer from "@/components/MetricExplainer";
 
@@ -41,6 +42,7 @@ export default function StrategyCenter() {
     const [selected, setSelected] = useState(null);       // internal engine key -> StrategyDetail
     const [catalogId, setCatalogId] = useState(null);     // library id -> CatalogDetail
     const [addOpen, setAddOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
     const { isOwner } = useAuth();
 
     const load = () => {
@@ -64,9 +66,12 @@ export default function StrategyCenter() {
     return (
         <>
             <StrategyLibrary metrics={metrics} isOwner={isOwner}
-                onOpenInternal={setSelected} onOpenCatalog={setCatalogId} onAdd={() => setAddOpen(true)} />
+                onOpenInternal={setSelected} onOpenCatalog={setCatalogId}
+                onImport={() => setImportOpen(true)} onBuild={() => setAddOpen(true)} />
             <StrategyArchitect open={addOpen} onOpenChange={setAddOpen} registry={registry} isOwner={isOwner}
                 onCreated={() => { setAddOpen(false); load(); }} />
+            <ImportStrategyModal open={importOpen} onOpenChange={setImportOpen}
+                onImported={() => { setImportOpen(false); load(); }} />
         </>
     );
 }
@@ -88,7 +93,7 @@ const FILTER_FIELDS = [
 ];
 
 /* ---------------- Library view ---------------- */
-function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onAdd }) {
+function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onImport, onBuild }) {
     const [lib, setLib] = useState(null);
     const [facets, setFacets] = useState({});
     const [query, setQuery] = useState("");
@@ -138,6 +143,10 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onAd
                             activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
                         <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
                     </button>
+                    <button data-testid="import-strategy-btn" onClick={onImport}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
+                        <Upload className="w-3 h-3" /> Import Strategy
+                    </button>
                 </div>
             </div>
 
@@ -157,12 +166,21 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onAd
                             onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
                             onFav={() => api.libraryFavorite(s.id).then(load)} />
                     ))}
-                    <button data-testid="add-strategy-card" onClick={onAdd}
+                    <button data-testid="add-strategy-card" onClick={onImport}
                         className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-atlas-cyan/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
                         <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10 transition-colors">
-                            <Plus className="w-5 h-5 text-atlas-textTertiary group-hover:text-atlas-cyan" />
+                            <Upload className="w-5 h-5 text-atlas-textTertiary group-hover:text-atlas-cyan" />
                         </div>
                         <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Import Strategy</span>
+                        <span className="font-mono text-[9px] text-atlas-textTertiary">Pine · Freqtrade · Jesse · JSON</span>
+                    </button>
+                    <button data-testid="build-strategy-card" onClick={onBuild}
+                        className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-violet-500/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
+                        <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-violet-500/50 group-hover:bg-violet-500/10 transition-colors">
+                            <Sparkles className="w-5 h-5 text-atlas-textTertiary group-hover:text-violet-400" />
+                        </div>
+                        <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Build with AI</span>
+                        <span className="font-mono text-[9px] text-atlas-textTertiary">Design a strategy conversationally</span>
                     </button>
                 </div>
             )}
@@ -606,6 +624,7 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                     </div>
                     <div className="flex items-center gap-2">
                         <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>Grade {s.ai_grade}</span>
+                        {s.imported && <span data-testid="imported-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Upload className="w-3 h-3" /> Imported</span>}
                         <button data-testid="catalog-favorite" onClick={() => api.libraryFavorite(id).then(load)} className="text-atlas-textTertiary hover:text-atlas-cyan" title="Favorite">
                             <Heart className={`w-5 h-5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
                         </button>
@@ -657,6 +676,38 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                 <RuleList title="Ideal Conditions" items={s.ideal_conditions} tone="positive" />
                 <RuleList title="Avoid Conditions" items={s.avoid_conditions} tone="negative" />
             </div>
+
+            {/* imported strategy extras */}
+            {s.imported && (
+                <div className="space-y-4" data-testid="catalog-import-meta">
+                    {s.conversion_report && (
+                        <div className="panel p-5">
+                            <div className="label-tag mb-2 flex items-center gap-2"><Upload className="w-3.5 h-3.5 text-atlas-cyan" /> Import &amp; Conversion Report
+                                <span className="ml-auto font-mono text-[10px] text-atlas-textTertiary">{s.source_label} · {s.conversion_confidence}% confidence</span>
+                            </div>
+                            <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">{s.conversion_report}</p>
+                        </div>
+                    )}
+                    {(s.indicators?.length > 0) && (
+                        <div className="panel p-5">
+                            <div className="label-tag mb-2">Indicators</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {s.indicators.map((ind, i) => (
+                                    <span key={i} className="font-mono text-[10px] px-2 py-1 rounded-lg border border-atlas-border bg-atlas-panel/50 text-atlas-textSecondary">
+                                        {ind.name}{ind.params && Object.keys(ind.params).length ? ` (${Object.entries(ind.params).map(([k, v]) => `${k}=${v}`).join(", ")})` : ""}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {(s.strengths?.length > 0 || s.weaknesses?.length > 0) && (
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <RuleList title="Strengths" items={s.strengths} tone="positive" />
+                            <RuleList title="Weaknesses" items={s.weaknesses} tone="negative" />
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

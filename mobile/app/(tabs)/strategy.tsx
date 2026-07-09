@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../src/api";
+import { useAuth } from "../../src/auth";
 import { Card } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
@@ -32,6 +33,7 @@ const FILTER_FIELDS = [
 export default function StrategyLibrary() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isOwner } = useAuth();
   const [lib, setLib] = useState<any[] | null>(null);
   const [facets, setFacets] = useState<Record<string, string[]>>({});
   const [chip, setChip] = useState<string | null>(null);
@@ -87,6 +89,12 @@ export default function StrategyLibrary() {
           <Ionicons name="options" size={12} color={activeCount ? colors.teal : colors.textMuted} />
           <Text style={[styles.chipTxt, activeCount > 0 && { color: colors.teal }]}>Filter{activeCount ? ` · ${activeCount}` : ""}</Text>
         </Pressable>
+        {isOwner && (
+          <Pressable testID="import-strategy-btn" onPress={() => router.push("/library/import")} style={[styles.chip, styles.importChip]}>
+            <Ionicons name="cloud-upload" size={12} color={colors.teal} />
+            <Text style={[styles.chipTxt, { color: colors.teal }]}>Import</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <StrategyLeaderboard onOpen={open} />
@@ -225,6 +233,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, color: colors.text, fontSize: 14, padding: 0 },
   chip: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingHorizontal: spacing.sm + 2, paddingVertical: 7 },
   chipActive: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  importChip: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
   chipTxt: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
   gradeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, minWidth: 22, alignItems: "center" },
   gradeTxt: { fontSize: 10, fontWeight: "800" },

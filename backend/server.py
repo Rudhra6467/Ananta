@@ -2319,6 +2319,135 @@ async def library_list(
     return {"strategies": docs, "count": len(docs)}
 
 
+# ---------------------------------------------------------------------------- #
+# STRATEGY IMPORT PIPELINE (P2) — import Pine Script / Freqtrade / Jesse / JSON,
+# AI-extract into Ananta's schema, validate + report, review/edit, then approve
+# into the Strategy Library. Owner-only mutations. See strategy_import.py.
+# NOTE: these specific routes MUST be declared before GET /library/{strategy_id}
+# so "/library/imports" is not captured by the {strategy_id} path param.
+# ---------------------------------------------------------------------------- #
+class ImportAnalyzeReq(BaseModel):
+    raw_content: str
+    source_format: str = "auto"   # auto | pine_script | freqtrade | jesse | json
+    name: str | None = None
+
+
+class ImportDraftUpdate(BaseModel):
+    patch: dict
+
+
+@api_router.get("/library/import/formats")
+async def import_formats():
+    """Supported frameworks for the import UI dropdown."""
+    import strategy_import  # noqa: PLC0415
+    return {"formats": strategy_import.SUPPORTED_FORMATS}
+
+
+@api_router.post("/library/import/detect")
+async def import_detect(payload: ImportAnalyzeReq):
+    """Cheap, credit-free format auto-detection (no AI)."""
+    import strategy_import  # noqa: PLC0415
+    return strategy_import.detect_format(payload.raw_content)
+
+
+@api_router.post("/library/import/analyze", dependencies=[Depends(require_owner)])
+async def import_analyze(payload: ImportAnalyzeReq):
+    """AI-extract a strategy from raw source, validate, and persist a review draft.
+    Consumes LLM credits. Returns the full draft (conversion report + validation)."""
+    import strategy_import  # noqa: PLC0415
+    import import_ai  # noqa: PLC0415
+
+    raw = (payload.raw_content or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="raw_content is required")
+
+    detected = strategy_import.detect_format(raw)
+    fmt = payload.source_format if payload.source_format and payload.source_format != "auto" else detected["best"]
+    if fmt not in strategy_import.ADAPTERS:
+        fmt = detected["best"]
+
+    try:
+        extraction = await import_ai.analyze_strategy(
+            raw, fmt, strategy_import.ai_hint_for(fmt), name_hint=payload.name)
+    except Exception as e:  # noqa: BLE001
+        logger.error("import analyze failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI extraction error: {e}")
+
+    draft = strategy_import.build_draft(
+        raw_source=raw, source_format=fmt, detected=detected,
+        extraction=extraction, name_override=payload.name)
+    await db.strategy_imports.insert_one({**draft})
+    draft.pop("_id", None)
+    return draft
+
+
+@api_router.get("/library/imports", dependencies=[Depends(require_owner)])
+async def import_list():
+    """List saved import drafts (most recent first)."""
+    docs = await db.strategy_imports.find({}, {"_id": 0, "raw_source": 0}).sort("created_at", -1).to_list(100)
+    return {"drafts": docs, "count": len(docs)}
+
+
+@api_router.get("/library/imports/{draft_id}", dependencies=[Depends(require_owner)])
+async def import_get(draft_id: str):
+    doc = await db.strategy_imports.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="import draft not found")
+    return doc
+
+
+@api_router.put("/library/imports/{draft_id}", dependencies=[Depends(require_owner)])
+async def import_update(draft_id: str, payload: ImportDraftUpdate):
+    """Apply user edits to a draft. Re-runs deterministic validation on the new fields."""
+    import strategy_import  # noqa: PLC0415
+    doc = await db.strategy_imports.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="import draft not found")
+    patch = payload.patch or {}
+    # only allow editable, library-shaped + a few metadata fields
+    editable = set(strategy_import.LIBRARY_FIELDS) | {
+        "volatility_preference", "expected_holding_period", "strengths", "weaknesses", "tags",
+        "position_sizing", "conversion_report"}
+    editable.discard("id")
+    clean = {k: v for k, v in patch.items() if k in editable}
+    doc.update(clean)
+    doc["validation"] = strategy_import.validate_extraction(doc)
+    doc["updated_at"] = _strat_now_iso()
+    await db.strategy_imports.update_one({"id": draft_id}, {"$set": {**{k: doc[k] for k in clean},
+        "validation": doc["validation"], "updated_at": doc["updated_at"]}})
+    return doc
+
+
+@api_router.delete("/library/imports/{draft_id}", dependencies=[Depends(require_owner)])
+async def import_delete(draft_id: str):
+    r = await db.strategy_imports.delete_one({"id": draft_id})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="import draft not found")
+    return {"deleted": draft_id}
+
+
+@api_router.post("/library/imports/{draft_id}/approve", dependencies=[Depends(require_owner)])
+async def import_approve(draft_id: str):
+    """Finalise a reviewed draft into the Strategy Library. Blocked if validation has errors."""
+    import strategy_import  # noqa: PLC0415
+    doc = await db.strategy_imports.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="import draft not found")
+    validation = strategy_import.validate_extraction(doc)
+    if validation.get("error_count"):
+        raise HTTPException(status_code=422,
+            detail="Cannot approve: unresolved errors — " +
+                   "; ".join(i["message"] for i in validation["issues"] if i["severity"] == "error"))
+    lib_doc = strategy_import.to_library_doc(doc)
+    if await db.strategy_library.find_one({"id": lib_doc["id"]}, {"_id": 1}):
+        lib_doc["id"] = f"{lib_doc['id']}-{uuid.uuid4().hex[:4]}"
+    await db.strategy_library.insert_one({**lib_doc})
+    await db.strategy_imports.update_one({"id": draft_id},
+        {"$set": {"status": "approved", "approved_library_id": lib_doc["id"], "updated_at": _strat_now_iso()}})
+    lib_doc.pop("_id", None)
+    return {"approved": True, "library_id": lib_doc["id"], "strategy": lib_doc}
+
+
 @api_router.get("/library/{strategy_id}")
 async def library_get(strategy_id: str):
     doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
@@ -2356,8 +2485,6 @@ async def library_ai_grade(strategy_id: str):
         "updated_at": _strat_now_iso(),
     }})
     return {"id": strategy_id, **grade}
-
-
 
 
 # ---- mount router and CORS ----

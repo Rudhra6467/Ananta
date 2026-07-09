@@ -141,6 +141,15 @@ export const api = {
     libraryFacets: () => client.get("/library/facets").then((r) => r.data),
     libraryFavorite: (id) => client.post(`/library/${id}/favorite`).then((r) => r.data),
     libraryAiGrade: (id) => client.post(`/library/${id}/ai-grade`).then((r) => r.data),
+    // Strategy Import Pipeline (P2)
+    importFormats: () => client.get("/library/import/formats").then((r) => r.data),
+    importDetect: (raw_content) => client.post("/library/import/detect", { raw_content }).then((r) => r.data),
+    importAnalyze: (payload) => client.post("/library/import/analyze", payload).then((r) => r.data),
+    importList: () => client.get("/library/imports").then((r) => r.data),
+    importGet: (id) => client.get(`/library/imports/${id}`).then((r) => r.data),
+    importUpdate: (id, patch) => client.put(`/library/imports/${id}`, { patch }).then((r) => r.data),
+    importDelete: (id) => client.delete(`/library/imports/${id}`).then((r) => r.data),
+    importApprove: (id) => client.post(`/library/imports/${id}/approve`).then((r) => r.data),
     // Active Watchlist
     watchlistSearch: (q = "") => client.get(`/watchlist/search?q=${encodeURIComponent(q)}`).then((r) => r.data),
     watchlistAdd: (symbol) => client.post("/watchlist/add", { symbol }).then((r) => r.data),

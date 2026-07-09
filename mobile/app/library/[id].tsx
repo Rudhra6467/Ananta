@@ -60,6 +60,12 @@ export default function LibraryDetail() {
             </Pressable>
           </View>
         </View>
+        {s.imported && (
+          <View testID="imported-badge" style={styles.importedBadge}>
+            <Ionicons name="cloud-upload" size={11} color={colors.teal} />
+            <Text style={{ color: colors.teal, fontSize: 10, fontWeight: "800" }}>IMPORTED · {s.source_label}</Text>
+          </View>
+        )}
         <Text style={[type.body, { marginTop: spacing.sm, lineHeight: 20 }]}>{s.description}</Text>
         <View style={styles.tagWrap}>
           {(s.market_regimes || []).map((m: string) => <Pill key={m} label={m} tone="neutral" />)}
@@ -104,6 +110,30 @@ export default function LibraryDetail() {
       <RuleList title="EXIT RULES" items={s.exit_rules} tone={colors.teal} />
       <RuleList title="IDEAL CONDITIONS" items={s.ideal_conditions} tone={colors.teal} />
       <RuleList title="AVOID CONDITIONS" items={s.avoid_conditions} tone={colors.red} />
+
+      {s.imported && !!s.conversion_report && (
+        <Card testID="catalog-import-meta" style={{ marginBottom: spacing.sm }}>
+          <SectionLabel>IMPORT &amp; CONVERSION REPORT</SectionLabel>
+          <Text style={[type.small, { marginTop: 4 }]}>{s.conversion_confidence}% conversion confidence</Text>
+          <Text style={[type.body, { marginTop: 6, fontSize: 13, lineHeight: 19 }]}>{s.conversion_report}</Text>
+        </Card>
+      )}
+      {s.imported && (s.indicators || []).length > 0 && (
+        <Card style={{ marginBottom: spacing.sm }}>
+          <SectionLabel>INDICATORS</SectionLabel>
+          <View style={styles.tagWrap}>
+            {s.indicators.map((ind: any, i: number) => (
+              <View key={i} style={styles.indChip}>
+                <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                  {ind.name}{ind.params && Object.keys(ind.params).length ? ` (${Object.entries(ind.params).map(([k, val]) => `${k}=${val}`).join(", ")})` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </Card>
+      )}
+      {s.imported && (s.strengths || []).length > 0 && <RuleList title="STRENGTHS" items={s.strengths} tone={colors.teal} />}
+      {s.imported && (s.weaknesses || []).length > 0 && <RuleList title="WEAKNESSES" items={s.weaknesses} tone={colors.red} />}
     </ScrollView>
   );
 }
@@ -129,6 +159,8 @@ const styles = StyleSheet.create({
   grade: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   gradeTxt: { fontSize: 10, fontWeight: "800" },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
+  importedBadge: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  indChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.bgElevated },
   perfGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   perfCell: { width: "47%", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, padding: spacing.sm, backgroundColor: colors.bgElevated },
   ruleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 6 },
