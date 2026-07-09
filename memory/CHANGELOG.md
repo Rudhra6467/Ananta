@@ -613,3 +613,19 @@ Per owner request, moved every execution + exit signal path from 4h to **1h cand
 - Screenshots: Cockpit, Portfolio, Datalogs, Research Lab, and floating-nav scroll behavior all confirmed rendering correctly.
 - Lint (JS + Python) clean.
 - Note: 6 failures in `tests/test_live_status_iter4.py` are PRE-EXISTING stale expectations (old "CryptoAtlas" name / $300 baseline) + auth-token setup in that file — not caused by these changes.
+
+---
+
+## 2026-07-09 — Final Mobile UI Polish (Competition Parity, iter 32)
+Ported the last web polish items to the Expo mobile app; verified by mobile testing agent (all passed).
+- **AI Coach headline banner** on mobile Cockpit (`app/(tabs)/index.tsx`, `coach-banner`): credit-free `GET /api/coach/headline`; tap → `/research?sub=ai`.
+- **Strategy Health radial ring** (`src/components/HealthRing.tsx`) on strategy detail — SVG gauge (score + band label) replacing the plain number.
+- **Mobile Metric Explainers** (`src/components/MetricExplainer.tsx`): tap-to-explain (i) modals for health / win_rate / roi, mirroring web bands.
+- **Academy deep-link from a strategy** (`strategy-academy-link` → lesson modal); shared lesson data extracted to `src/academy.ts` (reused by Workspace Academy).
+- **Regression fix:** Cockpit "See all positions" + PositionCard now route to `/trade` (previously the non-existent `/portfolio` route → dead link).
+- Research tab now honours a `?sub=` deep-link param (validate|ai|closed).
+
+### P1 Settings-architecture finding (investigation, no code change yet)
+- Live engine source of truth = **`RiskSettings`** singleton (read by trading/exit/risk engines).
+- `profile_overrides` is a **nested field inside RiskSettings** (Lab-promoted per-strategy exit overrides) — not a separate store.
+- `strategy_configs` collection = Architect-authored, versioned, validated/rated per-strategy param bundles that are **NOT yet wired to the engine** (server.py:1651 "Engine wiring = Phase 2"). Awaiting a direction decision before rewiring the live core.
