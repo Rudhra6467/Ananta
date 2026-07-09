@@ -1848,8 +1848,26 @@ async def strategy_set_state(key: str, payload: StrategyState):
         updates["enabled"] = payload.enabled
     if not updates:
         raise HTTPException(status_code=400, detail="no state fields provided")
+
+    # Enforce the enabled↔status invariant so the two can't drift out of sync:
+    #  - DISABLED/ERROR status ⇒ not enabled
+    #  - enabling while status is off ⇒ promote to PAPER
+    current = await db.strategy_meta.find_one({"key": key}, {"_id": 0}) or {}
+    merged = {**current, **updates}
+    status = merged.get("status", "PAPER")
+    enabled = merged.get("enabled", False)
+    # promote first: enabling a currently-off strategy (without an explicit status) ⇒ PAPER
+    if payload.enabled and payload.status is None and status in ("DISABLED", "ERROR"):
+        status = "PAPER"
+    # then clamp: an off status can never be enabled
+    if status in ("DISABLED", "ERROR"):
+        enabled = False
+    updates["status"] = status
+    updates["enabled"] = enabled
+
     await db.strategy_meta.update_one({"key": key}, {"$set": {"key": key, **updates}}, upsert=True)
-    return {"key": key, **updates}
+    doc = await db.strategy_meta.find_one({"key": key}, {"_id": 0})
+    return doc
 
 
 

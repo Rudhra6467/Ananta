@@ -3,9 +3,13 @@
 > **P3 UPDATE (2026-07-09, iter37):** ✅ Phase A — per-strategy engine configs SHIPPED. Engine resolves each
 > strategy's params from its active config (account-level risk stays global); activation no longer clobbers
 > the global RiskSettings. Web + mobile activate/revert UI + backend tested (32/32). See CHANGELOG iter37.
-> **NEXT — Phase B:** generic declarative executor to wire simple indicator catalog strategies (EMA Cross,
-> Supertrend, RSI Momentum, Bollinger MR, MACD…) to the live/paper engine, gated by strategy_meta + shared
-> risk budget; imported free-text strategies stay catalog-only until mapped to codeable rules.
+> **P2/P3 UPDATE (2026-07-09, iter38):** ✅ Phase B — DECLARATIVE ENGINE SHIPPED. 8 catalog indicator
+> strategies (EMA Cross, Supertrend, RSI Momentum live in PAPER; MACD, Bollinger MR, Donchian, ATR/Keltner
+> breakout registered+DISABLED) now run in the engine via a generic spec executor, sharing the book budget +
+> per-strategy configs. Web/mobile show engine status + Manage-in-Engine. Backend 26/26 green. See CHANGELOG iter38.
+> **NEXT:** honor declarative EXIT signals in the position watcher; backtest declarative strategies in the Lab
+> for real catalog metrics; enable the remaining 5 from the UI as desired; (optional) unify Lab backtest to
+> per-strategy configs. Imported free-text strategies stay catalog-only until mapped to codeable rules.
 > **P2 UPDATE (2026-07-09):** ✅ Strategy Import Pipeline SHIPPED (import Pine Script/Freqtrade/Jesse/JSON →
 > AI-extract → validate → review/edit → approve into Library; web+mobile parity, owner-gated). See CHANGELOG iter36.
 > **NEXT P2:** wire the remaining catalog library strategies (incl. imported ones) to the LIVE trading engine
