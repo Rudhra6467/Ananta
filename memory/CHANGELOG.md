@@ -1,3 +1,18 @@
+## 2026-07-09 (iter36) — P2 Strategy Import Pipeline SHIPPED (backend + web + mobile, tested all-green)
+
+Full "Strategy Import Pipeline" — import external strategies, AI-extract into Ananta's schema, validate, review/edit, approve into the Strategy Library. Cross-platform parity (web + mobile), all mutations owner-gated, AI via Emergent LLM key (Claude sonnet-4-6).
+
+- **Pluggable adapters** (`backend/strategy_import.py`): FrameworkAdapter registry with detectors for Pine Script, Freqtrade, Jesse, generic JSON. Add a new framework = register ONE adapter (detector + ai_hint), no pipeline/UI refactor. `detect_format()` is credit-free auto-detect.
+- **AI extractor** (`backend/import_ai.py`): one strict-JSON Claude call extracts entry/exit rules, risk management, position sizing, indicators+params, timeframes, direction (long/short/both), regimes, volatility pref, holding period, strengths/weaknesses, tags, ai_summary/health/confidence, PLUS a conversion report (confidence_score, unsupported_features, missing_logic, warnings, notes).
+- **Deterministic validation** (`validate_extraction`): layered guardrails → issues [{severity, message}], status ready|review|blocked. Flags no-entry (error → blocks approve), missing exits/params/risk (warning), short-selling (warning — engine is long-only spot today), non-crypto market type, exotic indicators.
+- **Draft lifecycle**: `strategy_imports` collection (draft → approved). On approve → projected into `strategy_library` as a first-class catalog entry (`imported=true`, filterable, AI-gradeable, leaderboard-eligible).
+- **Endpoints** (owner-gated except detect/formats): GET `/library/import/formats`, POST `/library/import/detect`, POST `/library/import/analyze`, GET `/library/imports`, GET/PUT/DELETE `/library/imports/{id}`, POST `/library/imports/{id}/approve`. Declared BEFORE `/library/{strategy_id}` to avoid route shadowing.
+- **Web** (`components/ImportStrategyModal.jsx` + StrategyCenter): "Import Strategy" button/card → 2-step modal (paste w/ live format detect → review: confidence ring, color-coded validation, conversion report, editable metadata → Save to Library). CatalogDetail shows Imported badge + conversion report + indicators + strengths/weaknesses. Added a separate "Build with AI" card (existing StrategyArchitect, web-only).
+- **Mobile** (`app/library/import.tsx` + strategy tab + library/[id]): owner-only Import button → full-screen import screen (same 2-step flow, RN components) → library detail shows imported badge + conversion report + indicators.
+- **Tests**: `backend/tests/test_strategy_import.py` (9 pure-logic) + testing agent iter36 `test_iter36_strategy_import_e2e.py` (17 e2e). Backend 100%, web 100%, mobile 95% (only gap: Build-with-AI is web-only, out of scope for import). a11y: added DialogTitle/Description to the web modal.
+- **Note**: imported strategies are catalog-level today (like the other 13 non-internal library strategies); wiring them to the LIVE trading engine is the next P2 task (their schema already carries entry/exit/params/direction for that).
+
+
 ## 2026-07-09 (iter31) — MOBILE full parity rebuild (Expo/React Native, tested all-green)
 
 Rebuilt the mobile app (/app/mobile) to match the web 5-tab "workspaces" model against the SAME shared FastAPI

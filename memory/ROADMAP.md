@@ -1,5 +1,11 @@
 # Ananta — Unified Roadmap (VALIDATION-FIRST ARCHITECTURE)
 
+> **P2 UPDATE (2026-07-09):** ✅ Strategy Import Pipeline SHIPPED (import Pine Script/Freqtrade/Jesse/JSON →
+> AI-extract → validate → review/edit → approve into Library; web+mobile parity, owner-gated). See CHANGELOG iter36.
+> **NEXT P2:** wire the remaining catalog library strategies (incl. imported ones) to the LIVE trading engine
+> incrementally — their schema already carries entry/exit/params/direction. Then P3 per-strategy engine configs.
+
+
 > **Foundational shift (2026-06-02):** This file has been PURGED and rebuilt around an
 > institutional **validation-first** framework. The governing question is no longer
 > *"How do we build more features?"* but **"How do we PROVE the existing system has a real edge?"**

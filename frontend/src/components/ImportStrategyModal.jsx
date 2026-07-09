@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const FORMAT_ICON = { pine_script: FileCode2, freqtrade: GitBranch, jesse: Store, json: Braces, auto: Sparkles };
 const SEV = {
@@ -73,6 +73,8 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="atlas-panel border-atlas-border bg-atlas-bg max-w-3xl p-0 gap-0 max-h-[92vh] overflow-hidden flex flex-col"
                 data-testid="import-modal">
+                <DialogTitle className="sr-only">Strategy Import Pipeline</DialogTitle>
+                <DialogDescription className="sr-only">Import a trading strategy from Pine Script, Freqtrade, Jesse or JSON, review the AI conversion, then save it to your library.</DialogDescription>
                 <div className="flex items-center gap-2.5 px-5 py-4 border-b border-atlas-border">
                     <div className="w-9 h-9 rounded-lg grid place-items-center border border-atlas-border bg-atlas-cyan/10">
                         <Upload className="w-4.5 h-4.5 text-atlas-cyan" />
@@ -148,7 +150,7 @@ function InputStep({ formats, fmt, setFmt, name, setName, raw, setRaw, detected,
 
             <div className="flex items-center justify-between pt-1">
                 <div className="font-mono text-[9px] text-atlas-textTertiary max-w-[55%]">
-                    The AI extracts entry/exit logic, risk, indicators &amp; parameters, then flags anything Ananta can't replicate.
+                    The AI extracts entry/exit logic, risk, indicators &amp; parameters, then flags anything Ananta cannot replicate.
                 </div>
                 <Button data-testid="import-analyze-btn" onClick={analyze} disabled={analyzing || !raw.trim()}
                     className="bg-atlas-cyan text-atlas-bg hover:bg-cyan-300 font-mono text-xs">
