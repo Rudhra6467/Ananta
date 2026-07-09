@@ -131,6 +131,10 @@ export const api = {
     strategyConfigUpdate: (id, payload) => client.put(`/strategy/configs/${id}`, payload).then((r) => r.data),
     strategyConfigDelete: (id) => client.delete(`/strategy/configs/${id}`).then((r) => r.data),
     strategyConfigFromLabRun: (payload) => client.post("/strategy/configs/from-lab-run", payload).then((r) => r.data),
+    strategyConfigActivate: (id) => client.post(`/strategy/configs/${id}/activate`).then((r) => r.data),
+    strategyConfigImport: (payload) => client.post("/strategy/configs/import", payload).then((r) => r.data),
+    strategyConfigExport: (id) => client.get(`/strategy/configs/${id}/export`).then((r) => r.data),
+    analyticsLeaderboard: () => client.get("/analytics/leaderboard").then((r) => r.data),
     watchlistValidate: () => cget("/watchlist/validate", 10000),
     watchlistSync: () =>
         client.post("/watchlist/sync").then((r) => {

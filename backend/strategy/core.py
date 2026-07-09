@@ -206,3 +206,18 @@ def resolve_config(config: dict, by_id: dict[str, dict], schema: StrategySchema 
     for c in reversed(chain):  # root first, leaf last (leaf wins)
         merged.update(c.get("params") or {})
     return merged
+
+
+def engine_backed_params(schema: StrategySchema | None, resolved: dict) -> dict:
+    """Filter a resolved param set to only the params that map 1:1 to a live
+    `RiskSettings` field (ParamSpec.engine_backed). These are the values the engine
+    can consume today (Phase 2 activation). Forward-looking knobs are dropped."""
+    if not schema:
+        return {}
+    by = schema.by_id()
+    out: dict = {}
+    for k, v in (resolved or {}).items():
+        spec = by.get(k)
+        if spec is not None and spec.engine_backed:
+            out[k] = v
+    return out

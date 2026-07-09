@@ -83,6 +83,9 @@ export const api = {
   strategySetState: (key: string, status: string) => put<any>(`/strategy/${key}/state`, { status }),
   strategyConfigs: (strategyKey?: string) =>
     get<any>(`/strategy/configs${strategyKey ? `?strategy_key=${strategyKey}` : ""}`),
+  strategyConfigActivate: (id: string) => post<any>(`/strategy/configs/${id}/activate`, {}),
+  strategyConfigImport: (payload: any) => post<any>("/strategy/configs/import", payload),
+  strategyConfigExport: (id: string) => get<any>(`/strategy/configs/${id}/export`),
 
   // --- Research Lab ---
   labCoverage: () => get<any>("/lab/data/coverage"),

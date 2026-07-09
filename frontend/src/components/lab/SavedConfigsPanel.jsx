@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Layers, Star, Trash2, Loader2, Save, Plus, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
+import { Layers, Star, Trash2, Loader2, Save, Plus, ChevronDown, ChevronRight, RotateCcw, Zap, Upload, Copy, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -22,24 +22,63 @@ const ORIGIN_CLS = {
 export default function SavedConfigsPanel({ isOwner, only }) {
     const [schemas, setSchemas] = useState({}); // key -> schema
     const [configs, setConfigs] = useState([]);
+    const [active, setActive] = useState({}); // strategy_key -> active config id
     const [loading, setLoading] = useState(true);
     const [openId, setOpenId] = useState(null);
+    const [importing, setImporting] = useState(false);
     const strats = only ? STRATS.filter((s) => s.id === only) : STRATS;
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [reg, cfg] = await Promise.all([api.strategyRegistry(), api.strategyConfigs()]);
+            const [reg, cfg, met] = await Promise.all([api.strategyRegistry(), api.strategyConfigs(), api.strategyMetrics().catch(() => ({ metrics: {} }))]);
             const map = {};
             (reg.strategies || []).forEach((s) => { map[s.key] = s; });
             setSchemas(map);
             setConfigs(cfg.configs || []);
+            const act = {};
+            Object.values(met.metrics || {}).forEach((m) => { if (m.active_config_id) act[m.key] = m.active_config_id; });
+            setActive(act);
         } catch (e) {
             toast.error("Failed to load configs", { description: String(e?.message || e) });
         } finally { setLoading(false); }
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    const activate = async (cfg) => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        try {
+            const r = await api.strategyConfigActivate(cfg.id);
+            toast.success("Config activated", { description: `${r.applied} params live · ${r.changes?.length || 0} changed` });
+            await load();
+        } catch (e) { toast.error("Activation failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+    };
+
+    const exportCfg = async (cfg) => {
+        try {
+            const blob = await api.strategyConfigExport(cfg.id);
+            await navigator.clipboard.writeText(JSON.stringify(blob, null, 2));
+            toast.success("Config JSON copied to clipboard");
+        } catch (e) { toast.error("Export failed", { description: String(e?.message || e) }); }
+    };
+
+    const importCfg = async (raw) => {
+        setImporting(false);
+        if (!raw || !raw.trim()) return;
+        let payload;
+        try { payload = JSON.parse(raw); }
+        catch { toast.error("Invalid JSON", { description: "Paste a valid exported config." }); return; }
+        try {
+            const r = await api.strategyConfigImport(payload.config ? payload : { config: payload });
+            toast.success("Strategy imported", { description: r.config.name });
+            await load();
+            setOpenId(r.config.id);
+        } catch (e) {
+            const d = e?.response?.data?.detail;
+            toast.error("Import failed", { description: String(d?.errors?.join?.(", ") || d || e?.message) });
+        }
+    };
 
     const rate = async (cfg, stars) => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -86,6 +125,14 @@ export default function SavedConfigsPanel({ isOwner, only }) {
                 </button>
             </div>
 
+            <div className="px-4 pt-3">
+                <button data-testid="import-config-btn" onClick={() => setImporting(true)} disabled={!isOwner}
+                    className="flex items-center gap-1.5 font-mono text-[10px] text-atlas-cyan hover:text-cyan-300 disabled:opacity-40">
+                    <Upload className="w-3.5 h-3.5" /> IMPORT STRATEGY (JSON)
+                </button>
+            </div>
+            {importing && <ImportBox onCancel={() => setImporting(false)} onImport={importCfg} />}
+
             <div className="p-4 space-y-4">
                 {strats.map((st) => {
                     const rows = configs.filter((c) => c.strategy_key === st.id);
@@ -104,14 +151,31 @@ export default function SavedConfigsPanel({ isOwner, only }) {
                                 <div className="space-y-2">
                                     {rows.map((c) => (
                                         <ConfigRow key={c.id} cfg={c} schema={schemas[c.strategy_key]} isOwner={isOwner}
+                                            isActive={active[c.strategy_key] === c.id}
                                             open={openId === c.id} onToggle={() => setOpenId(openId === c.id ? null : c.id)}
-                                            onRate={rate} onDelete={remove} onSaved={(u) => setConfigs((cs) => cs.map((x) => (x.id === u.id ? u : x)))} />
+                                            onRate={rate} onDelete={remove} onActivate={activate} onExport={exportCfg}
+                                            onSaved={(u) => setConfigs((cs) => cs.map((x) => (x.id === u.id ? u : x)))} />
                                     ))}
                                 </div>
                             )}
                         </div>
                     );
                 })}
+            </div>
+        </div>
+    );
+}
+
+function ImportBox({ onCancel, onImport }) {
+    const [text, setText] = useState("");
+    return (
+        <div className="mx-4 mt-2 mb-1 border border-atlas-cyan/30 rounded-lg p-3 bg-atlas-cyan/5" data-testid="import-config-box">
+            <textarea data-testid="import-config-textarea" value={text} onChange={(e) => setText(e.target.value)} rows={5}
+                placeholder='Paste an exported config JSON, e.g. {"strategy_key":"hunter","name":"My Import","params":{"rsi_reset_max":40}}'
+                className="w-full bg-atlas-panel border border-atlas-border rounded px-2.5 py-2 font-mono text-[10px] text-atlas-text resize-y" />
+            <div className="flex justify-end gap-2 mt-2">
+                <button data-testid="import-cancel" onClick={onCancel} className="font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-text px-3 py-1.5">CANCEL</button>
+                <button data-testid="import-submit" onClick={() => onImport(text)} className="font-mono text-[10px] text-atlas-bg bg-atlas-cyan hover:bg-cyan-400 rounded px-3 py-1.5 font-bold">IMPORT</button>
             </div>
         </div>
     );
@@ -130,22 +194,36 @@ function Stars({ value = 0, onSet, disabled }) {
     );
 }
 
-function ConfigRow({ cfg, schema, isOwner, open, onToggle, onRate, onDelete, onSaved }) {
+function ConfigRow({ cfg, schema, isOwner, isActive, open, onToggle, onRate, onDelete, onActivate, onExport, onSaved }) {
     const stars = cfg.rating?.stars ?? 0;
     const oc = ORIGIN_CLS[cfg.origin] || ORIGIN_CLS.user;
+    const validated = cfg.validation_status === "passed";
     return (
-        <div className="border border-atlas-border rounded-lg" data-testid={`config-row-${cfg.id.slice(0, 8)}`}>
+        <div className={`border rounded-lg ${isActive ? "border-atlas-cyan/60 bg-atlas-cyan/5" : "border-atlas-border"}`} data-testid={`config-row-${cfg.id.slice(0, 8)}`}>
             <div className="flex items-center gap-2 px-3 py-2">
                 <button onClick={onToggle} className="text-atlas-textTertiary hover:text-atlas-text" data-testid={`config-toggle-${cfg.id.slice(0, 8)}`}>
                     {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
                 <div className="min-w-0 flex-1">
-                    <div className="font-mono text-xs text-atlas-text truncate">{cfg.name}</div>
+                    <div className="font-mono text-xs text-atlas-text truncate flex items-center gap-1.5">
+                        {cfg.name}
+                        {isActive && <span data-testid={`config-live-${cfg.id.slice(0, 8)}`} className="inline-flex items-center gap-1 font-mono text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan"><CheckCircle2 className="w-2.5 h-2.5" /> LIVE</span>}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                         <span className={`font-mono text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${oc}`}>{cfg.origin}</span>
                         <span className="font-mono text-[9px] text-atlas-textTertiary">v{cfg.strategy_version} · {Object.keys(cfg.params || {}).length} overrides</span>
+                        {validated ? <span className="font-mono text-[8px] text-atlas-positive">validated</span> : <span className="font-mono text-[8px] text-atlas-textTertiary">unvalidated</span>}
                     </div>
                 </div>
+                <button data-testid={`config-export-${cfg.id.slice(0, 8)}`} onClick={() => onExport(cfg)} title="Copy config JSON"
+                    className="text-atlas-textTertiary hover:text-atlas-cyan"><Copy className="w-3.5 h-3.5" /></button>
+                {!isActive && (
+                    <button data-testid={`config-activate-${cfg.id.slice(0, 8)}`} onClick={() => onActivate(cfg)} disabled={!isOwner || !validated}
+                        title={validated ? "Make this the live config" : "Validate this config first"}
+                        className="flex items-center gap-1 font-mono text-[9px] font-bold text-atlas-cyan hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed border border-atlas-cyan/30 rounded px-2 py-1">
+                        <Zap className="w-3 h-3" /> ACTIVATE
+                    </button>
+                )}
                 <Stars value={stars} disabled={!isOwner} onSet={(n) => onRate(cfg, n)} />
                 {cfg.origin !== "builtin" && (
                     <button data-testid={`config-delete-${cfg.id.slice(0, 8)}`} onClick={() => onDelete(cfg)} disabled={!isOwner}

@@ -17,6 +17,7 @@ from settings_spec import (
     clamp_settings_dict,
     clamp_value,
 )
+from strategy import engine_backed_params, get_schema
 
 BACKEND = pathlib.Path(__file__).resolve().parent.parent
 ENGINE_MODULES = [
@@ -72,3 +73,21 @@ def test_engine_modules_do_not_read_strategy_configs(module):
     assert "db.strategy_configs" not in src and ".strategy_configs." not in src, (
         f"{module} accesses the strategy_configs collection — the engine must read only RiskSettings"
     )
+
+
+def test_engine_backed_params_filters_forward_looking_and_maps_to_fields():
+    """Phase-2 activation: only engine-backed params (that map to RiskSettings fields)
+    survive; forward-looking knobs (e.g. exit_method) are dropped."""
+    schema = get_schema("hunter")
+    resolved = dict(schema.defaults())
+    resolved.update({"rsi_reset_max": 42.0, "normal_lot_usd": 120.0, "exit_method": "atr", "target_profit": 9.0})
+    eb = engine_backed_params(schema, resolved)
+    # engine-backed & mapped to real RiskSettings fields
+    fields = set(RiskSettings.model_fields.keys())
+    assert eb.get("rsi_reset_max") == 42.0
+    assert eb.get("normal_lot_usd") == 120.0
+    for k in eb:
+        assert k in fields, f"engine-backed param {k} is not a RiskSettings field"
+    # forward-looking knobs dropped
+    assert "exit_method" not in eb
+    assert "target_profit" not in eb

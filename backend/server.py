@@ -1626,6 +1626,7 @@ async def lab_reject_proposal(prop_id: str):
 # ============================================================================ #
 from strategy import (  # noqa: E402
     StrategyConfig,
+    engine_backed_params,
     get_schema,
     list_schemas,
     now_iso as _strat_now_iso,
@@ -1751,6 +1752,7 @@ async def _compute_strategy_metrics() -> dict:
             "health_breakdown": breakdown,
             "timeline": _strategy_timeline(schema, cfgs, ts, status),
             "last_trade": last_ts, "config_count": len(cfgs),
+            "active_config_id": m.get("active_config_id"),
         }
     return out
 
@@ -1990,6 +1992,129 @@ async def strategy_config_from_lab_run(payload: dict):
     await db.strategy_configs.insert_one(cfg.model_dump())
     return {"config": cfg.model_dump(), "source": {"run_id": run_id, "symbol": symbol,
             "timeframe": timeframe, "winner_key": winner_key}}
+
+
+# ---------------------------------------------------------------------------- #
+# PHASE 2 — activate / import / export a strategy config.
+# ACTIVATION is the one compatible bridge from a StrategyConfig to the live engine:
+# it resolves the config, keeps only engine-backed params, and writes them into the
+# RiskSettings singleton (clamped via settings_spec). The engine still reads ONLY
+# RiskSettings — see CONFIG_ARCHITECTURE.md. No activation ⇒ behaviour is unchanged.
+# ---------------------------------------------------------------------------- #
+def _config_export_blob(row: dict) -> dict:
+    return {
+        "ananta_config": 1,
+        "strategy_key": row.get("strategy_key"),
+        "strategy_version": row.get("strategy_version"),
+        "name": row.get("name"),
+        "params": row.get("params") or {},
+        "origin": row.get("origin"),
+        "meta": row.get("meta") or {},
+    }
+
+
+@api_router.get("/strategy/configs/{config_id}/export")
+async def strategy_export_config(config_id: str):
+    """Portable JSON for a config — copy it to share or re-import elsewhere."""
+    row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT}, {"_id": 0})
+    if not row:
+        raise HTTPException(status_code=404, detail="config not found")
+    return _config_export_blob(row)
+
+
+@api_router.post("/strategy/configs/import", dependencies=[Depends(require_owner)])
+async def strategy_import_config(payload: dict):
+    """Import a strategy as STRUCTURED JSON (schema-validated). No code execution.
+
+    Accepts either a flat body `{strategy_key, name, params, parent_config_id?}` or an
+    exported blob `{ananta_config, strategy_key, params, ...}`. Params are validated
+    against the strategy schema, so an import can never introduce unknown/out-of-range
+    knobs. Stored as a normal versioned config with origin='imported'.
+    """
+    blob = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    key = blob.get("strategy_key")
+    schema = get_schema(key, blob.get("strategy_version"))
+    if not schema:
+        raise HTTPException(status_code=400, detail=f"unknown strategy '{key}'")
+    params = blob.get("params") or {}
+    if not isinstance(params, dict):
+        raise HTTPException(status_code=422, detail={"errors": ["'params' must be an object"]})
+    ok, errs = validate_params(schema, params)
+    if not ok:
+        raise HTTPException(status_code=422, detail={"errors": errs})
+    parent_id = blob.get("parent_config_id")
+    if parent_id and not await db.strategy_configs.find_one({"id": parent_id, "tenant_id": _OWNER_TENANT}):
+        raise HTTPException(status_code=400, detail="parent_config_id not found")
+    cfg = StrategyConfig(
+        tenant_id=_OWNER_TENANT, strategy_key=key, strategy_version=schema.version,
+        name=(blob.get("name") or f"{schema.name} · imported"),
+        params=params, parent_config_id=parent_id, origin="imported",
+        meta={**(blob.get("meta") or {}), "imported_at": _strat_now_iso()},
+    )
+    await db.strategy_configs.insert_one(cfg.model_dump())
+    return {"config": cfg.model_dump(), "resolved_params": resolve_config(cfg.model_dump(), {}, schema)}
+
+
+@api_router.post("/strategy/configs/{config_id}/activate", dependencies=[Depends(require_owner)])
+async def strategy_activate_config(config_id: str):
+    """Make a config the LIVE config for its strategy.
+
+    Resolves the config (defaults ← parent chain ← self), keeps only engine-backed
+    params, clamps them via settings_spec, writes them into RiskSettings, and records
+    the active config on strategy_meta. Requires a validated config (validation gate).
+    """
+    row = await db.strategy_configs.find_one({"id": config_id, "tenant_id": _OWNER_TENANT}, {"_id": 0})
+    if not row:
+        raise HTTPException(status_code=404, detail="config not found")
+    if row.get("validation_status") != "passed":
+        raise HTTPException(status_code=400, detail="config must pass validation before activation")
+
+    key = row["strategy_key"]
+    schema = get_schema(key, row.get("strategy_version"))
+    all_rows = await db.strategy_configs.find({"tenant_id": _OWNER_TENANT}, {"_id": 0}).to_list(2000)
+    by_id = {r["id"]: r for r in all_rows}
+    resolved = resolve_config(row, by_id, schema)
+    engine_params = engine_backed_params(schema, resolved)
+
+    from settings_spec import clamp_value  # noqa: PLC0415
+    settings = await load_settings(db)
+    changed: list[dict] = []
+    for field, val in engine_params.items():
+        if not hasattr(settings, field):
+            continue
+        clamped = clamp_value(field, val)
+        before = getattr(settings, field, None)
+        if before != clamped:
+            changed.append({"field": field, "from": before, "to": clamped})
+        setattr(settings, field, clamped)
+    await save_settings(db, settings)
+
+    await db.strategy_meta.update_one(
+        {"key": key},
+        {"$set": {"key": key, "active_config_id": config_id,
+                  "active_config_name": row.get("name"),
+                  "activated_at": _strat_now_iso()}},
+        upsert=True,
+    )
+    return {"activated": config_id, "strategy_key": key, "applied": len(engine_params),
+            "changes": changed,
+            "note": "Live RiskSettings updated from this config. The engine reads RiskSettings only."}
+
+
+@api_router.get("/analytics/leaderboard")
+async def analytics_leaderboard():
+    """Ranked per-strategy scoreboard (health-sorted) — a single aggregate the web and
+    mobile leaderboards consume instead of each recomputing client-side."""
+    metrics = await _compute_strategy_metrics()
+    rows = sorted(metrics.values(), key=lambda m: (m.get("health", 0), m.get("roi", 0)), reverse=True)
+    board = [{
+        "rank": i + 1,
+        "key": m["key"], "name": m["name"], "status": m["status"],
+        "health": m["health"], "roi": m["roi"], "win_rate": m["win_rate"],
+        "trades": m["trades"], "total_pnl": m["total_pnl"], "stars": m["stars"],
+        "active_config_id": m.get("active_config_id"),
+    } for i, m in enumerate(rows)]
+    return {"leaderboard": board, "count": len(board)}
 
 
 

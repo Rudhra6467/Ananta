@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Modal, Alert } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, ScrollView, StyleSheet, Pressable, Modal, Alert, TextInput, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -101,6 +101,9 @@ export default function StrategyDetail() {
         ))}
       </Card>
 
+      {/* Configs (Phase 2: activate a config to drive the live engine) */}
+      <StrategyConfigs sKey={id as string} activeId={s.active_config_id} isOwner={isOwner} onChanged={refresh} />
+
       {/* Edit / status */}
       <Card testID="strategy-edit-card">
         <SectionLabel>EDIT STRATEGY</SectionLabel>
@@ -133,6 +136,99 @@ export default function StrategyDetail() {
   );
 }
 
+function StrategyConfigs({ sKey, activeId, isOwner, onChanged }: { sKey: string; activeId?: string; isOwner: boolean; onChanged: () => void }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [busy, setBusy] = useState<string>("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [text, setText] = useState("");
+
+  const load = () => api.strategyConfigs(sKey).then((d: any) => setRows(d.configs || [])).catch(() => setRows([]));
+  useEffect(() => { load(); }, [sKey]);
+
+  const activate = (cfg: any) => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    if (cfg.validation_status !== "passed") return Alert.alert("Validation required", "This config must pass validation before it can go live.");
+    Alert.alert("Activate config", `Make "${cfg.name}" the live config? Its parameters will drive the engine.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Activate", onPress: async () => {
+        setBusy(cfg.id);
+        try { const r = await api.strategyConfigActivate(cfg.id); Alert.alert("Activated", `${r.applied} params live · ${r.changes?.length || 0} changed`); load(); onChanged(); }
+        catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
+        finally { setBusy(""); }
+      } },
+    ]);
+  };
+
+  const doImport = async () => {
+    if (!text.trim()) return;
+    let payload: any;
+    try { payload = JSON.parse(text); } catch { return Alert.alert("Invalid JSON", "Paste a valid exported config."); }
+    setBusy("import");
+    try {
+      await api.strategyConfigImport(payload.config ? payload : { config: payload });
+      setImportOpen(false); setText(""); load(); onChanged();
+      Alert.alert("Imported", "Strategy config imported and validated.");
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      Alert.alert("Import failed", (d?.errors && d.errors.join(", ")) || d || e?.message);
+    } finally { setBusy(""); }
+  };
+
+  return (
+    <Card testID="strategy-configs-card" style={{ marginBottom: spacing.md }}>
+      <View style={styles.rowBetween}>
+        <SectionLabel>CONFIGS</SectionLabel>
+        <Pressable testID="config-import-btn" onPress={() => (isOwner ? setImportOpen(true) : Alert.alert("Owner login required"))} hitSlop={8} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Ionicons name="cloud-upload-outline" size={15} color={colors.teal} />
+          <Text style={{ color: colors.teal, fontSize: 11, fontWeight: "700" }}>IMPORT</Text>
+        </Pressable>
+      </View>
+      <Text style={[type.small, { marginBottom: spacing.sm }]}>Activate a validated config to drive the live engine. Import a strategy as JSON.</Text>
+      {rows === null ? <ActivityIndicator color={colors.teal} /> : rows.length === 0 ? (
+        <Text style={type.small}>No saved configs yet.</Text>
+      ) : rows.map((c: any) => {
+        const isActive = c.id === activeId;
+        const validated = c.validation_status === "passed";
+        return (
+          <View key={c.id} testID={`config-row-${c.id.slice(0, 8)}`} style={[styles.cfgRow, isActive && { borderColor: colors.teal }]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={[type.body, { fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
+                {isActive && <View testID={`config-live-${c.id.slice(0, 8)}`} style={styles.liveBadge}><Text style={styles.liveTxt}>LIVE</Text></View>}
+              </View>
+              <Text style={type.small}>{c.origin} · {Object.keys(c.params || {}).length} overrides · {validated ? "validated" : "unvalidated"}</Text>
+            </View>
+            {!isActive && (
+              <Pressable testID={`config-activate-${c.id.slice(0, 8)}`} onPress={() => activate(c)} disabled={!isOwner || !validated || !!busy}
+                style={[styles.activateBtn, (!isOwner || !validated) && { opacity: 0.35 }]}>
+                {busy === c.id ? <ActivityIndicator color={colors.teal} size="small" /> : (<><Ionicons name="flash" size={13} color={colors.teal} /><Text style={styles.activateTxt}>ACTIVATE</Text></>)}
+              </Pressable>
+            )}
+          </View>
+        );
+      })}
+
+      <Modal visible={importOpen} transparent animationType="slide" onRequestClose={() => setImportOpen(false)}>
+        <View style={styles.modalWrap}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <Text style={type.h2}>Import Strategy</Text>
+              <Pressable testID="config-import-close" onPress={() => setImportOpen(false)} hitSlop={10}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
+            </View>
+            <Text style={[type.small, { marginVertical: spacing.sm }]}>Paste an exported config JSON (schema-validated, no code execution).</Text>
+            <TextInput testID="config-import-input" value={text} onChangeText={setText} multiline placeholder={'{"strategy_key":"hunter","name":"My Import","params":{"rsi_reset_max":40}}'}
+              placeholderTextColor={colors.textFaint} style={styles.importInput} />
+            <Pressable testID="config-import-submit" onPress={doImport} disabled={busy === "import"} style={[styles.stateBtn, styles.stateBtnActive, { marginTop: spacing.sm }]}>
+              {busy === "import" ? <ActivityIndicator color={colors.bg} /> : <Text style={[styles.stateTxt, { color: colors.bg }]}>IMPORT</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </Card>
+  );
+}
+
+
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
   back: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm },
@@ -149,4 +245,10 @@ const styles = StyleSheet.create({
   stateBtn: { flex: 1, alignItems: "center", paddingVertical: spacing.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.cardBorder },
   stateBtnActive: { backgroundColor: colors.teal, borderColor: colors.teal },
   stateTxt: { color: colors.textMuted, fontWeight: "700", letterSpacing: 1, fontSize: 12 },
+  cfgRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm, marginTop: spacing.sm },
+  liveBadge: { borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
+  liveTxt: { color: colors.teal, fontSize: 8, fontWeight: "800", letterSpacing: 0.5 },
+  activateBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  activateTxt: { color: colors.teal, fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  importInput: { minHeight: 110, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, padding: spacing.sm, fontSize: 12, textAlignVertical: "top" },
 });

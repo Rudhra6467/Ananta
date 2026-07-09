@@ -4,6 +4,7 @@ from strategy.core import (  # noqa: F401
     REGISTRY,
     StrategyConfig,
     StrategySchema,
+    engine_backed_params,
     get_schema,
     list_schemas,
     now_iso,
