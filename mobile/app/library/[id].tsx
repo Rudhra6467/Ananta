@@ -19,10 +19,16 @@ export default function LibraryDetail() {
   const { isOwner } = useAuth();
   const [s, setS] = useState<any>(null);
   const [grading, setGrading] = useState(false);
+  const [backtesting, setBacktesting] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [engineState, setEngineState] = useState<any>(null);
 
   const load = () => api.libraryGet(id as string).then((d: any) => {
     if (d.internal && d.engine_key) { router.replace(`/strategy/${d.engine_key}`); return; }
     setS(d);
+    if (d.wireable && d.engine_key) {
+      api.strategyMetrics().then((m: any) => setEngineState(m?.metrics?.[d.engine_key] || null)).catch(() => {});
+    }
   }).catch(() => setS(false));
   useEffect(() => { load(); }, [id]);
 
@@ -32,6 +38,25 @@ export default function LibraryDetail() {
     try { const g = await api.libraryAiGrade(id as string); Alert.alert("Re-graded", `${g.ai_grade} · ${g.ai_health_score}/100`); load(); }
     catch (e: any) { Alert.alert("AI grade failed", e?.response?.data?.detail || e?.message); }
     finally { setGrading(false); }
+  };
+
+  const runBacktest = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    setBacktesting(true);
+    try { const r = await api.libraryBacktest(id as string); Alert.alert("Backtest complete", `${r.historical_results.trade_count} trades · ROI ${r.historical_results.roi}% over ${r.days}d`); load(); }
+    catch (e: any) { Alert.alert("Backtest failed", e?.response?.data?.detail || e?.message); }
+    finally { setBacktesting(false); }
+  };
+
+  const toggleDeploy = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    const on = !!engineState?.enabled;
+    setDeploying(true);
+    try {
+      const next = on ? await api.strategyDisable(s.engine_key) : await api.strategyDeploy(s.engine_key);
+      setEngineState((p: any) => ({ ...(p || {}), status: next.status, enabled: next.enabled }));
+    } catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); }
+    finally { setDeploying(false); }
   };
 
   if (s === null) return <View style={styles.fill}><LoadingView /></View>;
@@ -68,11 +93,29 @@ export default function LibraryDetail() {
         )}
         <Text style={[type.body, { marginTop: spacing.sm, lineHeight: 20 }]}>{s.description}</Text>
         {s.wireable && s.engine_key && (
-          <Pressable testID="catalog-manage-engine" onPress={() => router.push(`/strategy/${s.engine_key}`)} style={styles.manageBtn}>
-            <Ionicons name="flash" size={13} color={colors.teal} />
-            <Text style={{ color: colors.teal, fontSize: 11, fontWeight: "700", flex: 1 }}>Live-executable — manage in engine</Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.teal} />
-          </Pressable>
+          <View style={styles.enginePanel}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Ionicons name="flash" size={14} color={colors.teal} />
+              <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600", flex: 1 }}>Live-executable in the paper engine</Text>
+              <Pill label={engineState?.enabled ? (engineState.status || "PAPER") : "OFF"} tone={engineState?.enabled ? "teal" : "muted"} />
+            </View>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: spacing.sm, flexWrap: "wrap" }}>
+              <Pressable testID="catalog-deploy-toggle" onPress={toggleDeploy} disabled={!isOwner || deploying}
+                style={[styles.engineBtn, engineState?.enabled ? { borderColor: colors.cardBorder } : { borderColor: colors.teal, backgroundColor: colors.tealGlow }, (!isOwner || deploying) && { opacity: 0.4 }]}>
+                {deploying ? <ActivityIndicator size="small" color={colors.teal} /> : <Ionicons name="power" size={13} color={engineState?.enabled ? colors.textMuted : colors.teal} />}
+                <Text style={[styles.engineBtnTxt, { color: engineState?.enabled ? colors.textMuted : colors.teal }]}>{engineState?.enabled ? "Disable" : "Deploy (Paper)"}</Text>
+              </Pressable>
+              <Pressable testID="catalog-backtest" onPress={runBacktest} disabled={!isOwner || backtesting}
+                style={[styles.engineBtn, { borderColor: colors.cardBorder }, (!isOwner || backtesting) && { opacity: 0.4 }]}>
+                {backtesting ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="bar-chart" size={13} color={colors.textMuted} />}
+                <Text style={[styles.engineBtnTxt, { color: colors.textMuted }]}>{backtesting ? "Backtesting…" : "Backtest"}</Text>
+              </Pressable>
+              <Pressable testID="catalog-manage-engine" onPress={() => router.push(`/strategy/${s.engine_key}`)}
+                style={[styles.engineBtn, { borderColor: colors.teal }]}>
+                <Text style={[styles.engineBtnTxt, { color: colors.teal }]}>Manage →</Text>
+              </Pressable>
+            </View>
+          </View>
         )}
         <View style={styles.tagWrap}>
           {(s.market_regimes || []).map((m: string) => <Pill key={m} label={m} tone="neutral" />)}
@@ -168,6 +211,9 @@ const styles = StyleSheet.create({
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
   importedBadge: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   manageBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 9 },
+  enginePanel: { marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: radius.sm, padding: spacing.sm + 2 },
+  engineBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8 },
+  engineBtnTxt: { fontSize: 11, fontWeight: "700" },
   indChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.bgElevated },
   perfGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   perfCell: { width: "47%", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, padding: spacing.sm, backgroundColor: colors.bgElevated },

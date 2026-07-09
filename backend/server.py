@@ -2510,6 +2510,49 @@ async def import_approve(draft_id: str):
     return {"approved": True, "library_id": lib_doc["id"], "strategy": lib_doc}
 
 
+@api_router.post("/library/{lib_id}/backtest", dependencies=[Depends(require_owner)])
+async def library_backtest(lib_id: str, symbol: str = "BTC/USD", days: int = 30, exchange: str = "kraken"):
+    """Replay a WIREABLE catalog strategy's declarative spec over real historical OHLCV and
+    persist the resulting metrics onto the library doc (replaces seeded numbers). No LLM cost."""
+    import asyncio  # noqa: PLC0415
+    from strategy.declarative_defs import get_declarative_spec  # noqa: PLC0415
+    from strategy_runtime import resolve_full_params  # noqa: PLC0415
+    from declarative_backtest import run_declarative_backtest  # noqa: PLC0415
+    from backtest import fetch_history  # noqa: PLC0415
+
+    doc = await db.strategy_library.find_one({"id": lib_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    ekey = doc.get("engine_key")
+    spec = get_declarative_spec(ekey) if ekey else None
+    if not (doc.get("wireable") and spec):
+        raise HTTPException(status_code=400, detail="strategy is not wireable / has no declarative spec")
+
+    days = max(7, min(90, days))
+    params = await resolve_full_params(db, ekey)
+    try:
+        candles = await asyncio.to_thread(fetch_history, symbol, days, "1h", exchange)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        logger.exception("library backtest data fetch failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"could not fetch history: {e}") from e
+    if len(candles) < 60:
+        raise HTTPException(status_code=422, detail="insufficient historical data for a backtest")
+
+    stop_pct = float(params.get("stop_loss_pct", 8.0))
+    metrics = await asyncio.to_thread(run_declarative_backtest, spec, candles, params, stop_pct=stop_pct)
+    hist = {k: metrics[k] for k in ("roi", "win_rate", "profit_factor", "sharpe", "sortino",
+                                    "max_drawdown", "avg_trade", "trade_count")}
+    await db.strategy_library.update_one({"id": lib_id}, {"$set": {
+        "historical_results": hist, "backtested": True,
+        "backtest_meta": {"symbol": symbol, "days": days, "exchange": exchange, "bars": metrics["bars"],
+                          "at": _strat_now_iso()},
+        "updated_at": _strat_now_iso()}})
+    return {"id": lib_id, "engine_key": ekey, "symbol": symbol, "days": days,
+            "historical_results": hist, "bars": metrics["bars"]}
+
+
 @api_router.get("/library/{strategy_id}")
 async def library_get(strategy_id: str):
     doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})

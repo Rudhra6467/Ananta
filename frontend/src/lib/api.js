@@ -140,6 +140,8 @@ export const api = {
     // Strategy Library (P1)
     libraryList: (params = {}) => client.get("/library", { params }).then((r) => r.data),
     libraryGet: (id) => client.get(`/library/${id}`).then((r) => r.data),
+    libraryBacktest: (id, symbol = "BTC/USD", days = 30) =>
+        client.post(`/library/${id}/backtest`, null, { params: { symbol, days } }).then((r) => r.data),
     libraryFacets: () => client.get("/library/facets").then((r) => r.data),
     libraryFavorite: (id) => client.post(`/library/${id}/favorite`).then((r) => r.data),
     libraryAiGrade: (id) => client.post(`/library/${id}/ai-grade`).then((r) => r.data),

@@ -586,12 +586,20 @@ function TimelinePanel({ metric }) {
 function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
     const [s, setS] = useState(null);
     const [grading, setGrading] = useState(false);
+    const [backtesting, setBacktesting] = useState(false);
+    const [deploying, setDeploying] = useState(false);
+    const [engineState, setEngineState] = useState(null);
 
     const load = () => api.libraryGet(id).then((d) => {
         if (d.internal && d.engine_key) { onOpenInternal(d.engine_key); return; }
         setS(d);
     }).catch(() => toast.error("Failed to load strategy"));
     useEffect(() => { load(); }, [id]);
+    useEffect(() => {
+        if (s?.wireable && s?.engine_key) {
+            api.strategyMetrics().then((m) => setEngineState(m?.metrics?.[s.engine_key] || null)).catch(() => {});
+        }
+    }, [s?.engine_key, s?.wireable]);
 
     const regrade = async () => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -602,6 +610,29 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
             await load();
         } catch (e) { toast.error("AI grade failed", { description: String(e?.response?.data?.detail || e?.message) }); }
         finally { setGrading(false); }
+    };
+
+    const runBacktest = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        setBacktesting(true);
+        try {
+            const r = await api.libraryBacktest(id);
+            toast.success("Backtest complete", { description: `${r.historical_results.trade_count} trades · ROI ${r.historical_results.roi}% over ${r.days}d` });
+            await load();
+        } catch (e) { toast.error("Backtest failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+        finally { setBacktesting(false); }
+    };
+
+    const toggleDeploy = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        const on = !!engineState?.enabled;
+        setDeploying(true);
+        try {
+            const next = await api.strategySetState(s.engine_key, on ? { status: "DISABLED" } : { enabled: true });
+            setEngineState((prev) => ({ ...(prev || {}), status: next.status, enabled: next.enabled }));
+            toast.success(on ? "Disabled" : "Deployed to paper engine", { description: `${s.name} → ${next.status}` });
+        } catch (e) { toast.error("Toggle failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+        finally { setDeploying(false); }
     };
 
     if (!s) return <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> LOADING</div>;
@@ -633,15 +664,35 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                 </div>
                 <p className="font-mono text-xs text-atlas-textSecondary mt-3 leading-relaxed">{s.description}</p>
                 {s.wireable && s.engine_key && (
-                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5 px-3 py-2.5 flex-wrap">
+                    <div className="mt-3 rounded-lg border border-atlas-cyan/30 bg-atlas-cyan/5 px-3 py-2.5 space-y-2.5">
                         <div className="flex items-center gap-2">
                             <Power className="w-4 h-4 text-atlas-cyan" />
                             <span className="font-mono text-[11px] text-atlas-text">Live-executable — runs in the paper engine via the declarative executor.</span>
+                            {engineState && (
+                                <span className={`ml-auto font-mono text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${engineState.enabled ? "border-atlas-positive/40 bg-atlas-positive/10 text-atlas-positive" : "border-atlas-border text-atlas-textTertiary"}`}>
+                                    {engineState.enabled ? (engineState.status || "PAPER") : "OFF"}
+                                </span>
+                            )}
                         </div>
-                        <button data-testid="catalog-manage-engine" onClick={() => onOpenInternal(s.engine_key)}
-                            className="font-mono text-[10px] font-bold text-atlas-cyan hover:text-cyan-300 border border-atlas-cyan/40 rounded px-3 py-1.5 whitespace-nowrap">
-                            Manage in Engine →
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button data-testid="catalog-deploy-toggle" onClick={toggleDeploy} disabled={!isOwner || deploying}
+                                className={`flex items-center gap-1.5 font-mono text-[10px] font-bold rounded px-3 py-1.5 border disabled:opacity-40 ${engineState?.enabled ? "border-atlas-border text-atlas-textSecondary hover:text-atlas-text" : "border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20"}`}>
+                                {deploying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
+                                {engineState?.enabled ? "Disable" : "Deploy (Paper)"}
+                            </button>
+                            <button data-testid="catalog-backtest" onClick={runBacktest} disabled={!isOwner || backtesting}
+                                className="flex items-center gap-1.5 font-mono text-[10px] font-bold rounded px-3 py-1.5 border border-atlas-border text-atlas-textSecondary hover:text-atlas-text disabled:opacity-40">
+                                {backtesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <BarChart3 className="w-3 h-3" />}
+                                {backtesting ? "Backtesting…" : "Run Backtest"}
+                            </button>
+                            <button data-testid="catalog-manage-engine" onClick={() => onOpenInternal(s.engine_key)}
+                                className="ml-auto font-mono text-[10px] font-bold text-atlas-cyan hover:text-cyan-300 border border-atlas-cyan/40 rounded px-3 py-1.5 whitespace-nowrap">
+                                Manage in Engine →
+                            </button>
+                        </div>
+                        {s.backtested && s.backtest_meta && (
+                            <div className="font-mono text-[9px] text-atlas-textTertiary">Backtested on {s.backtest_meta.symbol} · {s.backtest_meta.days}d · {s.backtest_meta.bars} bars</div>
+                        )}
                     </div>
                 )}
                 <div className="flex flex-wrap gap-1.5 mt-3">

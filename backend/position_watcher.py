@@ -30,7 +30,10 @@ from live_execution import LiveExecutor, get_default_executor, get_dry_run_execu
 from market_data import fetch_ohlcv_1h, fetch_snapshot
 from models import AIReasoning, MarketSnapshot, Position, RiskSettings, TradeLog, compute_return_and_hold
 from asset_profiles import eff_setting
-from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, evaluate_exit_engine, profile_for
+from exit_engine import ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN, ExitDecision, evaluate_exit_engine, profile_for
+from declarative_engine import evaluate as _decl_eval
+from strategy.declarative_defs import get_declarative_spec as _decl_spec, is_declarative as _is_declarative
+from strategy_runtime import resolve_full_params
 from trading_engine import (
     _ensure_day_start,
     _execute_partial_sell,
@@ -330,6 +333,19 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
 
         decision = evaluate_exit_engine(pos, snap.price, bars_1h, settings, emergency=emergency,
                                          profile_override=profile_for(pos.strategy, settings))
+        # Declarative strategies (Phase B): honor the strategy's OWN exit rule as a secondary
+        # trigger — universal safety exits (stops/kill/floors) keep top priority; only when the
+        # engine says "hold" do we consult the strategy's declarative exit spec.
+        if decision.action == ACT_NONE and bars_1h and _is_declarative(pos.strategy):
+            with contextlib.suppress(Exception):
+                spec = _decl_spec(pos.strategy)
+                if spec and (spec.get("exit")):
+                    dparams = await resolve_full_params(db, pos.strategy)
+                    sig = _decl_eval(spec, bars_1h, dparams)
+                    if sig.exit:
+                        decision = ExitDecision(action=ACT_EXIT_FULL, module="DECL",
+                                                exit_reason="STRAT_EXIT", reason=f"{pos.strategy} exit rule",
+                                                confidence=1.0, fraction=1.0)
         if decision.action == ACT_NONE:
             continue
 

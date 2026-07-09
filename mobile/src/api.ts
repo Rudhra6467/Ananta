@@ -81,6 +81,8 @@ export const api = {
   strategyMetrics: () => get<any>("/strategy/metrics"),
   strategyRegistry: () => get<any>("/strategy/registry"),
   strategySetState: (key: string, status: string) => put<any>(`/strategy/${key}/state`, { status }),
+  strategyDeploy: (key: string) => put<any>(`/strategy/${key}/state`, { enabled: true }),
+  strategyDisable: (key: string) => put<any>(`/strategy/${key}/state`, { status: "DISABLED" }),
   strategyConfigs: (strategyKey?: string) =>
     get<any>(`/strategy/configs${strategyKey ? `?strategy_key=${strategyKey}` : ""}`),
   strategyConfigActivate: (id: string) => post<any>(`/strategy/configs/${id}/activate`, {}),
@@ -94,6 +96,8 @@ export const api = {
     return get<any>(`/library${qs ? `?${qs}` : ""}`);
   },
   libraryGet: (id: string) => get<any>(`/library/${id}`),
+  libraryBacktest: (id: string, symbol = "BTC/USD", days = 30) =>
+    post<any>(`/library/${id}/backtest?symbol=${encodeURIComponent(symbol)}&days=${days}`, {}),
   libraryFacets: () => get<any>("/library/facets"),
   libraryFavorite: (id: string) => post<any>(`/library/${id}/favorite`, {}),
   libraryAiGrade: (id: string) => post<any>(`/library/${id}/ai-grade`, {}),

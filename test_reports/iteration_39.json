@@ -1,0 +1,59 @@
+{
+  "summary": "iter39 Phase B — declarative BACKTEST endpoint + Deploy/Disable UI on web+mobile — VERIFIED end-to-end. Backend: NEW pytest suite tests/test_iter39_phase_b.py = 10/10 tests (9 passed + 1 non-wireable path skipped-then-fixed → passes; final 10/10 green). POST /api/library/supertrend/backtest?symbol=BTC/USD&days=14 returns 200 in ~4s with historical_results {roi, win_rate, profit_factor, sharpe, sortino, max_drawdown, avg_trade, trade_count} + bars>60; GET /api/library/supertrend then shows backtested=true + backtest_meta{symbol,days,exchange,bars,at}. Non-wireable IDs (hunter/continuation/squeeze/pairs-trading) return 400 as required. Owner gate enforced (401/403 without token). PUT /api/strategy/bollinger-mr/state {enabled:true} correctly promotes DISABLED→PAPER+enabled=true (invariant hardening from iter38 verified); {status:'DISABLED'} clamps enabled→false. Regression: /api/strategy/registry returns all 11, /api/strategy/metrics returns states for all keys, ema-cross per-strategy config create→validate→activate (using_config=true)→deactivate (using_config=false)→delete works, POST /api/cycle/run/BTC returns 200. WEB (viewport 1920x4000): Strategy Center → supertrend card → CatalogDetail renders engine panel with all three testIDs (catalog-deploy-toggle, catalog-backtest, catalog-manage-engine) + status pill. Clicked Run Backtest → 'Backtested on BTC/USD · 30d · 720 bars' rendered, metrics updated (ROI -1.01%, 25% win, 0.38 profit-factor, 8 trades, -1.11 sharpe). Deploy toggle: PAPER pill → OFF pill → PAPER pill, button text flipped 'Disable' ↔ 'Deploy (Paper)'. Toast confirmations shown. MOBILE (viewport 390x844, Expo web preview at expo.preview host): /library/supertrend → engine panel with all three testIDs; Run Backtest fires the API and updates displayed metrics (ROI -1.01%, 8 trades matching web); Deploy toggle button flipped 'Disable' → 'Deploy (Paper)' → 'Disable' (returned to baseline PAPER); catalog-manage-engine routed correctly to /strategy/supertrend engine detail (PAPER pill, Health, Lifecycle, Configs, Edit Strategy LIVE/PAPER/OFF). Baseline restored at teardown: ema-cross/supertrend/rsi-momentum = PAPER+enabled; macd-trend/bollinger-mr/donchian-breakout/atr-breakout/keltner-breakout = DISABLED+enabled=false. No LLM/AI endpoints called during testing per constraint. Cross-platform PARITY confirmed for backtest + deploy + manage-in-engine flows.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Strategy Center → Leaderboard sort dropdown", "issues": ["Pre-existing (iter38-noted) React hydration warning '<span> cannot be a child of <option>'. Non-blocking; caused by Emergent Visual Editing wrapper injecting <span data-ve-dynamic> inside <option>. No user impact but pollutes console."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Global (all screens)", "issues": ["Console warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — React Native Web now prefers boxShadow. Cosmetic only, but should be migrated for RN 0.76+ compatibility.", "Console warns: '[expo-notifications] Listening to push token changes is not yet fully supported on web.' — expected on web preview, no action needed for mobile-native builds."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter39_phase_b.py",
+    "/app/test_reports/pytest/iter39_phase_b.xml",
+    "/tmp/web_strategy_center.png",
+    "/tmp/web_catalog_detail.png",
+    "/tmp/web_catalog_after.png",
+    "/tmp/mobile_library_supertrend.png",
+    "/tmp/mobile_after_backtest.png",
+    "/tmp/mobile_engine_detail.png"
+  ],
+  "action_items": [
+    "(LOW) Migrate deprecated React Native 'shadow*' style props to 'boxShadow' across mobile components — currently emits deprecation warnings on every render on web preview. Grep /app/mobile/src for shadowColor/shadowOffset/shadowOpacity/shadowRadius and consolidate under boxShadow.",
+    "(LOW, carried-over from iter38) Fix <span> inside <option> hydration warning in StrategyCenter.jsx leaderboard sort dropdown. Likely a Visual-Editing wrapper — could suppress by using plain string children (no span) in option elements."
+  ],
+  "critical_code_review_comments": [
+    "declarative_backtest.py:19-62 — long-only spot backtest with stop-first exit priority (low<=stop_price checked BEFORE signal exit): correct pessimistic ordering for worst-case metrics. Fee applied on entry AND exit (0.1% each side), slippage applied on both sides too — matches production paper engine semantics.",
+    "server.py:2513-2553 library_backtest endpoint: proper 400 gate for non-wireable, days clamped to [7,90], 60-bar minimum, 502 for CCXT failures. Data fetched via asyncio.to_thread (non-blocking). Persistence of historical_results + backtest_meta atomic via single $set update.",
+    "server.py:1837-1870 strategy_set_state: invariant enforced end-to-end — DISABLED/ERROR ⇒ enabled=false clamp; bare {enabled:true} on off-strategy ⇒ auto-promoted to PAPER. Response returns full merged doc (iter38 recommendation adopted).",
+    "StrategyCenter.jsx CatalogDetail (frontend) + library/[id].tsx (mobile) mirror each other exactly — 3 buttons, same api.libraryBacktest / strategySetState calls, same pill semantics. No parity drift."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter39_phase_b.py (new — 10 tests covering Phase B: 3 backtest, 2 deploy-toggle, 4 regression, 1 owner-gate)"
+  ],
+  "success_rate": {
+    "backend": "100% — 10/10 iter39_phase_b (3 backtest + 2 deploy invariant + 4 regression + 1 owner-gate). Includes real ccxt-backed backtest producing real metrics.",
+    "frontend": "web 100% — CatalogDetail engine panel, Run Backtest updates metrics + backtest_meta text, Deploy toggle flips PAPER↔OFF, Manage in Engine routes to StrategyDetail. mobile 100% — same testIDs present, Run Backtest updates metrics, Deploy toggle flips button text ('Disable' ↔ 'Deploy (Paper)'), Manage → /strategy/supertrend routing verified."
+  },
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — unchanged)",
+  "seed_data_creation": "One TEST_iter39_phase_b ema-cross per-strategy config created + validated + activated + deactivated + DELETED (finally-block cleanup). Backtest wrote real historical_results + backtest_meta{symbol:'BTC/USD', days:14 then 30, bars:720, exchange:'kraken', at:iso} onto library/supertrend doc — this is the intended persistent state per the feature. bollinger-mr was toggled PAPER↔DISABLED during invariant test; restored to DISABLED+enabled=false at teardown. Final baseline verified via /api/strategy/metrics: ema-cross/supertrend/rsi-momentum=PAPER+enabled=true; macd-trend/bollinger-mr/donchian-breakout/atr-breakout/keltner-breakout=DISABLED+enabled=false. Exactly matches the required '3 enabled / 5 disabled' baseline.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter39 Phase B is contract-complete. Regression command: `pytest /app/backend/tests/test_iter39_phase_b.py -v` (~16s, 1 cycle/run + 1 backtest hit ccxt). Note: library shape uses {strategies:[...], count} (NOT items[]). Non-wireable library rows include hunter/continuation/squeeze (internal engines) + a few external non-wireable (pairs-trading, time-series-momentum, vwap-mr, turtle). Deactivate endpoint is `/api/strategy/{key}/deactivate` (per-strategy, NOT per-config-id). Backtest days is clamped to [7,90] server-side. Mobile Expo web preview host = https://hunter-squeeze-labs.expo.preview.emergentagent.com (auth API still at .preview.emergentagent.com). Alerts on mobile use native RN Alert — dismiss with page.click('text=OK'). Baseline is 3-enabled/5-disabled; do NOT leave any declarative strategy toggled inconsistently.",
+  "rca of the issue": "N/A — no bugs. All acceptance criteria in the review_request met on both surfaces. Two low-priority carry-overs noted for main agent's future polish (shadow* deprecation on RN, <span> hydration warning in web leaderboard)."
+}
