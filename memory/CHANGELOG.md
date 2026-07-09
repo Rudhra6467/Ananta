@@ -638,3 +638,14 @@ Ported the last web polish items to the Expo mobile app; verified by mobile test
 - Guard test `tests/test_config_architecture.py` (11 pass): clamp registry ↔ real fields, clamp bounds, and engine modules never access the `strategy_configs` collection.
 - Verified: PUT clamps out-of-range values (min_confidence 5→1.0, daily_loss 999→50); settings restored to defaults; lab proposals suite green. Backend-only, zero web/mobile impact.
 - NOTE: 4 pre-existing `*_requires_owner` failures in `test_iter29_demo_coach.py` are a test-harness quirk (shared authenticated session) — auth gating verified correct via curl (403). Not a regression.
+
+## 2026-07-09 — Phase-2: Strategy configs drive the engine + JSON import/export + leaderboard (iter 33, web+mobile+backend)
+Turned the Strategy Architect into a real end-to-end loop (author → validate → **activate → drives live trading**), kept 100% compatible with the single-source-of-truth invariant.
+- **Activate** `POST /api/strategy/configs/{id}/activate` (owner): resolves config (defaults←parent←self) → keeps only `engine_backed` params (`strategy.core.engine_backed_params`) → clamps via `settings_spec` → writes into the RiskSettings singleton; records `active_config_id`/`activated_at` on `strategy_meta`; returns `{applied, changes[]}`. Gated on `validation_status=='passed'` (400 otherwise). Engine STILL reads only RiskSettings — no engine changes.
+- **Import (safe)** `POST /api/strategy/configs/import` (owner): strategy imported as STRUCTURED JSON, schema-validated (422 on unknown/out-of-range), `origin='imported'`. NO code execution (RCE-free by design).
+- **Export** `GET /api/strategy/configs/{id}/export`: portable `{ananta_config:1, strategy_key, params, ...}` blob.
+- **Leaderboard** `GET /api/analytics/leaderboard`: ranked (health, roi) aggregate; `/api/strategy/metrics` now surfaces `active_config_id`.
+- **Web** (`SavedConfigsPanel.jsx`): Import (paste JSON) + per-config ACTIVATE (disabled until validated) + LIVE badge + Export-to-clipboard.
+- **Mobile** (`app/strategy/[id].tsx`): CONFIGS card with Import modal + ACTIVATE (dimmed+guarded until validated) + LIVE badge — parity with web.
+- Guard test `tests/test_config_architecture.py` extended (engine_backed_params filters forward-looking knobs); new `tests/test_iter33_configs_engine.py`. Testing agent: web+mobile+backend green (2 pytest `*_requires_owner` are the known shared-session artifact; auth verified 403 via curl).
+- DEFERRED (consciously, to protect competition stability): the large `server.py` / `Dashboard.jsx` file-splitting refactor — high churn/regression risk mid-submission, low user-visible value. Leaderboard endpoint from item C delivered.
