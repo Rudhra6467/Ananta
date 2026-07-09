@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable, Switch, ActivityIndicator, Linking, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../src/api";
 import { useAuth } from "../../src/auth";
@@ -16,7 +17,13 @@ const PERIODS = [{ key: "1m", label: "1M" }, { key: "3m", label: "3M" }, { key: 
 export default function Research() {
   const insets = useSafeAreaInsets();
   const { isOwner } = useAuth();
+  const params = useLocalSearchParams<{ sub?: string }>();
   const [sub, setSub] = useState<"validate" | "ai" | "closed">("validate");
+
+  useEffect(() => {
+    const s = params.sub;
+    if (s === "validate" || s === "ai" || s === "closed") setSub(s);
+  }, [params.sub]);
 
   return (
     <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>

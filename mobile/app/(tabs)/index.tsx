@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -82,6 +82,9 @@ export default function Cockpit() {
         />
       </View>
 
+      {/* AI Coach headline banner (credit-free) */}
+      <CoachBanner />
+
       {/* Portfolio hero */}
       <View style={styles.hero}>
         <Text style={type.label}>Portfolio Value</Text>
@@ -158,7 +161,7 @@ export default function Cockpit() {
         <View style={styles.sectionHead}>
           <SectionLabel>Open Positions</SectionLabel>
           {positions.length > 0 && (
-            <Pressable testID="see-all-positions" onPress={() => router.push("/portfolio")}>
+            <Pressable testID="see-all-positions" onPress={() => router.push("/trade")}>
               <Text style={styles.link}>See all →</Text>
             </Pressable>
           )}
@@ -169,7 +172,7 @@ export default function Cockpit() {
           </Card>
         ) : (
           positions.slice(0, 3).map((p) => (
-            <PositionCard key={p.symbol} p={p} onPress={() => router.push("/portfolio")} />
+            <PositionCard key={p.symbol} p={p} onPress={() => router.push("/trade")} />
           ))
         )}
       </View>
@@ -177,8 +180,58 @@ export default function Cockpit() {
   );
 }
 
+/* ---------------- AI Coach headline banner (credit-free) ---------------- */
+function CoachBanner() {
+  const router = useRouter();
+  const [h, setH] = useState<any>(null);
+  useEffect(() => { api.coachHeadline().then(setH).catch(() => {}); }, []);
+  if (!h) return null;
+  return (
+    <View style={styles.sectionPad}>
+      <Pressable
+        testID="coach-banner"
+        onPress={() => router.push("/research?sub=ai")}
+        style={({ pressed }) => [styles.coachCard, pressed && { borderColor: colors.teal }]}
+      >
+        <View style={styles.coachIcon}>
+          <Ionicons name="sparkles" size={16} color={colors.teal} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.coachTag}>AI TRADING COACH</Text>
+          <Text style={styles.coachHeadline} numberOfLines={2}>
+            {h.headline}
+            {h.impact ? <Text style={{ color: colors.teal }}>{`  ·  ${h.impact}`}</Text> : null}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
+  coachCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.tealGlow,
+    borderWidth: 1,
+    borderColor: "rgba(20,224,201,0.3)",
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+  },
+  coachIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20,224,201,0.15)",
+  },
+  coachTag: { color: colors.teal, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  coachHeadline: { color: colors.text, fontSize: 13, fontWeight: "600", marginTop: 2 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

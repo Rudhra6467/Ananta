@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
+import React, { useState } from "react";
+import { View, Text, ScrollView, StyleSheet, Pressable, Modal, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,7 +8,10 @@ import { useAuth } from "../../src/auth";
 import { useFetch } from "../../src/useFetch";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
+import { HealthRing } from "../../src/components/HealthRing";
+import { MetricExplainer } from "../../src/components/MetricExplainer";
 import { LoadingView, ErrorView } from "../../src/components/StateView";
+import { STRATEGY_LESSON, lessonByKey } from "../../src/academy";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { pct } from "../../src/format";
 
@@ -22,12 +25,15 @@ export default function StrategyDetail() {
   const router = useRouter();
   const { isOwner } = useAuth();
   const { data, loading, error, refresh } = useFetch(api.strategyMetrics, [], 0);
+  const [lessonOpen, setLessonOpen] = useState(false);
 
   if (loading && !data) return <View style={styles.fill}><LoadingView /></View>;
   if (error && !data) return <View style={styles.fill}><ErrorView message={error} onRetry={refresh} /></View>;
 
   const s = (data?.metrics || {})[id as string];
   if (!s) return <View style={styles.fill}><ErrorView message="Strategy not found" onRetry={refresh} /></View>;
+
+  const lesson = lessonByKey(STRATEGY_LESSON[id as string] || "hunter");
 
   const setState = (status: string) => {
     if (!isOwner) return Alert.alert("Owner login required");
@@ -48,18 +54,37 @@ export default function StrategyDetail() {
 
       {/* Health */}
       <Card testID="strategy-health-card" style={{ marginBottom: spacing.md }}>
-        <SectionLabel>STRATEGY HEALTH</SectionLabel>
         <View style={styles.rowBetween}>
-          <Text style={[type.hero, { fontSize: 52, color: healthColor(s.health) }]} testID="health-score-value">{s.health}</Text>
-          <View style={{ flex: 1, marginLeft: spacing.lg }}>
-            {(s.health_breakdown || []).map((c: any) => (
-              <View key={c.key} style={{ marginBottom: 6 }} testID={`health-comp-${c.key}`}>
-                <View style={styles.rowBetween}><Text style={type.small}>{c.label}</Text><Text style={[type.small, { color: healthColor(c.score), fontWeight: "700" }]}>{c.score}</Text></View>
-                <View style={styles.track}><View style={[styles.trackFill, { width: `${Math.max(2, c.score)}%`, backgroundColor: healthColor(c.score) }]} /></View>
-              </View>
-            ))}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <SectionLabel>STRATEGY HEALTH</SectionLabel>
+            <MetricExplainer metric="health" value={s.health} />
           </View>
         </View>
+        <View style={[styles.rowBetween, { marginTop: spacing.sm }]}>
+          <HealthRing score={s.health} />
+          <View style={{ flex: 1, marginLeft: spacing.lg }}>
+            {(s.health_breakdown || []).map((c: any) => {
+              const explain = c.key === "win_rate" ? "win_rate" : c.key === "risk" ? "roi" : null;
+              return (
+                <View key={c.key} style={{ marginBottom: 6 }} testID={`health-comp-${c.key}`}>
+                  <View style={styles.rowBetween}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <Text style={type.small}>{c.label}</Text>
+                      {explain && <MetricExplainer metric={explain} value={c.score} size={13} />}
+                    </View>
+                    <Text style={[type.small, { color: healthColor(c.score), fontWeight: "700" }]}>{c.score}</Text>
+                  </View>
+                  <View style={styles.track}><View style={[styles.trackFill, { width: `${Math.max(2, c.score)}%`, backgroundColor: healthColor(c.score) }]} /></View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+        <Pressable testID="strategy-academy-link" onPress={() => setLessonOpen(true)} style={styles.learnRow}>
+          <Ionicons name="book-outline" size={15} color={colors.teal} />
+          <Text style={styles.learnTxt}>Learn how {s.name} works</Text>
+          <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+        </Pressable>
       </Card>
 
       {/* Timeline */}
@@ -89,6 +114,21 @@ export default function StrategyDetail() {
           ))}
         </View>
       </Card>
+
+      {/* Academy lesson deep-link modal */}
+      <Modal visible={lessonOpen} transparent animationType="slide" onRequestClose={() => setLessonOpen(false)}>
+        <View style={styles.modalWrap}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <Text style={type.h2}>{lesson?.title}</Text>
+              <Pressable testID="strategy-academy-close" onPress={() => setLessonOpen(false)} hitSlop={10}>
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={[type.body, { marginTop: spacing.md, lineHeight: 22 }]}>{lesson?.body}</Text>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -100,6 +140,10 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   track: { height: 6, borderRadius: 3, backgroundColor: colors.bgElevated, overflow: "hidden", marginTop: 2 },
   trackFill: { height: 6, borderRadius: 3 },
+  learnRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+  learnTxt: { flex: 1, color: colors.teal, fontSize: 13, fontWeight: "700" },
+  modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: 40, borderWidth: 1, borderColor: colors.cardBorder },
   tlRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 6 },
   stateRow: { flexDirection: "row", gap: spacing.sm },
   stateBtn: { flex: 1, alignItems: "center", paddingVertical: spacing.sm + 2, borderRadius: radius.md, borderWidth: 1, borderColor: colors.cardBorder },

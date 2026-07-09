@@ -10,19 +10,7 @@ import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
 import { colors, spacing, type, radius } from "../../src/theme";
-
-const LESSONS = [
-  { t: "Getting Started", b: "Ananta is an operating system for algorithmic trading. Flow: Cockpit → Strategy → Research → Trade → Workspace. Pick a strategy, validate it, paper-trade, review with AI, then go live." },
-  { t: "Trading Basics", b: "A strategy decides WHEN to enter and exit. Ananta trades spot crypto only — no leverage. Each closed trade has a P&L, return %, and an exit reason." },
-  { t: "Risk Management", b: "Capital preservation first: a daily loss cap, max open positions, a min-confidence floor and a hard drawdown ruin line. The Emergency Stop blocks all new entries instantly." },
-  { t: "How Hunter Works", b: "Hunter hunts high-conviction setups: price tests support after a momentum reset, with a volatility-contraction base and confirming higher-timeframe trend. Exits via ATR trailing stop + profit floors." },
-  { t: "How Squeeze Works", b: "Volatility Squeeze finds tight, coiled ranges; when volume expands and price breaks out, it enters in the breakout direction. Best in compression→expansion regimes." },
-  { t: "How AI Thinks", b: "Ananta's AI (Architect, Analyst, Coach) is grounded — it reasons only over the real data snapshot, citing actual numbers. AI never trades on its own; it suggests, you decide." },
-  { t: "Walk-Forward", b: "Optimize on one slice of history, test on the next unseen slice, roll forward. A 'robust' verdict means the edge held out-of-sample — strong evidence it isn't curve-fit." },
-  { t: "Monte Carlo", b: "Reshuffles your trade order thousands of times to estimate the RANGE of outcomes including worst-case drawdown and risk-of-ruin. Good strategies stay survivable in unlucky orderings." },
-  { t: "Paper vs Live", b: "Paper trades run the full engine on live prices with fake money — zero risk, real behavior. Live places real orders. Always graduate through paper first." },
-  { t: "FAQ & Best Practices", b: "Start small, validate rigorously, and let the AI Coach guide small incremental tweaks. Chase a validated edge, not more indicators. Review weekly; only go live when paper + validation agree." },
-];
+import { LESSONS } from "../../src/academy";
 
 export default function Workspace() {
   const insets = useSafeAreaInsets();
@@ -94,9 +82,9 @@ export default function Workspace() {
       <Card style={{ marginBottom: spacing.md }} testID="ws-academy">
         <SectionLabel>ACADEMY</SectionLabel>
         {LESSONS.map((l, i) => (
-          <Pressable key={l.t} testID={`academy-lesson-${i}`} onPress={() => setLesson(l)} style={styles.lessonRow}>
+          <Pressable key={l.key} testID={`academy-lesson-${i}`} onPress={() => setLesson(l)} style={styles.lessonRow}>
             <Ionicons name="book" size={16} color={colors.teal} />
-            <Text style={[type.body, { flex: 1 }]}>{l.t}</Text>
+            <Text style={[type.body, { flex: 1 }]}>{l.title}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
         ))}
@@ -127,10 +115,10 @@ export default function Workspace() {
         <View style={styles.modalWrap}>
           <View style={styles.modalCard}>
             <View style={styles.rowBetween}>
-              <Text style={type.h2}>{lesson?.t}</Text>
+              <Text style={type.h2}>{lesson?.title}</Text>
               <Pressable testID="academy-close" onPress={() => setLesson(null)}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
             </View>
-            <Text style={[type.body, { marginTop: spacing.md, lineHeight: 22 }]}>{lesson?.b}</Text>
+            <Text style={[type.body, { marginTop: spacing.md, lineHeight: 22 }]}>{lesson?.body}</Text>
           </View>
         </View>
       </Modal>
