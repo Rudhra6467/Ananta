@@ -96,7 +96,7 @@ export default function Watchlist({ snapshots = [], enabledSymbols = [], onSymbo
             {/* LIST */}
             <div className="panel lg:col-span-4 flex flex-col" data-testid="watchlist-panel">
                 <div className="px-4 pt-3 pb-2 border-b border-atlas-border flex items-center justify-between">
-                    <div className="label-tag">WATCHLIST · {enabledSymbols.length}</div>
+                    <div className="label-tag">ACTIVE WATCHLIST · {enabledSymbols.length}</div>
                     <button
                         data-testid="watchlist-add-btn"
                         onClick={() => setShowModal(true)}

@@ -86,6 +86,20 @@ export const api = {
   strategyConfigActivate: (id: string) => post<any>(`/strategy/configs/${id}/activate`, {}),
   strategyConfigImport: (payload: any) => post<any>("/strategy/configs/import", payload),
   strategyConfigExport: (id: string) => get<any>(`/strategy/configs/${id}/export`),
+  // Strategy Library (P1)
+  libraryList: (params: Record<string, any> = {}) => {
+    const qs = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&");
+    return get<any>(`/library${qs ? `?${qs}` : ""}`);
+  },
+  libraryGet: (id: string) => get<any>(`/library/${id}`),
+  libraryFacets: () => get<any>("/library/facets"),
+  libraryFavorite: (id: string) => post<any>(`/library/${id}/favorite`, {}),
+  libraryAiGrade: (id: string) => post<any>(`/library/${id}/ai-grade`, {}),
+  analyticsLeaderboard: (sort = "health", source = "all") => get<any>(`/analytics/leaderboard?sort=${sort}&source=${source}`),
+  watchlistSearch: (q = "") => get<any>(`/watchlist/search?q=${encodeURIComponent(q)}`),
+  watchlistAdd: (symbol: string) => post<any>("/watchlist/add", { symbol }),
+  watchlistRemove: (symbol: string) => post<any>("/watchlist/remove", { symbol }),
 
   // --- Research Lab ---
   labCoverage: () => get<any>("/lab/data/coverage"),

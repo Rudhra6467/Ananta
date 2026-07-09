@@ -134,7 +134,17 @@ export const api = {
     strategyConfigActivate: (id) => client.post(`/strategy/configs/${id}/activate`).then((r) => r.data),
     strategyConfigImport: (payload) => client.post("/strategy/configs/import", payload).then((r) => r.data),
     strategyConfigExport: (id) => client.get(`/strategy/configs/${id}/export`).then((r) => r.data),
-    analyticsLeaderboard: () => client.get("/analytics/leaderboard").then((r) => r.data),
+    analyticsLeaderboard: (sort = "health", source = "all") => client.get(`/analytics/leaderboard?sort=${sort}&source=${source}`).then((r) => r.data),
+    // Strategy Library (P1)
+    libraryList: (params = {}) => client.get("/library", { params }).then((r) => r.data),
+    libraryGet: (id) => client.get(`/library/${id}`).then((r) => r.data),
+    libraryFacets: () => client.get("/library/facets").then((r) => r.data),
+    libraryFavorite: (id) => client.post(`/library/${id}/favorite`).then((r) => r.data),
+    libraryAiGrade: (id) => client.post(`/library/${id}/ai-grade`).then((r) => r.data),
+    // Active Watchlist
+    watchlistSearch: (q = "") => client.get(`/watchlist/search?q=${encodeURIComponent(q)}`).then((r) => r.data),
+    watchlistAdd: (symbol) => client.post("/watchlist/add", { symbol }).then((r) => r.data),
+    watchlistRemove: (symbol) => client.post("/watchlist/remove", { symbol }).then((r) => r.data),
     watchlistValidate: () => cget("/watchlist/validate", 10000),
     watchlistSync: () =>
         client.post("/watchlist/sync").then((r) => {

@@ -1110,6 +1110,71 @@ async def watchlist_sync():
     return {"ok": True, "enabled_symbols": saved.enabled_symbols, "count": len(saved.enabled_symbols)}
 
 
+# Curated searchable universe for the Cockpit "Active Watchlist" add flow.
+_WATCHLIST_UNIVERSE = [
+    ("BTC/USD", "Bitcoin"), ("ETH/USD", "Ethereum"), ("SOL/USD", "Solana"), ("XRP/USD", "Ripple"),
+    ("ADA/USD", "Cardano"), ("AVAX/USD", "Avalanche"), ("LINK/USD", "Chainlink"), ("AAVE/USD", "Aave"),
+    ("ARB/USD", "Arbitrum"), ("RENDER/USD", "Render"), ("PAXG/USD", "PAX Gold"), ("DOGE/USD", "Dogecoin"),
+    ("MATIC/USD", "Polygon"), ("DOT/USD", "Polkadot"), ("LTC/USD", "Litecoin"), ("ATOM/USD", "Cosmos"),
+    ("UNI/USD", "Uniswap"), ("NEAR/USD", "NEAR Protocol"), ("OP/USD", "Optimism"), ("INJ/USD", "Injective"),
+    ("APT/USD", "Aptos"), ("SUI/USD", "Sui"), ("FIL/USD", "Filecoin"), ("ETC/USD", "Ethereum Classic"),
+    ("BCH/USD", "Bitcoin Cash"), ("ALGO/USD", "Algorand"), ("XLM/USD", "Stellar"), ("TIA/USD", "Celestia"),
+]
+
+
+def _norm_symbol(raw: str) -> str:
+    raw = (raw or "").strip().upper()
+    return raw if "/" in raw else f"{raw}/USD"
+
+
+@api_router.get("/watchlist/search")
+async def watchlist_search(q: str = Query("")):
+    """Search the crypto universe to add to the Active Watchlist (excludes already-added)."""
+    s = await load_settings(db)
+    current = set(s.enabled_symbols or [])
+    ql = q.strip().lower()
+    out = [{"symbol": sym, "name": name} for sym, name in _WATCHLIST_UNIVERSE
+           if sym not in current and (not ql or ql in sym.lower() or ql in name.lower())]
+    return {"results": out[:20], "count": len(out)}
+
+
+@api_router.post("/watchlist/add", dependencies=[Depends(require_owner)])
+async def watchlist_add(payload: dict):
+    """Add a crypto to the Active Watchlist. Validates it is tradable, then the bot begins
+    tracking it (it also appears on the Trade page)."""
+    symbol = _norm_symbol(payload.get("symbol", ""))
+    if not symbol or "/" not in symbol:
+        raise HTTPException(status_code=422, detail="symbol required, e.g. DOGE or DOGE/USD")
+    s = await load_settings(db)
+    current = list(s.enabled_symbols or [])
+    if symbol in current:
+        return {"ok": True, "enabled_symbols": current, "note": "already in watchlist"}
+    snap = await fetch_snapshot(symbol)
+    if not snap:
+        raise HTTPException(status_code=400, detail=f"{symbol} is not tradable / price unavailable")
+    current.append(symbol)
+    s.enabled_symbols = current
+    saved = await save_settings(db, s)
+    return {"ok": True, "symbol": symbol, "enabled_symbols": saved.enabled_symbols, "count": len(saved.enabled_symbols)}
+
+
+@api_router.post("/watchlist/remove", dependencies=[Depends(require_owner)])
+async def watchlist_remove(payload: dict):
+    symbol = _norm_symbol(payload.get("symbol", ""))
+    s = await load_settings(db)
+    current = list(s.enabled_symbols or [])
+    if symbol not in current:
+        raise HTTPException(status_code=404, detail="symbol not in watchlist")
+    if len(current) <= 1:
+        raise HTTPException(status_code=400, detail="watchlist must keep at least one asset")
+    current.remove(symbol)
+    s.enabled_symbols = current
+    saved = await save_settings(db, s)
+    return {"ok": True, "symbol": symbol, "enabled_symbols": saved.enabled_symbols, "count": len(saved.enabled_symbols)}
+
+
+
+
 @api_router.post("/cycle/run", dependencies=[Depends(require_owner)])
 async def run_cycle():
     """Run one evaluation cycle synchronously and return full results.
@@ -2102,19 +2167,194 @@ async def strategy_activate_config(config_id: str):
 
 
 @api_router.get("/analytics/leaderboard")
-async def analytics_leaderboard():
-    """Ranked per-strategy scoreboard (health-sorted) — a single aggregate the web and
-    mobile leaderboards consume instead of each recomputing client-side."""
-    metrics = await _compute_strategy_metrics()
-    rows = sorted(metrics.values(), key=lambda m: (m.get("health", 0), m.get("roi", 0)), reverse=True)
-    board = [{
-        "rank": i + 1,
-        "key": m["key"], "name": m["name"], "status": m["status"],
-        "health": m["health"], "roi": m["roi"], "win_rate": m["win_rate"],
-        "trades": m["trades"], "total_pnl": m["total_pnl"], "stars": m["stars"],
-        "active_config_id": m.get("active_config_id"),
-    } for i, m in enumerate(rows)]
-    return {"leaderboard": board, "count": len(board)}
+async def analytics_leaderboard(sort: str = Query("health"), source: str = Query("all")):
+    """Ranked strategy scoreboard with a selectable sort metric (Part 12).
+
+    Ranks over the Strategy Library (which carries full seeded metrics) overlaid with
+    the real live metrics for the internal engine strategies. `sort` picks the metric;
+    `source` = all | live | library.
+    """
+    live = await _compute_strategy_metrics()
+    lib = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+
+    rows: list[dict] = []
+    for s in lib:
+        hist = s.get("historical_results") or {}
+        internal = bool(s.get("internal"))
+        lm = live.get(s.get("engine_key")) if internal else None
+        row = {
+            "key": s["id"], "name": s["name"], "source": s.get("source"),
+            "internal": internal, "style": s.get("style"),
+            "status": (lm or {}).get("status") if lm else "CATALOG",
+            "roi": (lm or {}).get("roi", hist.get("roi", 0)),
+            "win_rate": (lm or {}).get("win_rate", hist.get("win_rate", 0)),
+            "net_pnl": (lm or {}).get("total_pnl", 0) if lm else hist.get("roi", 0),
+            "trades": (lm or {}).get("trades", hist.get("trade_count", 0)),
+            "health": (lm or {}).get("health", s.get("ai_health_score", 0)),
+            "ai_health_score": s.get("ai_health_score", 0),
+            "ai_grade": s.get("ai_grade"),
+            "profit_factor": hist.get("profit_factor", 0),
+            "sharpe": hist.get("sharpe", 0),
+            "sortino": hist.get("sortino", 0),
+            "max_drawdown": hist.get("max_drawdown", 0),
+            "avg_trade": hist.get("avg_trade", 0),
+            "rating": s.get("rating", 0),
+            "active_config_id": (lm or {}).get("active_config_id") if lm else None,
+        }
+        rows.append(row)
+
+    if source == "live":
+        rows = [r for r in rows if r["internal"]]
+    elif source == "library":
+        rows = [r for r in rows if not r["internal"]]
+
+    ascending = {"max_drawdown"}
+    key = sort if sort in {"net_pnl", "roi", "win_rate", "health", "ai_health_score", "sharpe",
+                           "sortino", "profit_factor", "max_drawdown", "avg_trade", "trades", "rating"} else "health"
+    rows.sort(key=lambda r: r.get(key, 0) or 0, reverse=key not in ascending)
+    for i, r in enumerate(rows):
+        r["rank"] = i + 1
+    return {"leaderboard": rows, "count": len(rows), "sort": key, "source": source,
+            "sort_options": ["net_pnl", "roi", "win_rate", "ai_health_score", "sharpe", "sortino",
+                             "profit_factor", "max_drawdown", "avg_trade", "trades", "rating"]}
+
+
+# ---------------------------------------------------------------------------- #
+# STRATEGY LIBRARY (P1) — curated catalog with rich metadata, seeded results and
+# AI grading. Public read; owner-only mutations. See library_seed.py.
+# ---------------------------------------------------------------------------- #
+async def _seed_library_if_empty():
+    if await db.strategy_library.count_documents({}) == 0:
+        from library_seed import library  # noqa: PLC0415
+        await db.strategy_library.insert_many(library())
+
+
+@api_router.post("/library/seed", dependencies=[Depends(require_owner)])
+async def library_seed_endpoint(force: bool = Query(False)):
+    from library_seed import library  # noqa: PLC0415
+    if force:
+        await db.strategy_library.delete_many({})
+    if await db.strategy_library.count_documents({}) == 0:
+        docs = library()
+        await db.strategy_library.insert_many(docs)
+        return {"seeded": len(docs)}
+    return {"seeded": 0, "note": "library already populated (use force=true to reseed)"}
+
+
+@api_router.get("/library/facets")
+async def library_facets():
+    """Available filter options for the Strategy Center filter drawer."""
+    docs = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+    regimes, styles, mtypes, tfs, risks, grades, sources = (set() for _ in range(7))
+    for d in docs:
+        regimes.update(d.get("market_regimes") or [])
+        styles.add(d.get("style"))
+        mtypes.update(d.get("market_type") or [])
+        tfs.update(d.get("timeframes") or [])
+        risks.add(d.get("risk"))
+        grades.add(d.get("ai_grade"))
+        sources.add(d.get("source"))
+    def _s(x):
+        return sorted(v for v in x if v)
+    return {"market_regime": _s(regimes), "style": _s(styles), "market_type": _s(mtypes),
+            "timeframe": _s(tfs), "risk": _s(risks), "ai_grade": _s(grades), "source": _s(sources)}
+
+
+@api_router.get("/library")
+async def library_list(
+    market_regime: str | None = Query(None), market_type: str | None = Query(None),
+    style: str | None = Query(None), timeframe: str | None = Query(None),
+    risk: str | None = Query(None), ai_grade: str | None = Query(None),
+    source: str | None = Query(None), favorite: bool | None = Query(None),
+    min_health: int | None = Query(None), chip: str | None = Query(None),
+    sort: str = Query("health"), q: str | None = Query(None),
+):
+    """List library strategies with multi-select filters + quick chips + sort.
+    Comma-separated values are OR'd within a field; fields are AND'd together."""
+    docs = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+
+    def _multi(val, field, list_field=False):
+        nonlocal docs
+        if not val:
+            return
+        wanted = {v.strip() for v in val.split(",") if v.strip()}
+        if list_field:
+            docs = [d for d in docs if wanted & set(d.get(field) or [])]
+        else:
+            docs = [d for d in docs if d.get(field) in wanted]
+
+    _multi(market_regime, "market_regimes", list_field=True)
+    _multi(market_type, "market_type", list_field=True)
+    _multi(timeframe, "timeframes", list_field=True)
+    _multi(style, "style")
+    _multi(risk, "risk")
+    _multi(ai_grade, "ai_grade")
+    _multi(source, "source")
+    if favorite:
+        docs = [d for d in docs if d.get("favorite")]
+    if min_health is not None:
+        docs = [d for d in docs if (d.get("ai_health_score") or 0) >= min_health]
+    if q:
+        ql = q.lower()
+        docs = [d for d in docs if ql in (d.get("name", "") + " " + d.get("description", "")).lower()]
+
+    # quick chips
+    if chip == "top_rated":
+        docs.sort(key=lambda d: (d.get("rating", 0), d.get("ai_health_score", 0)), reverse=True)
+    elif chip == "top_internal":
+        docs = [d for d in docs if d.get("internal")] + [d for d in docs if not d.get("internal")]
+    elif chip == "healthiest":
+        docs.sort(key=lambda d: d.get("ai_health_score", 0), reverse=True)
+    elif chip == "trending":
+        docs.sort(key=lambda d: (d.get("historical_results") or {}).get("roi", 0), reverse=True)
+    else:
+        skey = {"health": lambda d: d.get("ai_health_score", 0),
+                "rating": lambda d: d.get("rating", 0),
+                "roi": lambda d: (d.get("historical_results") or {}).get("roi", 0),
+                "win_rate": lambda d: (d.get("historical_results") or {}).get("win_rate", 0)}.get(sort)
+        if skey:
+            docs.sort(key=skey, reverse=True)
+
+    return {"strategies": docs, "count": len(docs)}
+
+
+@api_router.get("/library/{strategy_id}")
+async def library_get(strategy_id: str):
+    doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    return doc
+
+
+@api_router.post("/library/{strategy_id}/favorite", dependencies=[Depends(require_owner)])
+async def library_favorite(strategy_id: str):
+    doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    fav = not bool(doc.get("favorite"))
+    await db.strategy_library.update_one({"id": strategy_id}, {"$set": {"favorite": fav}})
+    return {"id": strategy_id, "favorite": fav}
+
+
+@api_router.post("/library/{strategy_id}/ai-grade", dependencies=[Depends(require_owner)])
+async def library_ai_grade(strategy_id: str):
+    """Re-grade a library strategy with the AI (Claude) over its logic + seeded results.
+    Consumes LLM credits."""
+    doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    import library_ai  # noqa: PLC0415
+    try:
+        grade = await library_ai.grade_strategy(doc)
+    except Exception as e:  # noqa: BLE001
+        logger.error("library ai-grade failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI grade error: {e}")
+    await db.strategy_library.update_one({"id": strategy_id}, {"$set": {
+        "ai_summary": grade["ai_summary"], "ai_health_score": grade["ai_health_score"],
+        "ai_grade": grade["ai_grade"], "ai_confidence": grade["ai_confidence"],
+        "updated_at": _strat_now_iso(),
+    }})
+    return {"id": strategy_id, **grade}
 
 
 
@@ -2153,6 +2393,7 @@ async def _deferred_startup():
             await load_portfolio(db)
             await seed_owner(db)
             await db.users.create_index("email", unique=True)
+            await _seed_library_if_empty()
             logger.info("Deferred DB bootstrap complete (attempt %d).", attempt)
             break
         except Exception as e:  # noqa: BLE001

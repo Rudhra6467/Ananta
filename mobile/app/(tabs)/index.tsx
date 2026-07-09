@@ -6,12 +6,17 @@ import {
   RefreshControl,
   StyleSheet,
   Pressable,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../src/api";
 import { useFetch } from "../../src/useFetch";
+import { useAuth } from "../../src/auth";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { Logo } from "../../src/components/Logo";
@@ -44,6 +49,8 @@ function botStatus(risk: any, positions: any[]) {
 export default function Cockpit() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isOwner } = useAuth();
+  const [addOpen, setAddOpen] = useState(false);
   const { data, loading, error, refreshing, refresh } = useFetch(loadCockpit, [], 15000);
 
   const onRetry = useCallback(() => refresh(), [refresh]);
@@ -62,7 +69,7 @@ export default function Cockpit() {
   const dailyPnlUsd = (pf?.equity ?? 0) - dayStart;
 
   const railMap = new Map(snaps.map((s) => [s.symbol, s]));
-  const rail = RAIL_SYMBOLS.map((sym) => railMap.get(sym)).filter(Boolean);
+  const rail = snaps.length ? snaps : RAIL_SYMBOLS.map((sym) => railMap.get(sym)).filter(Boolean);
 
   return (
     <ScrollView
@@ -102,8 +109,14 @@ export default function Cockpit() {
         </View>
       </View>
 
-      {/* Market rail */}
-      <SectionLabel style={styles.sectionPad}>Market</SectionLabel>
+      {/* Active Watchlist rail */}
+      <View style={[styles.sectionPad, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+        <SectionLabel>Active Watchlist</SectionLabel>
+        <Pressable testID="watchlist-add-asset" onPress={() => (isOwner ? setAddOpen(true) : Alert.alert("Owner login required"))} hitSlop={8}
+          style={styles.addBtn}>
+          <Ionicons name="add" size={18} color={colors.teal} />
+        </Pressable>
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -176,11 +189,51 @@ export default function Cockpit() {
           ))
         )}
       </View>
+      <AddAssetModal visible={addOpen} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); refresh(); }} />
     </ScrollView>
   );
 }
 
-/* ---------------- AI Coach headline banner (credit-free) ---------------- */
+function AddAssetModal({ visible, onClose, onAdded }: { visible: boolean; onClose: () => void; onAdded: () => void }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    if (!visible) return;
+    const t = setTimeout(() => { api.watchlistSearch(q).then((d: any) => setResults(d.results || [])).catch(() => setResults([])); }, 180);
+    return () => clearTimeout(t);
+  }, [q, visible]);
+  const add = async (sym: string) => {
+    setBusy(sym);
+    try { await api.watchlistAdd(sym); onAdded(); setQ(""); }
+    catch (e: any) { Alert.alert("Add failed", e?.response?.data?.detail || e?.message); setBusy(""); }
+  };
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.addWrap}>
+        <View style={styles.addCard}>
+          <View style={styles.addHeader}>
+            <Text style={type.h3}>Add to Active Watchlist</Text>
+            <Pressable testID="add-asset-close" onPress={onClose} hitSlop={10}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
+          </View>
+          <View style={styles.addSearch}>
+            <Ionicons name="search" size={15} color={colors.textFaint} />
+            <TextInput testID="add-asset-search" value={q} onChangeText={setQ} autoFocus placeholder="Search any crypto — BTC, DOGE, SUI…"
+              placeholderTextColor={colors.textFaint} style={{ flex: 1, color: colors.text, fontSize: 14, padding: 0 }} />
+          </View>
+          <ScrollView style={{ maxHeight: 320 }}>
+            {results.length === 0 ? <Text style={[type.small, { padding: spacing.md }]}>No matches.</Text> : results.map((r) => (
+              <Pressable key={r.symbol} testID={`add-asset-option-${base(r.symbol)}`} onPress={() => add(r.symbol)} disabled={!!busy} style={styles.addRow}>
+                <Text style={[type.body, { fontWeight: "700" }]}>{r.symbol} <Text style={{ color: colors.textMuted, fontWeight: "400" }}>· {r.name}</Text></Text>
+                {busy === r.symbol ? <ActivityIndicator color={colors.teal} size="small" /> : <Ionicons name="add" size={16} color={colors.teal} />}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 function CoachBanner() {
   const router = useRouter();
   const [h, setH] = useState<any>(null);
@@ -245,6 +298,12 @@ const styles = StyleSheet.create({
   heroPnl: { fontSize: 15, fontWeight: "700" },
   heroToday: { color: colors.textFaint, fontSize: 13 },
   sectionPad: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  addBtn: { width: 30, height: 30, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
+  addWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  addCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, paddingBottom: 30 },
+  addHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  addSearch: { flexDirection: "row", alignItems: "center", gap: 8, margin: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 10, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, backgroundColor: colors.bgElevated },
+  addRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.md, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.cardBorder },
   sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   link: { color: colors.teal, fontWeight: "700", fontSize: 13 },
   rail: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingVertical: 2 },

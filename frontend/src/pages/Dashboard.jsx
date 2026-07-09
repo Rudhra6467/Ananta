@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, RefreshCw, Sparkles, Plus, Search, X, Loader2 } from "lucide-react";
 import {
     Cell as RCell,
     Pie,
@@ -8,6 +8,7 @@ import {
     Tooltip as RTooltip,
 } from "recharts";
 import api from "@/lib/api";
+import { toast } from "sonner";
 import { useAppData } from "@/context/AppDataContext";
 import CandleChart from "@/components/CandleChart";
 import ManualExitButton from "@/components/ManualExitButton";
@@ -42,7 +43,7 @@ export default function Dashboard() {
         <div className="space-y-6" data-testid="cockpit-page">
             <CoachBanner />
             <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
-            <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} />
+            <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} onChanged={refresh} />
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
             <AnalyticsGroup summary={summary} trades={trades} />
@@ -109,15 +110,16 @@ function BrainStat({ label, value, valueClass = "text-atlas-text" }) {
 const Sep = () => <span className="text-atlas-border">|</span>;
 
 /* ---------------- Watchlist Ribbon — compact single-line selector ---------------- */
-function WatchlistRibbon({ snapshots, symbols, selected, onSelect }) {
+function WatchlistRibbon({ snapshots, symbols, selected, onSelect, onChanged }) {
     const priceMap = useMemo(() => Object.fromEntries(snapshots.map((s) => [s.symbol, s])), [snapshots]);
     const sel = selected ? priceMap[selected] : null;
     const chg = sel?.change_24h_pct ?? null;
+    const [addOpen, setAddOpen] = useState(false);
     const fmt = (p) => (p == null ? "—" : `$${p.toLocaleString(undefined, { minimumFractionDigits: p < 10 ? 4 : 2, maximumFractionDigits: p < 10 ? 4 : 2 })}`);
     return (
         <div className="panel px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="watchlist-ribbon">
             <div className="flex items-center gap-3 min-w-0">
-                <span className="label-tag shrink-0">WATCHLIST</span>
+                <span className="label-tag shrink-0">ACTIVE WATCHLIST</span>
                 <select
                     data-testid="watchlist-select"
                     value={selected || ""}
@@ -130,6 +132,10 @@ function WatchlistRibbon({ snapshots, symbols, selected, onSelect }) {
                         return <option key={sym} value={sym}>{base}{s ? ` · ${fmt(s.price)}` : ""}</option>;
                     })}
                 </select>
+                <button data-testid="watchlist-add-asset" onClick={() => setAddOpen(true)} title="Add a crypto to track"
+                    className="w-8 h-8 grid place-items-center rounded-lg border border-atlas-border text-atlas-cyan hover:bg-atlas-cyan/10 hover:border-atlas-cyan/50 transition-colors shrink-0">
+                    <Plus className="w-4 h-4" strokeWidth={2.5} />
+                </button>
                 {sel && (
                     <span className="font-mono text-sm tabular-nums text-atlas-textSecondary flex items-center gap-2">
                         {fmt(sel.price)}
@@ -142,6 +148,47 @@ function WatchlistRibbon({ snapshots, symbols, selected, onSelect }) {
                 )}
             </div>
             <WatchlistControl />
+            {addOpen && <AddAssetModal onClose={() => setAddOpen(false)} onAdded={(sym) => { setAddOpen(false); onSelect(sym); onChanged && onChanged(); }} />}
+        </div>
+    );
+}
+
+function AddAssetModal({ onClose, onAdded }) {
+    const [q, setQ] = useState("");
+    const [results, setResults] = useState([]);
+    const [busy, setBusy] = useState("");
+    useEffect(() => {
+        const t = setTimeout(() => { api.watchlistSearch(q).then((d) => setResults(d.results || [])).catch(() => setResults([])); }, 180);
+        return () => clearTimeout(t);
+    }, [q]);
+    const add = async (sym) => {
+        setBusy(sym);
+        try { await api.watchlistAdd(sym); toast.success("Added to Active Watchlist", { description: sym }); onAdded(sym); }
+        catch (e) { toast.error("Add failed", { description: String(e?.response?.data?.detail || e?.message) }); setBusy(""); }
+    };
+    return (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" data-testid="add-asset-modal" onClick={onClose}>
+            <div className="panel w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="px-4 py-3 border-b border-atlas-border flex items-center justify-between">
+                    <div className="label-tag">ADD TO ACTIVE WATCHLIST</div>
+                    <button data-testid="add-asset-close" onClick={onClose} className="text-atlas-textSecondary hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="px-4 py-3 border-b border-atlas-border flex items-center gap-2">
+                    <Search className="w-3.5 h-3.5 text-atlas-textSecondary" />
+                    <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any crypto — BTC, DOGE, SUI…"
+                        data-testid="add-asset-search" className="flex-1 bg-transparent outline-none text-white text-sm font-mono placeholder:text-atlas-textTertiary" />
+                </div>
+                <div className="overflow-y-auto">
+                    {results.length === 0 && <div className="p-4 font-mono text-xs text-atlas-textSecondary">No matches.</div>}
+                    {results.map((r) => (
+                        <button key={r.symbol} data-testid={`add-asset-option-${r.symbol.replace("/", "-")}`} onClick={() => add(r.symbol)} disabled={!!busy}
+                            className="w-full text-left px-4 py-3 border-b border-atlas-border last:border-b-0 panel-hover transition-colors font-mono text-sm text-white flex items-center justify-between">
+                            <span>{r.symbol} <span className="text-atlas-textTertiary">· {r.name}</span></span>
+                            {busy === r.symbol ? <Loader2 className="w-3.5 h-3.5 animate-spin text-atlas-cyan" /> : <Plus className="w-3.5 h-3.5 text-atlas-cyan" />}
+                        </button>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

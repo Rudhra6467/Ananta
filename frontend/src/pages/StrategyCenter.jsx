@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, Flame, SlidersHorizontal, Heart, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -27,17 +27,19 @@ const STATUS = {
     OPTIMIZING: "text-violet-400 border-violet-500/40 bg-violet-500/10",
     ERROR: "text-atlas-negative border-atlas-negative/40 bg-atlas-negative/10",
 };
-const SORTS = [
-    { id: "profit", label: "Most Profitable", fn: (a, b) => b.roi - a.roi },
-    { id: "winrate", label: "Highest Win Rate", fn: (a, b) => b.win_rate - a.win_rate },
-    { id: "health", label: "Healthiest", fn: (a, b) => b.health - a.health },
-    { id: "rating", label: "Top Rated", fn: (a, b) => b.stars - a.stars },
-];
+const GRADE_CLS = {
+    A: "text-atlas-positive border-atlas-positive/40 bg-atlas-positive/10",
+    B: "text-atlas-cyan border-atlas-cyan/40 bg-atlas-cyan/10",
+    C: "text-atlas-warning border-atlas-warning/40 bg-atlas-warning/10",
+    D: "text-orange-400 border-orange-500/40 bg-orange-500/10",
+    E: "text-atlas-negative border-atlas-negative/40 bg-atlas-negative/10",
+};
 
 export default function StrategyCenter() {
     const [metrics, setMetrics] = useState(null);
     const [registry, setRegistry] = useState({});
-    const [selected, setSelected] = useState(null);
+    const [selected, setSelected] = useState(null);       // internal engine key -> StrategyDetail
+    const [catalogId, setCatalogId] = useState(null);     // library id -> CatalogDetail
     const [addOpen, setAddOpen] = useState(false);
     const { isOwner } = useAuth();
 
@@ -53,105 +55,250 @@ export default function StrategyCenter() {
         return <StrategyDetail sKey={selected} schema={registry[selected]} metric={metrics?.[selected]}
             isOwner={isOwner} onBack={() => { setSelected(null); load(); }} onChanged={load} />;
     }
+    if (catalogId) {
+        return <CatalogDetail id={catalogId} isOwner={isOwner}
+            onOpenInternal={(k) => { setCatalogId(null); setSelected(k); }}
+            onBack={() => setCatalogId(null)} />;
+    }
 
     return (
         <>
-            <StrategyList metrics={metrics} onOpen={setSelected} onAdd={() => setAddOpen(true)} />
+            <StrategyLibrary metrics={metrics} isOwner={isOwner}
+                onOpenInternal={setSelected} onOpenCatalog={setCatalogId} onAdd={() => setAddOpen(true)} />
             <StrategyArchitect open={addOpen} onOpenChange={setAddOpen} registry={registry} isOwner={isOwner}
                 onCreated={() => { setAddOpen(false); load(); }} />
         </>
     );
 }
 
-/* ---------------- List view ---------------- */
-function StrategyList({ metrics, onOpen, onAdd }) {
+const CHIPS = [
+    { id: "top_rated", label: "Top Rated", Icon: Star },
+    { id: "top_internal", label: "Top Internal", Icon: Brain },
+    { id: "healthiest", label: "Healthiest", Icon: HeartPulse },
+    { id: "trending", label: "Trending", Icon: Flame },
+];
+const FILTER_FIELDS = [
+    { key: "market_regime", label: "Market Regime" },
+    { key: "market_type", label: "Market Type" },
+    { key: "style", label: "Trading Style" },
+    { key: "timeframe", label: "Timeframe" },
+    { key: "risk", label: "Risk Level" },
+    { key: "ai_grade", label: "AI Grade" },
+    { key: "source", label: "Strategy Source" },
+];
+
+/* ---------------- Library view ---------------- */
+function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onAdd }) {
+    const [lib, setLib] = useState(null);
+    const [facets, setFacets] = useState({});
     const [query, setQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState(null);
-    const [sort, setSort] = useState("health");
+    const [chip, setChip] = useState(null);
+    const [filters, setFilters] = useState({});   // {field: [values]}
+    const [favOnly, setFavOnly] = useState(false);
+    const [showFilter, setShowFilter] = useState(false);
 
-    const rows = useMemo(() => {
-        let arr = Object.values(metrics || {});
-        if (query.trim()) arr = arr.filter((s) => s.name.toLowerCase().includes(query.toLowerCase()));
-        if (statusFilter) arr = arr.filter((s) => s.status === statusFilter);
-        const s = SORTS.find((x) => x.id === sort);
-        return [...arr].sort(s ? s.fn : (a, b) => 0);
-    }, [metrics, query, statusFilter, sort]);
+    const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
 
-    if (!metrics) {
-        return <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING STRATEGIES</div>;
-    }
+    const load = () => {
+        const params = {};
+        if (chip) params.chip = chip;
+        if (query.trim()) params.q = query.trim();
+        if (favOnly) params.favorite = true;
+        Object.entries(filters).forEach(([k, v]) => { if (v.length) params[k] = v.join(","); });
+        api.libraryList(params).then((d) => setLib(d.strategies)).catch(() => setLib([]));
+    };
+    useEffect(() => { api.libraryFacets().then(setFacets).catch(() => {}); }, []);
+    useEffect(load, [chip, filters, favOnly, query]);
+
+    const toggleFilter = (field, val) => setFilters((f) => {
+        const cur = f[field] || [];
+        return { ...f, [field]: cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val] };
+    });
+    const clearFilters = () => { setFilters({}); setFavOnly(false); };
 
     return (
         <div className="space-y-5" data-testid="strategy-center">
-            {/* search + filters */}
             <div className="space-y-3">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-atlas-textTertiary" />
                     <Input data-testid="strategy-search" value={query} onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search strategies…" className="atlas-input rounded-lg pl-9 font-mono text-sm" />
+                        placeholder="Search the strategy library…" className="atlas-input rounded-lg pl-9 font-mono text-sm" />
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    {["LIVE", "PAPER", "DISABLED"].map((st) => (
-                        <Chip key={st} testid={`filter-${st}`} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? null : st)}>{st}</Chip>
+                    {CHIPS.map(({ id, label, Icon }) => (
+                        <button key={id} data-testid={`chip-${id}`} onClick={() => setChip(chip === id ? null : id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
+                                chip === id ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"}`}>
+                            <Icon className="w-3 h-3" /> {label}
+                        </button>
                     ))}
                     <span className="w-px h-5 bg-atlas-border mx-1" />
-                    {SORTS.map((s) => (
-                        <Chip key={s.id} testid={`sort-${s.id}`} active={sort === s.id} onClick={() => setSort(s.id)}>{s.label}</Chip>
-                    ))}
+                    <button data-testid="filter-button" onClick={() => setShowFilter(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
+                            activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                        <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
+                    </button>
                 </div>
             </div>
 
-            {/* cards — always 2 per row */}
-            <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
-                {rows.map((s) => <StrategyCard key={s.key} s={s} onOpen={() => onOpen(s.key)} />)}
-                <button data-testid="add-strategy-card" onClick={onAdd}
-                    className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-atlas-cyan/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
-                    <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10 transition-colors">
-                        <Plus className="w-5 h-5 text-atlas-textTertiary group-hover:text-atlas-cyan" />
-                    </div>
-                    <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Add Strategy</span>
-                </button>
+            <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
+
+            {!lib ? (
+                <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING LIBRARY</div>
+            ) : lib.length === 0 ? (
+                <div className="panel p-10 text-center" data-testid="library-empty">
+                    <div className="font-mono text-sm text-atlas-textSecondary">No strategies match these filters.</div>
+                    <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
+                    {lib.map((s) => (
+                        <LibraryCard key={s.id} s={s} metric={s.internal ? metrics?.[s.engine_key] : null} isOwner={isOwner}
+                            onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
+                            onFav={() => api.libraryFavorite(s.id).then(load)} />
+                    ))}
+                    <button data-testid="add-strategy-card" onClick={onAdd}
+                        className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-atlas-cyan/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
+                        <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10 transition-colors">
+                            <Plus className="w-5 h-5 text-atlas-textTertiary group-hover:text-atlas-cyan" />
+                        </div>
+                        <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Import Strategy</span>
+                    </button>
+                </div>
+            )}
+
+            {showFilter && (
+                <FilterDrawer facets={facets} filters={filters} favOnly={favOnly} activeCount={activeCount}
+                    onToggle={toggleFilter} onFav={() => setFavOnly((v) => !v)} onClear={clearFilters}
+                    onClose={() => setShowFilter(false)} />
+            )}
+        </div>
+    );
+}
+
+const LB_LABELS = {
+    net_pnl: "Net P&L", roi: "ROI", win_rate: "Win Rate", ai_health_score: "AI Health Score",
+    sharpe: "Sharpe Ratio", sortino: "Sortino Ratio", profit_factor: "Profit Factor",
+    max_drawdown: "Max Drawdown", avg_trade: "Avg Trade", trades: "Total Trades", rating: "Rating",
+};
+
+export function StrategyLeaderboard({ onOpen }) {
+    const [sort, setSort] = useState("ai_health_score");
+    const [data, setData] = useState(null);
+    useEffect(() => { api.analyticsLeaderboard(sort).then(setData).catch(() => {}); }, [sort]);
+    const opts = data?.sort_options || Object.keys(LB_LABELS);
+    const rows = (data?.leaderboard || []).slice(0, 8);
+    const fmt = (k, v) => (k === "net_pnl" ? `$${(v || 0).toLocaleString()}` : ["roi", "win_rate", "max_drawdown"].includes(k) ? `${v}%` : v);
+    return (
+        <div className="panel p-4" data-testid="strategy-leaderboard">
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                <div className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">STRATEGY LEADERBOARD</span></div>
+                <select data-testid="leaderboard-sort-select" value={sort} onChange={(e) => setSort(e.target.value)}
+                    className="bg-atlas-panel border border-atlas-border rounded px-2.5 py-1.5 font-mono text-[11px] text-atlas-text focus:border-atlas-cyan outline-none">
+                    {opts.map((o) => <option key={o} value={o}>Sort: {LB_LABELS[o] || o}</option>)}
+                </select>
+            </div>
+            <div className="space-y-1">
+                {rows.map((r) => (
+                    <button key={r.key} data-testid={`leaderboard-row-${r.key}`} onClick={() => onOpen && onOpen(r)}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border hover:border-atlas-cyan/40 transition-colors text-left">
+                        <span className="font-mono text-[11px] text-atlas-textTertiary w-5">#{r.rank}</span>
+                        <span className="font-heading text-sm text-atlas-text flex-1 truncate">{r.name}</span>
+                        <span className={`font-mono text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${GRADE_CLS[r.ai_grade] || GRADE_CLS.C}`}>{r.ai_grade}</span>
+                        <span className="font-mono text-sm font-bold tabular-nums text-atlas-cyan w-24 text-right">{fmt(sort, r[sort])}</span>
+                    </button>
+                ))}
             </div>
         </div>
     );
 }
 
-function Chip({ children, active, onClick, testid }) {
+function FilterDrawer({ facets, filters, favOnly, activeCount, onToggle, onFav, onClear, onClose }) {
     return (
-        <button data-testid={testid} onClick={onClick}
-            className={`px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
-                active ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"
-            }`}>{children}</button>
+        <div className="fixed inset-0 z-50 flex justify-end" data-testid="filter-drawer">
+            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+            <div className="relative w-full max-w-sm h-full bg-atlas-bg border-l border-atlas-border overflow-y-auto p-5 space-y-5">
+                <div className="flex items-center justify-between sticky top-0 bg-atlas-bg pb-2">
+                    <div className="font-heading text-lg text-atlas-text">Filters{activeCount ? ` · ${activeCount}` : ""}</div>
+                    <button data-testid="filter-close" onClick={onClose} className="text-atlas-textTertiary hover:text-atlas-text"><X className="w-5 h-5" /></button>
+                </div>
+                <button data-testid="filter-favorites" onClick={onFav}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border font-mono text-xs transition-all ${favOnly ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary"}`}>
+                    <Heart className={`w-4 h-4 ${favOnly ? "fill-atlas-cyan" : ""}`} /> Favorites only
+                </button>
+                {FILTER_FIELDS.map(({ key, label }) => (
+                    <div key={key}>
+                        <div className="label-tag mb-2">{label}</div>
+                        <div className="flex flex-wrap gap-2">
+                            {(facets[key] || []).map((val) => {
+                                const active = (filters[key] || []).includes(val);
+                                return (
+                                    <button key={val} data-testid={`filter-${key}-${val}`} onClick={() => onToggle(key, val)}
+                                        className={`px-2.5 py-1 rounded-full font-mono text-[10px] border transition-all ${active ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                                        {val}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+                <div className="flex gap-2 pt-2">
+                    <Button data-testid="filter-clear" variant="outline" onClick={onClear} className="flex-1 font-mono text-xs">Clear</Button>
+                    <Button data-testid="filter-apply" onClick={onClose} className="flex-1 font-mono text-xs bg-atlas-cyan text-atlas-bg hover:bg-cyan-400">Show results</Button>
+                </div>
+            </div>
+        </div>
     );
 }
 
-function StrategyCard({ s, onOpen }) {
-    const Icon = ICONS[s.key] || Boxes;
-    const roiCls = s.roi > 0 ? "text-atlas-positive" : s.roi < 0 ? "text-atlas-negative" : "text-atlas-text";
+
+function LibraryCard({ s, metric, isOwner, onOpen, onFav }) {
+    const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
+    const r = s.historical_results || {};
+    const roi = metric ? metric.roi : r.roi;
+    const roiCls = roi > 0 ? "text-atlas-positive" : roi < 0 ? "text-atlas-negative" : "text-atlas-text";
+    const status = s.internal ? (metric?.status || "PAPER") : "CATALOG";
     return (
-        <button data-testid={`strategy-card-${s.key}`} onClick={onOpen}
-            className="group text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
-            <div className="flex items-start justify-between gap-2">
+        <div data-testid={`library-card-${s.id}`}
+            className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
+            <button onClick={onOpen} className="absolute inset-0 z-0" aria-label={`Open ${s.name}`} data-testid={`library-open-${s.id}`} />
+            <div className="flex items-start justify-between gap-2 relative z-10 pointer-events-none">
                 <div className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5">
                     <Icon className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
                 </div>
-                <span className={`font-mono text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${STATUS[s.status] || STATUS.PAPER}`} data-testid={`card-status-${s.key}`}>{s.status}</span>
-            </div>
-            <div>
-                <div className="font-heading font-medium text-base md:text-lg text-atlas-text leading-tight truncate">{s.name}</div>
-                <div className="flex items-center gap-1 mt-0.5">
-                    {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3 h-3 ${n <= s.stars ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                <div className="flex items-center gap-1.5 pointer-events-auto">
+                    <span className={`font-mono text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`} data-testid={`card-grade-${s.id}`}>Grade {s.ai_grade}</span>
+                    {isOwner && (
+                        <button data-testid={`card-fav-${s.id}`} onClick={onFav} className="text-atlas-textTertiary hover:text-atlas-cyan">
+                            <Heart className={`w-3.5 h-3.5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
+                        </button>
+                    )}
                 </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[11px]">
-                <Kv label="ROI" value={`${s.roi > 0 ? "+" : ""}${s.roi}%`} cls={roiCls} />
-                <Kv label="Win Rate" value={`${s.win_rate}%`} />
-                <Kv label="Health" value={`${s.health}`} cls={s.health >= 60 ? "text-atlas-positive" : s.health >= 35 ? "text-atlas-warning" : "text-atlas-negative"} />
-                <Kv label="Trades" value={s.trades} />
+            <div className="relative z-10 pointer-events-none">
+                <div className="font-heading font-medium text-base md:text-lg text-atlas-text leading-tight truncate">{s.name}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-[9px] text-atlas-textTertiary truncate">{s.style} · {s.source}</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                    {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3 h-3 ${n <= s.rating ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                    <span className={`ml-auto font-mono text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border"}`}>{status}</span>
+                </div>
             </div>
-        </button>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[11px] relative z-10 pointer-events-none">
+                <Kv label="ROI" value={`${roi > 0 ? "+" : ""}${roi}%`} cls={roiCls} />
+                <Kv label="Health" value={s.ai_health_score} cls={s.ai_health_score >= 60 ? "text-atlas-positive" : s.ai_health_score >= 35 ? "text-atlas-warning" : "text-atlas-negative"} />
+                <Kv label="Win Rate" value={`${r.win_rate}%`} />
+                <Kv label="Sharpe" value={r.sharpe} />
+            </div>
+        </div>
     );
 }
+
+const CATEGORY_ICON = {
+    "Trend Following": TrendingUp, "Momentum": Activity, "Mean Reversion": BarChart3,
+    "Volatility": Zap, "Statistical / Quantitative": GitBranch, "Academic / Institutional": Brain,
+};
 
 function Kv({ label, value, cls = "text-atlas-text" }) {
     return (
@@ -411,6 +558,121 @@ function TimelinePanel({ metric }) {
                     );
                 })}
             </div>
+        </div>
+    );
+}
+
+
+/* ---------------- Catalog detail (non-engine library strategies) ---------------- */
+function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
+    const [s, setS] = useState(null);
+    const [grading, setGrading] = useState(false);
+
+    const load = () => api.libraryGet(id).then((d) => {
+        if (d.internal && d.engine_key) { onOpenInternal(d.engine_key); return; }
+        setS(d);
+    }).catch(() => toast.error("Failed to load strategy"));
+    useEffect(() => { load(); }, [id]);
+
+    const regrade = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        setGrading(true);
+        try {
+            const g = await api.libraryAiGrade(id);
+            toast.success(`Re-graded: ${g.ai_grade} · ${g.ai_health_score}/100`);
+            await load();
+        } catch (e) { toast.error("AI grade failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+        finally { setGrading(false); }
+    };
+
+    if (!s) return <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> LOADING</div>;
+    const r = s.historical_results || {};
+    const Icon = CATEGORY_ICON[s.category] || Boxes;
+
+    return (
+        <div className="space-y-5" data-testid="catalog-detail">
+            <button data-testid="catalog-back" onClick={onBack} className="flex items-center gap-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text">
+                <ArrowLeft className="w-4 h-4" /> Back to Library
+            </button>
+
+            <div className="panel p-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5"><Icon className="w-6 h-6 text-atlas-cyan" /></div>
+                        <div>
+                            <div className="font-heading text-xl text-atlas-text">{s.name}</div>
+                            <div className="font-mono text-[10px] text-atlas-textTertiary">{s.style} · {s.category} · {s.source}</div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>Grade {s.ai_grade}</span>
+                        <button data-testid="catalog-favorite" onClick={() => api.libraryFavorite(id).then(load)} className="text-atlas-textTertiary hover:text-atlas-cyan" title="Favorite">
+                            <Heart className={`w-5 h-5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
+                        </button>
+                    </div>
+                </div>
+                <p className="font-mono text-xs text-atlas-textSecondary mt-3 leading-relaxed">{s.description}</p>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                    {(s.market_regimes || []).map((m) => <span key={m} className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-atlas-border text-atlas-textSecondary">{m}</span>)}
+                    <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-atlas-border text-atlas-textSecondary">{s.risk}</span>
+                    {(s.timeframes || []).map((t) => <span key={t} className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-atlas-border text-atlas-textSecondary">{t}</span>)}
+                </div>
+            </div>
+
+            {/* AI summary */}
+            <div className="panel p-5" data-testid="catalog-ai">
+                <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">AI ASSESSMENT</span></div>
+                    <button data-testid="catalog-regrade" onClick={regrade} disabled={grading || !isOwner}
+                        className="flex items-center gap-1.5 font-mono text-[10px] text-atlas-cyan hover:text-cyan-300 disabled:opacity-40">
+                        {grading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />} Re-grade with AI
+                    </button>
+                </div>
+                <p className="font-mono text-xs text-atlas-text leading-relaxed">{s.ai_summary}</p>
+                <div className="flex items-center gap-4 mt-3 font-mono text-[10px] text-atlas-textTertiary">
+                    <span>Health <b className="text-atlas-text">{s.ai_health_score}/100</b></span>
+                    <span>Confidence <b className="text-atlas-text">{s.ai_confidence}%</b></span>
+                    <span>Recommended <b className="text-atlas-text">{s.recommended_market}</b></span>
+                </div>
+            </div>
+
+            {/* performance */}
+            <div className="panel p-5">
+                <div className="label-tag mb-3">BACKTEST PERFORMANCE <span className="text-atlas-textTertiary normal-case">(seeded — run a real backtest to validate)</span></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
+                    {[["ROI", `${r.roi}%`], ["Win Rate", `${r.win_rate}%`], ["Profit Factor", r.profit_factor], ["Sharpe", r.sharpe],
+                      ["Sortino", r.sortino], ["Max Drawdown", `${r.max_drawdown}%`], ["Avg Trade", `${r.avg_trade}%`], ["Trades", r.trade_count]].map(([k, v]) => (
+                        <div key={k} className="rounded-lg border border-atlas-border bg-atlas-panel/50 p-2.5">
+                            <div className="text-atlas-textTertiary text-[9px] uppercase tracking-wide">{k}</div>
+                            <div className="text-atlas-text font-bold text-sm mt-0.5 tabular-nums">{v}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* rules */}
+            <div className="grid md:grid-cols-2 gap-4">
+                <RuleList title="Entry Rules" items={s.entry_rules} tone="positive" />
+                <RuleList title="Exit Rules" items={s.exit_rules} tone="cyan" />
+                <RuleList title="Ideal Conditions" items={s.ideal_conditions} tone="positive" />
+                <RuleList title="Avoid Conditions" items={s.avoid_conditions} tone="negative" />
+            </div>
+        </div>
+    );
+}
+
+function RuleList({ title, items, tone }) {
+    const dot = tone === "positive" ? "bg-atlas-positive" : tone === "negative" ? "bg-atlas-negative" : "bg-atlas-cyan";
+    return (
+        <div className="panel p-4">
+            <div className="label-tag mb-2">{title}</div>
+            <ul className="space-y-1.5">
+                {(items || []).map((it, i) => (
+                    <li key={i} className="flex items-start gap-2 font-mono text-[11px] text-atlas-textSecondary">
+                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />{it}
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
