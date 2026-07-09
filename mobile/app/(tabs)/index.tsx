@@ -210,7 +210,7 @@ function AddAssetModal({ visible, onClose, onAdded }: { visible: boolean; onClos
   };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.addWrap}>
+      <View style={styles.addWrap} testID="add-asset-modal">
         <View style={styles.addCard}>
           <View style={styles.addHeader}>
             <Text style={type.h3}>Add to Active Watchlist</Text>
@@ -223,7 +223,7 @@ function AddAssetModal({ visible, onClose, onAdded }: { visible: boolean; onClos
           </View>
           <ScrollView style={{ maxHeight: 320 }}>
             {results.length === 0 ? <Text style={[type.small, { padding: spacing.md }]}>No matches.</Text> : results.map((r) => (
-              <Pressable key={r.symbol} testID={`add-asset-option-${base(r.symbol)}`} onPress={() => add(r.symbol)} disabled={!!busy} style={styles.addRow}>
+              <Pressable key={r.symbol} testID={`add-asset-option-${r.symbol.replace("/", "-")}`} onPress={() => add(r.symbol)} disabled={!!busy} style={styles.addRow}>
                 <Text style={[type.body, { fontWeight: "700" }]}>{r.symbol} <Text style={{ color: colors.textMuted, fontWeight: "400" }}>· {r.name}</Text></Text>
                 {busy === r.symbol ? <ActivityIndicator color={colors.teal} size="small" /> : <Ionicons name="add" size={16} color={colors.teal} />}
               </Pressable>

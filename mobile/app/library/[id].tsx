@@ -39,7 +39,7 @@ export default function LibraryDetail() {
   const r = s.historical_results || {};
 
   return (
-    <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
+    <ScrollView style={styles.fill} testID="catalog-detail" contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
       <Pressable testID="catalog-back" onPress={() => router.back()} style={styles.back}>
         <Ionicons name="chevron-back" size={18} color={colors.teal} />
         <Text style={{ color: colors.teal, fontWeight: "700", fontSize: 12 }}>Library</Text>

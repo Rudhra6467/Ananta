@@ -384,3 +384,9 @@ enforcement / read-only public + Owner JWT / regime-driven sizing / homepage red
 deleted as ideas — those quick-wins/safety items fold into Phases 1–3 and 5 of THIS framework as
 supporting work, but they are explicitly DOWNSTREAM of validation. No UI/feature work precedes the
 Research Database.
+
+---
+## P1 "App Store for Strategies" — status (2026-07-09)
+- ✅ **Phase 1 DONE** (iter 34): Strategy Library (16 seeded, rich schema, AI grade) · chips + multi-select Filter drawer · CatalogDetail w/ AI summary + re-grade · multi-metric Leaderboard sort · Cockpit "Active Watchlist" + add-any-crypto. Web + mobile + backend, tested.
+- 🟡 **Phase 2 NEXT**: Mobile interactive YouTube-style paging (Parts 7-10) — finger-follows-drag main-tab pager + Research subtab pager + nested boundary swipe transfer + premium motion (Part 13). Web: smooth animated tab transitions.
+- ⚪ **Backlog**: Pine Script / Freqtrade / Jesse → JSON import converters (Part 6). Wire more library strategies to the live engine incrementally. Split `StrategyCenter.jsx` / `server.py` as they approach size limits.

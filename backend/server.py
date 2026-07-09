@@ -2302,7 +2302,8 @@ async def library_list(
     if chip == "top_rated":
         docs.sort(key=lambda d: (d.get("rating", 0), d.get("ai_health_score", 0)), reverse=True)
     elif chip == "top_internal":
-        docs = [d for d in docs if d.get("internal")] + [d for d in docs if not d.get("internal")]
+        docs = [d for d in docs if d.get("internal")]
+        docs.sort(key=lambda d: d.get("ai_health_score", 0), reverse=True)
     elif chip == "healthiest":
         docs.sort(key=lambda d: d.get("ai_health_score", 0), reverse=True)
     elif chip == "trending":
