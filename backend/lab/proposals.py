@@ -13,16 +13,7 @@ from __future__ import annotations
 from collections import Counter
 
 from exit_engine import get_profile
-
-# clamps for direct RiskSettings fields (mirror the /settings validation)
-_SET_CLAMP = {
-    "stop_loss_pct": (0.1, 50.0), "trail_arm_pct": (0.1, 50.0), "trail_distance_pct": (0.1, 50.0),
-    "rsi_reset_max": (0.0, 100.0), "level_proximity_pct": (0.1, 10.0),
-    "max_concurrent_positions": (1, 20), "normal_lot_usd": (1.0, 1000.0),
-}
-_PROF_CLAMP = {
-    "trail_atr_mult": (0.5, 6.0), "profit_arm_pct": (0.5, 30.0), "time_exit_hours": (1.0, 1000.0),
-}
+from settings_spec import clamp_profile_value, clamp_value
 
 _LABELS = {
     "prof:squeeze:trail_atr_mult": "Squeeze · ATR Trail Multiple",
@@ -80,34 +71,29 @@ def _current_value(key: str, settings):
     return None
 
 
-def _clamp(val, lo, hi):
-    try:
-        return max(lo, min(hi, val))
-    except TypeError:
-        return val
-
-
 def build_diff(params: dict, settings) -> list[dict]:
     return [{"key": k, "target": _label(k), "current": _current_value(k, settings), "proposed": v}
             for k, v in params.items()]
 
 
 def apply_to_settings(settings, params: dict) -> list[dict]:
-    """Mutate `settings` in place with the proposal. Returns the list of applied changes."""
+    """Mutate `settings` in place with the proposal. Returns the list of applied changes.
+
+    All values are clamped to the hard bounds in settings_spec so a promoted
+    research proposal can never push RiskSettings out of a safe range.
+    """
     changed = []
     ov = {k: dict(v) for k, v in (getattr(settings, "profile_overrides", {}) or {}).items()}
     for k, v in params.items():
         if k.startswith("set:"):
             field = k[4:]
             if hasattr(settings, field):
-                lo, hi = _SET_CLAMP.get(field, (None, None))
-                val = _clamp(v, lo, hi) if lo is not None else v
+                val = clamp_value(field, v)
                 setattr(settings, field, val)
                 changed.append({"target": _label(k), "value": val})
         elif k.startswith("prof:"):
             _, strat, field = k.split(":", 2)
-            lo, hi = _PROF_CLAMP.get(field, (None, None))
-            val = _clamp(v, lo, hi) if lo is not None else v
+            val = clamp_profile_value(field, v)
             ov.setdefault(strat, {})[field] = val
             changed.append({"target": _label(k), "value": val})
     settings.profile_overrides = ov

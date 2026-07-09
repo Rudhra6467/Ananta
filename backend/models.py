@@ -231,7 +231,17 @@ class PendingOrder(BaseModel):
 
 # ---------- Settings ----------
 class RiskSettings(BaseModel):
-    """User-configurable risk thresholds and operational settings."""
+    """User-configurable risk thresholds and operational settings.
+
+    SINGLE SOURCE OF TRUTH for the live engine. Every trading/exit/risk decision
+    reads these values (via trading_engine.load_settings → the `settings` singleton
+    doc). It is written by exactly three paths — direct owner edits (PUT /api/settings),
+    approved Lab promotions (lab.proposals.apply_to_settings) and applied AI-Coach
+    tweaks (coach.validate_apply) — all clamped through settings_spec.
+
+    NOTE: the `strategy_configs` collection (Strategy Architect) is a design/versioning
+    layer and is NOT read by the engine yet (Phase 2). See CONFIG_ARCHITECTURE.md.
+    """
     model_config = ConfigDict(extra="ignore")
 
     id: str = "singleton"

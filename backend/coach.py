@@ -135,12 +135,25 @@ async def weekly_review(db, settings) -> dict:
 
 
 def validate_apply(setting_key: str, value) -> float | int:
+    """Validate one Coach-recommended tweak.
+
+    Two layers: (1) the Coach may only touch keys in APPLYABLE (a deliberately
+    NARROW advisory whitelist), and (2) the value is additionally clamped to the
+    global HARD bounds in settings_spec so it can never exceed a safe range even
+    if the advisory band is later widened.
+    """
     if setting_key not in APPLYABLE:
         raise ValueError(f"setting '{setting_key}' is not applyable")
     if not isinstance(value, (int, float)):
         raise ValueError("value must be numeric")
     lo, hi, _ = APPLYABLE[setting_key]
     clamped = max(lo, min(hi, value))
+    # defense-in-depth: never exceed the global hard bounds (single source of truth)
+    try:
+        from settings_spec import clamp_value
+        clamped = clamp_value(setting_key, clamped)
+    except Exception:  # noqa: BLE001 — advisory clamp already applied above
+        pass
     return int(clamped) if isinstance(APPLYABLE[setting_key][0], int) else float(clamped)
 
 

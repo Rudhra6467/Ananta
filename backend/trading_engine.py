@@ -119,6 +119,13 @@ async def set_symbol_cooldown(
 
 # ---------- persistence helpers ----------
 async def load_settings(db: AsyncIOMotorDatabase) -> RiskSettings:
+    """Load the `settings` singleton — the ONLY config the live engine reads.
+
+    All engine modules (trading_engine, exit_engine, risk_engine, position_watcher,
+    shadow_sim, levels, backtest) receive their configuration exclusively via the
+    RiskSettings returned here. Do not add engine reads from other collections
+    (e.g. strategy_configs); route new tunables through RiskSettings instead.
+    """
     doc = await db.settings.find_one({"id": "singleton"}, {"_id": 0})
     if not doc:
         s = RiskSettings()

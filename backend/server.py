@@ -1051,44 +1051,9 @@ async def update_settings(update: SettingsUpdate):
     if "trading_mode" in data and data["trading_mode"] not in ("PAPER", "DRY_RUN", "LIVE"):
         raise HTTPException(status_code=400, detail="trading_mode must be PAPER, DRY_RUN, or LIVE")
 
-    # clamp numeric fields
-    for k, lo, hi in [
-        ("max_spread_pct", 0.001, 5.0),
-        ("max_daily_loss_pct", 0.1, 50.0),
-        ("min_confidence", 0.0, 1.0),
-        ("position_size_pct_min", 0.1, 10.0),
-        ("position_size_pct_max", 0.1, 20.0),
-        ("normal_lot_usd", 1.0, 1000.0),
-        ("strong_lot_usd", 1.0, 1000.0),
-        ("strong_min_confidence", 0.0, 1.0),
-        ("strong_min_atr_percentile", 0.0, 100.0),
-        ("strong_min_adx", 0.0, 100.0),
-        ("stop_loss_pct", 0.1, 50.0),
-        ("trail_arm_pct", 0.1, 50.0),
-        ("trail_distance_pct", 0.1, 50.0),
-        ("vault_max_override_usd", 1.0, 1000000.0),
-        ("taker_fee_pct", 0.0, 5.0),
-        ("maker_fee_pct", 0.0, 5.0),
-        ("breakout_paper_slippage_pct", 0.0, 5.0),
-        ("breakout_lot_usd", 1.0, 10000.0),
-        ("breakout_min_confidence", 0.0, 1.0),
-        ("breakout_volume_percentile", 0.0, 100.0),
-        ("breakout_max_spread_pct", 0.0, 5.0),
-        ("breakout_trail_arm_pct", 0.1, 50.0),
-        ("breakout_trail_distance_pct", 0.1, 50.0),
-    ]:
-        if k in data and data[k] is not None:
-            data[k] = max(lo, min(hi, float(data[k])))
-    for k, lo, hi in [
-        ("sl_cooldown_seconds", 0, 86400),
-        ("trail_cooldown_seconds", 0, 86400),
-    ]:
-        if k in data and data[k] is not None:
-            data[k] = max(int(lo), min(int(hi), int(data[k])))
-    if "max_concurrent_positions" in data and data["max_concurrent_positions"] is not None:
-        data["max_concurrent_positions"] = max(1, min(20, int(data["max_concurrent_positions"])))
-    if "position_watcher_interval_seconds" in data and data["position_watcher_interval_seconds"] is not None:
-        data["position_watcher_interval_seconds"] = max(5, min(300, int(data["position_watcher_interval_seconds"])))
+    # clamp numeric fields to their hard bounds (single source: settings_spec)
+    from settings_spec import clamp_settings_dict  # noqa: PLC0415
+    clamp_settings_dict(data)
 
     # ignore masked secrets (frontend re-sends "••••••••")
     for k in ("coinbase_api_secret", "kraken_api_secret"):
@@ -1647,8 +1612,17 @@ async def lab_reject_proposal(prop_id: str):
 
 # ============================================================================ #
 # PLATFORM PHASE 1 — Strategy Registry + Parameter Schema + Strategy Configs
-# Additive + tenant-aware. Configs are sparse overrides with inheritance + versioning;
-# resolved params flatten schema defaults <- parent chain <- self. (Engine wiring = Phase 2.)
+# ---------------------------------------------------------------------------- #
+# OWNERSHIP: this `strategy_configs` collection is a DESIGN & VERSIONING layer
+# (Architect-authored, sparse overrides with inheritance + validation + rating).
+# It is NOT the live source of truth and is NOT read by the trading engine yet.
+# The engine reads ONLY RiskSettings (see settings_spec.py + CONFIG_ARCHITECTURE.md).
+#
+# PHASE 2 MIGRATION PATH (kept compatible on purpose): to make per-strategy configs
+# drive the engine, resolve each active config (resolve_config: schema defaults <-
+# parent chain <- self) and merge the resolved params into the RiskSettings passed
+# to the engine per strategy — RiskSettings stays the read interface, so no engine
+# module needs to change. Until then these endpoints are purely additive.
 # ============================================================================ #
 from strategy import (  # noqa: E402
     StrategyConfig,

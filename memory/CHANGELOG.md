@@ -629,3 +629,12 @@ Ported the last web polish items to the Expo mobile app; verified by mobile test
 - Live engine source of truth = **`RiskSettings`** singleton (read by trading/exit/risk engines).
 - `profile_overrides` is a **nested field inside RiskSettings** (Lab-promoted per-strategy exit overrides) — not a separate store.
 - `strategy_configs` collection = Architect-authored, versioned, validated/rated per-strategy param bundles that are **NOT yet wired to the engine** (server.py:1651 "Engine wiring = Phase 2"). Awaiting a direction decision before rewiring the live core.
+
+### P1 Settings Unification — Option A DONE (2026-07-09, backend-only)
+- **Single clamp registry** `backend/settings_spec.py` (`FLOAT_CLAMPS`/`INT_CLAMPS`/`PROFILE_CLAMPS` + `clamp_value`/`clamp_profile_value`/`clamp_settings_dict`). Now the ONE definition of tunable RiskSettings fields + hard bounds.
+- Refactored all three write-paths to use it: `PUT /api/settings` (update_settings), Lab promotion (`lab.proposals.apply_to_settings`), AI Coach apply (`coach.validate_apply`, advisory band + defense-in-depth hard clamp).
+- Removed duplicate clamp tables (inline list in update_settings, `_SET_CLAMP`/`_PROF_CLAMP` + dead `_clamp` in proposals).
+- Authoritative docs: `backend/CONFIG_ARCHITECTURE.md` (ownership map + promotion flow + Phase-2 migration path) and docstrings on `RiskSettings`, `load_settings`, and the strategy_configs section header.
+- Guard test `tests/test_config_architecture.py` (11 pass): clamp registry ↔ real fields, clamp bounds, and engine modules never access the `strategy_configs` collection.
+- Verified: PUT clamps out-of-range values (min_confidence 5→1.0, daily_loss 999→50); settings restored to defaults; lab proposals suite green. Backend-only, zero web/mobile impact.
+- NOTE: 4 pre-existing `*_requires_owner` failures in `test_iter29_demo_coach.py` are a test-harness quirk (shared authenticated session) — auth gating verified correct via curl (403). Not a regression.
