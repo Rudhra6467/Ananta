@@ -712,3 +712,37 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
   all pass; live exit path green. No regression.
 - REMAINING/BACKLOG: split Dashboard.jsx/Settings.jsx into smaller files; dedicated leaderboard
   aggregate endpoint; optional 1h timeframe.
+
+## V1 UX FREEZE — Phase 0 backend + Phase 2 Trade tab (2026-07-10)
+- NET-NEW BACKEND: POST /api/orders/manual (owner) — real paper BUY/SELL market+limit;
+  LIMIT-below-market rests via pending_orders engine; routes LIVE/DRY_RUN once the gate is armed.
+  Reuses _execute_buy/_execute_sell/_execute_partial_sell (PAPER) and place_buy/place_sell +
+  _record_live_buy/_record_live_sell (LIVE). Validations: missing amount 400, bad side 400,
+  sell-no-position 404, non-enabled symbol 400, public 403.
+- NET-NEW SETTING: RiskSettings.ask_ananta_enabled (+ SettingsUpdate) — owner feature toggle for the
+  Ask Ananta copilot, OFF by default (LLM only called on user send; frontend wiring in Phase 4).
+- MOBILE Trade tab (spatial redesign, /app/mobile/app/(tabs)/trade.tsx): subtabs Orders(default)/
+  Positions/History; Create Manual Order card (symbol pills, BUY/SELL, MKT/LMT, amount/%, confirm
+  alert); Active Strategies toggle grid (Switch -> strategy state endpoint); sticky bottom
+  [AI Trade Coach modal][Add Strategies -> strategy tab]; History 3 -> More -> 15 -> internal scroll;
+  denser padding. Kill switch moved to a compact chip in the mode bar.
+- WEB Trade parity (/app/frontend/src/pages/Trade.jsx): default subtab ORDERS; ManualOrder +
+  ActiveStrategies (shadcn Switch) added; feature parity, desktop grid preserved.
+- WORKSPACE ask_ananta toggle added on web (AskAnantaToggle section) + mobile (ws-copilot card).
+- TESTED (iter 40): backend pytest 11/11 (test_iter40_manual_order_and_ask_ananta.py); web + mobile
+  Trade + Workspace toggle green, parity verified. No regressions.
+
+### V1 UX FREEZE — REMAINING (source of truth: /app/memory/V1_UX_FREEZE.md)
+- P0 Phase 1 (rest): app-wide 8pt padding cut 20-35% + remove decorative eyebrow copy on Cockpit/
+  Strategy/Research/Workspace mobile screens; swipeable subtabs w/ animated auto-centering underline
+  (Trade currently uses Segmented, not the pager underline).
+- P0 Phase 2 (rest): Cockpit metric reflow (2-col generation->filter->qualified) + full-width
+  "Start Trading" CTA opening the Trading Wizard (Mode -> pick 1-3 strategies -> Paper/Backtest 70-30
+  or 100% -> Launch); move AI Coach out of Cockpit (done on Trade); Strategy Center "+" bottom sheet
+  (Import JSON / Manual Builder / AI Wizard) replacing the Import pill; Research + Workspace density
+  passes + renames ("Ananta Setup", "Stop Engine", Entry/Exit card clickable + edit icon).
+- P0 Phase 3 Onboarding: spotlight tour + first-visit tips + Help mode (backend prefs persistence).
+- P0 Phase 4 Ask Ananta: chip + context Q&A (reuse ai_analyst.answer_question w/ tab context) +
+  action-executor w/ confirm modals, gated by ask_ananta_enabled.
+- P1 Phase 5 polish; P0 Phase 6 full regression.
+- P3 backlog: shadow* -> boxShadow warnings; web select/option nesting warning.
