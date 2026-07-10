@@ -5,14 +5,18 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const SUGGESTIONS = {
-    dashboard: ["Today's performance", "Why were setups rejected?", "What's the market regime?", "Start paper trading"],
+    cockpit: ["Today's performance", "Why were setups rejected?", "What's the market regime?", "Start paper trading"],
     trade: ["Explain this position", "Pause Hunter", "Add a strategy", "Why is a trade open?"],
-    strategies: ["What's my best strategy?", "Explain Hunter", "Import or build a strategy"],
+    strategy: ["What's my best strategy?", "Explain Hunter", "Import or build a strategy"],
     research: ["How do I validate a strategy?", "Explain the AI score", "Why did this fail?"],
     workspace: ["Explain this page", "What does the exit engine do?", "Paper vs Live?", "Configure risk"],
 };
 
+// AppShell tab ids → canonical backend tab names.
+const TAB_MAP = { dashboard: "cockpit", trade: "trade", strategies: "strategy", research: "research", workspace: "workspace" };
+
 export default function AskAnanta({ tab }) {
+    const canonicalTab = TAB_MAP[tab] || tab;
     const { isOwner } = useAuth();
     const [enabled, setEnabled] = useState(false);
     const [open, setOpen] = useState(false);
@@ -38,7 +42,7 @@ export default function AskAnanta({ tab }) {
         setMsgs((m) => [...m, { role: "user", text: question }]);
         setQ(""); setBusy(true);
         try {
-            const r = await api.anantaAsk(question, session.current, tab);
+            const r = await api.anantaAsk(question, session.current, canonicalTab);
             session.current = r.session_id;
             setMsgs((m) => [...m, { role: "assistant", text: r.answer, actions: r.actions || [] }]);
         } catch (e) {
@@ -76,7 +80,7 @@ export default function AskAnanta({ tab }) {
                         {msgs.length === 0 ? (
                             <div className="space-y-2">
                                 <div className="font-mono text-[11px] text-atlas-textTertiary">Suggested for this tab:</div>
-                                {(SUGGESTIONS[tab] || SUGGESTIONS.dashboard).map((s) => (
+                                {(SUGGESTIONS[canonicalTab] || SUGGESTIONS.cockpit).map((s) => (
                                     <button key={s} onClick={() => send(s)} className="w-full text-left rounded-lg border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10 font-mono text-[12px] px-3 py-2 transition-colors">{s}</button>
                                 ))}
                             </div>

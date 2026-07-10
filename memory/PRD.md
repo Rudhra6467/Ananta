@@ -746,3 +746,32 @@ per run, async job queue (QUEUED->RUNNING->%->DONE) via worker/ProcessPool, manu
   action-executor w/ confirm modals, gated by ask_ananta_enabled.
 - P1 Phase 5 polish; P0 Phase 6 full regression.
 - P3 backlog: shadow* -> boxShadow warnings; web select/option nesting warning.
+
+## V1 UX FREEZE — Phases 2-6 COMPLETE (2026-07-10)
+- NET-NEW BACKEND: POST /api/ananta/ask (owner, gated by ask_ananta_enabled) — context-aware Q&A via
+  ai_analyst.answer_question with tab context + deterministic intent parser (_parse_ananta_intents)
+  returning suggested actions (strategy_disable/enable, open_research/wizard/strategy_add/workspace_setting).
+  403 when disabled, 400 empty. Client executes actions against EXISTING endpoints behind confirm.
+- ASK ANANTA UI (web src/components/AskAnanta.jsx mounted globally in AppShell; mobile
+  src/components/AskAnanta.tsx mounted on Cockpit/Strategy/Research/Workspace): floating chip bottom-left,
+  panel with per-tab suggestions, chat, and action-confirm buttons. Hidden unless owner + toggle ON.
+- TRADING WIZARD (web TradingWizard.jsx on Dashboard via cockpit-start-trading + ananta:wizard event;
+  mobile TradingWizard.tsx on Cockpit): Mode -> pick 1-3 strategies -> Paper Forward or Backtest
+  (70/30 or 100%, reuses /api/backtest/run preview) -> Launch (setEnvironment + enable strategies).
+- COCKPIT: 2-col metric reflow (Setups=executed, Scanned=detected, Rejected=detected-qualified,
+  Qualified) from /api/research/funnel; full-width Start Trading CTA.
+- STRATEGY CENTER: Add (+) menu replacing the Import pill — Import / Write / Describe&Build (AI).
+  Web = dropdown (strategy-add-btn/add-menu-*); mobile = bottom sheet (AddStrategySheet.tsx).
+- ONBOARDING: FirstVisitTip.tsx progressive dismissible hints (persisted) on Strategy + Workspace;
+  Workspace "Replay Guided Tour" = Help/replay of the onboarding pipeline.
+- COPY/DENSITY: Workspace retitled "Ananta Setup"; tab-question headers aligned to nav philosophy.
+- TESTED (iter 41): backend pytest 7/7 (test_iter41_ask_ananta.py); web + mobile all green, parity
+  verified, no critical bugs. ask_ananta_enabled reset to FALSE (off until launch).
+
+### V1 UX FREEZE — STATUS: functionally complete across all 6 phases.
+Remaining polish / backlog (non-blocking):
+- P3: shadow* -> boxShadow warnings; web select/option nesting warning.
+- P2: map imported free-text strategies (Pine/Freqtrade/Jesse) to structured declarative rules.
+- Nice-to-have: word-boundary matching in _parse_ananta_intents; extract ananta router from server.py
+  (>2900 lines); distinct mobile Manual/AI strategy builders (currently both route to /library/import);
+  animated auto-centering subtab underline (Trade currently uses Segmented control).
