@@ -10,9 +10,12 @@ import {
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAppData } from "@/context/AppDataContext";
+import { useAuth } from "@/context/AuthContext";
 import CandleChart from "@/components/CandleChart";
 import ManualExitButton from "@/components/ManualExitButton";
 import WatchlistControl from "@/components/WatchlistControl";
+import TradingWizard from "@/components/TradingWizard";
+import { Rocket } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 
 const SILVER = "#C0C5CE";
@@ -22,9 +25,17 @@ const MUTED = "#5C6370";
 
 export default function Dashboard() {
     const { portfolio, snapshots, enabledSymbols, trades, brain, summary, regime, refresh } = useAppData();
+    const { isOwner } = useAuth();
     const [selected, setSelected] = useState(null);
     const [candles, setCandles] = useState([]);
     const [loadingChart, setLoadingChart] = useState(false);
+    const [wizardOpen, setWizardOpen] = useState(false);
+
+    useEffect(() => {
+        const onWizard = () => setWizardOpen(true);
+        window.addEventListener("ananta:wizard", onWizard);
+        return () => window.removeEventListener("ananta:wizard", onWizard);
+    }, []);
 
     useEffect(() => {
         if (!selected && enabledSymbols.length) setSelected(enabledSymbols[0]);
@@ -44,10 +55,15 @@ export default function Dashboard() {
             <CoachBanner />
             <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} onChanged={refresh} />
+            <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
+                <Rocket className="w-4 h-4" /> START TRADING
+            </button>
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
             <AnalyticsGroup summary={summary} trades={trades} />
             <ConsolidatedPositions portfolio={portfolio} onDone={refresh} />
+            <TradingWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
         </div>
     );
 }

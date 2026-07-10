@@ -12,6 +12,7 @@ import OwnerAuthControl from "@/components/OwnerAuthControl";
 import AccountOverlay from "@/components/AccountOverlay";
 import AnantaLogo from "@/components/AnantaLogo";
 import OnboardingPipeline from "@/components/OnboardingPipeline";
+import AskAnanta from "@/components/AskAnanta";
 import { useAuth } from "@/context/AuthContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
@@ -123,6 +124,7 @@ function Shell() {
             <BottomNav active={active} onSelect={go} />
 
             <OnboardingPipeline open={tourOpen} onClose={closeTour} />
+            <AskAnanta tab={TABS[active].id} />
 
 
             <Toaster

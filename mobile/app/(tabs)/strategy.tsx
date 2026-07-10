@@ -8,6 +8,9 @@ import { useAuth } from "../../src/auth";
 import { Card } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
+import { AddStrategySheet } from "../../src/components/AddStrategySheet";
+import { AskAnanta } from "../../src/components/AskAnanta";
+import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { pct } from "../../src/format";
 
@@ -41,6 +44,7 @@ export default function StrategyLibrary() {
   const [favOnly, setFavOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [showFilter, setShowFilter] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
@@ -67,9 +71,17 @@ export default function StrategyLibrary() {
   const open = (s: any) => router.push(s.internal ? `/strategy/${s.engine_key}` : `/library/${s.id}`);
 
   return (
+    <View style={styles.fill}>
     <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.teal} />}>
-      <PageHeader title="Strategy Center" question="Browse the strategy library" />
+      <PageHeader title="Strategy Center" question="What do I own?" right={
+        isOwner ? (
+          <Pressable testID="strategy-add-btn" accessibilityLabel="Add Strategy" onPress={() => setAddOpen(true)} style={styles.addHeaderBtn}>
+            <Ionicons name="add" size={24} color={colors.bg} />
+          </Pressable>
+        ) : undefined
+      } />
+      <FirstVisitTip tipKey="strategy" text="Tap + to import or build a strategy. Filter and sort the leaderboard to find an edge." />
 
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
@@ -89,12 +101,6 @@ export default function StrategyLibrary() {
           <Ionicons name="options" size={12} color={activeCount ? colors.teal : colors.textMuted} />
           <Text style={[styles.chipTxt, activeCount > 0 && { color: colors.teal }]}>Filter{activeCount ? ` · ${activeCount}` : ""}</Text>
         </Pressable>
-        {isOwner && (
-          <Pressable testID="import-strategy-btn" onPress={() => router.push("/library/import")} style={[styles.chip, styles.importChip]}>
-            <Ionicons name="cloud-upload" size={12} color={colors.teal} />
-            <Text style={[styles.chipTxt, { color: colors.teal }]}>Import</Text>
-          </Pressable>
-        )}
       </ScrollView>
 
       <StrategyLeaderboard onOpen={open} />
@@ -172,6 +178,9 @@ export default function StrategyLibrary() {
         </View>
       </Modal>
     </ScrollView>
+    <AddStrategySheet visible={addOpen} onClose={() => setAddOpen(false)} />
+    <AskAnanta tab="strategy" />
+    </View>
   );
 }
 
@@ -235,6 +244,7 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
   importChip: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
   chipTxt: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
+  addHeaderBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.teal, alignItems: "center", justifyContent: "center" },
   gradeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, minWidth: 22, alignItems: "center" },
   gradeTxt: { fontSize: 10, fontWeight: "800" },
   sortChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },

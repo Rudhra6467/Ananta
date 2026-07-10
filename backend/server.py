@@ -731,6 +731,81 @@ async def analytics_ai_query(payload: AiQuery):
     return {"session_id": session_id, "answer": answer}
 
 
+ANANTA_TAB_CONTEXT = {
+    "cockpit": "This tab answers 'What is happening?' — portfolio value, market watchlist, engine status and recent AI decisions.",
+    "trade": "This tab answers 'What should I do?' — manual orders, active-strategy toggles, open positions and trade history.",
+    "strategy": "This tab answers 'What do I own?' — the strategy library, leaderboard and add/import flows.",
+    "research": "This tab answers 'Does it work?' — validation, analytics and closed-trade analysis.",
+    "workspace": "This tab answers 'How is my system configured?' — engine, risk, exchange connections and settings.",
+}
+
+
+def _parse_ananta_intents(question: str, schemas) -> list[dict]:
+    """Deterministic keyword intent parser → suggested actions the UI renders as
+    confirm buttons that call EXISTING endpoints. Never mutates anything itself."""
+    ql = question.lower()
+    actions: list[dict] = []
+    for s in schemas:
+        name = (s.name or "").lower()
+        key = (s.key or "").lower()
+        if not name and not key:
+            continue
+        if name in ql or (key and key in ql):
+            if any(w in ql for w in ["pause", "stop", "disable", "turn off", "halt", "shut"]):
+                actions.append({"type": "strategy_disable", "label": f"Pause {s.name}", "params": {"key": s.key}})
+            elif any(w in ql for w in ["enable", "resume", "turn on", "activate", "deploy"]):
+                actions.append({"type": "strategy_enable", "label": f"Enable {s.name}", "params": {"key": s.key}})
+            elif any(w in ql for w in ["research", "validate", "backtest", "test"]):
+                actions.append({"type": "open_research", "label": f"Validate {s.name}", "params": {"key": s.key}})
+    if any(w in ql for w in ["paper trading", "start paper", "start trading", "begin trading", "trading wizard"]):
+        actions.append({"type": "open_wizard", "label": "Open Trading Wizard", "params": {}})
+    if "stop loss" in ql or "stop-loss" in ql:
+        actions.append({"type": "open_workspace_setting", "label": "Adjust Stop Loss", "params": {"setting": "stop_loss_pct"}})
+    if any(w in ql for w in ["add strategy", "import strategy", "build a strategy", "create a strategy"]):
+        actions.append({"type": "open_strategy_add", "label": "Add / Import Strategy", "params": {}})
+    seen: set = set()
+    uniq: list[dict] = []
+    for a in actions:
+        k = (a["type"], a["params"].get("key") or a["params"].get("setting") or a["type"])
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(a)
+    return uniq[:4]
+
+
+class AnantaAsk(BaseModel):
+    question: str
+    session_id: str | None = None
+    tab: str | None = None
+    strategy: str | None = None
+
+
+@api_router.post("/ananta/ask", dependencies=[Depends(require_owner)])
+async def ananta_ask(payload: AnantaAsk):
+    """Ask Ananta — embedded, context-aware trading copilot. Gated by the
+    ask_ananta_enabled owner toggle; LLM is only invoked on send. Returns a
+    grounded answer plus suggested action buttons (executed by the client
+    against existing endpoints, always behind a confirmation)."""
+    settings = await load_settings(db)
+    if not getattr(settings, "ask_ananta_enabled", False):
+        raise HTTPException(status_code=403, detail="Ask Ananta is disabled. Enable it in Workspace.")
+    q = (payload.question or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="question is required")
+    session_id = payload.session_id or f"ananta-{uuid.uuid4().hex[:12]}"
+    tab = (payload.tab or "").lower()
+    tab_ctx = ANANTA_TAB_CONTEXT.get(tab, "")
+    scoped_q = (f"[Operator is on the {tab.upper()} tab. {tab_ctx}] " if tab_ctx else "") + q
+    try:
+        answer = await ai_analyst.answer_question(db, session_id, scoped_q, payload.strategy)
+    except Exception as e:  # noqa: BLE001
+        logger.error("ananta_ask failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Ask Ananta error: {e}")
+    actions = _parse_ananta_intents(q, list_schemas())
+    return {"session_id": session_id, "answer": answer, "actions": actions, "enabled": True}
+
+
 class CoachApply(BaseModel):
     setting_key: str
     value: float

@@ -1,0 +1,38 @@
+{
+  "summary": "V1 UX Freeze Phase 2 e2e (web+mobile+backend). Backend 7/7 pytest passed (POST /api/ananta/ask: public 401/403, disabled=false yields 403, empty question 400, 'Pause Hunter' returns strategy_disable action with params.key='hunter'; regressions: ask_ananta_enabled PUT persistence, /api/strategy/{key}/state disable+enable, /api/orders/manual paper BUY/SELL). WEB (owner logged in, ask_ananta_enabled=true, ananta_onboarded=1): cockpit-start-trading opens trading-wizard; wizard-mode-* (2), wizard-strategy-* (11), wizard-method-* (2), wizard-launch closes modal + fires ananta:wizard listener; ask-ananta-chip visible bottom-left, opens ask-ananta-panel, ask-ananta-send returns grounded answer + 1 ananta-action-strategy_disable button for 'Pause Hunter'; bottom-nav-strategies routes to strategy-center; strategy-add-btn opens add-menu with add-menu-import/manual/ai and Import opens the import-modal (Pine/Freqtrade/Jesse/JSON). MOBILE (Expo web preview after login-email-input + SKIP onboarding): cockpit-metric-setups=4, scanned=2000, rejected=1996, qualified=4 (real numbers, no dashes); Start Trading launches the Trading Wizard with 11 wizard-strategy-* and wizard-launch closes; ask-ananta-chip opens the panel, 'Pause Hunter' returns 'Hunter strategy is now **paused**...' + ananta-action-strategy_disable ('Pause Hunter'); Strategy tab shows tip-strategy (dismissed via tip-dismiss-strategy) and no legacy header-import-pill; strategy-add-btn opens sheet with add-menu-import/manual/ai; Workspace header title 'Ananta Setup' + ask-ananta-toggle + ws-copilot present; Trade regression: manual-order-submit, strategy-toggle-hunter, sticky-ai-coach, sticky-add-strategy all present. No parity issues.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter41_ask_ananta.py",
+    "/app/test_reports/pytest/iter41_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py continues to grow past 2900 lines; ananta_ask + _parse_ananta_intents (~L734–806) mix routing, intent parsing and copilot glue — consider moving to a dedicated ananta router module.",
+    "_parse_ananta_intents matches strategy name/key by substring against the raw question — 'continuation' (a common word) could false-positive; consider word-boundary matching.",
+    "AddStrategySheet routes all three menu items (import/manual/ai) to the same /library/import route — Write Strategy and Describe & Build should land on distinct builders (or clearly label the shared destination).",
+    "Web tab id is 'strategies' (plural) while route/testID naming elsewhere is singular ('strategy-add-btn', ANANTA_TAB_CONTEXT key 'strategy'). Consider standardising to avoid selector confusion in future test agents."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter41_ask_ananta.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (PREVIEW only, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None new. Regression BUY BTC $20 + SELL 50% BTC in PAPER mode as required by iter40 flow. ask_ananta_enabled left =true at end (per review note).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Web tab id for Strategy Center is 'strategies' (plural) — use [data-testid='bottom-nav-strategies'], not 'bottom-nav-strategy'. Mobile bottom tab testIDs use expo-router route names: tab-index (cockpit), tab-trade, tab-strategy, tab-research, tab-workspace (NOT 'text=Trade' — that collides with 'Avg Trade' analytics label). Ask Ananta test IDs mirror across web/mobile (ask-ananta-chip / -panel / -input / -send / -close / ananta-action-<type>). Global conftest auto-injects owner Bearer into mutating requests — use urllib.request to hit /api/ananta/ask and /api/orders/manual anonymously (bypasses monkeypatch). ask_ananta_enabled is currently TRUE.",
+  "rca of the issue": "N/A — no bugs found."
+}

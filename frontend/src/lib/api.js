@@ -80,6 +80,8 @@ export const api = {
     getEnvironment: () => client.get("/environment").then((r) => r.data),
     setEnvironment: (mode) => client.post(`/environment/${mode}`).then((r) => r.data),
     manualOrder: (payload) => client.post("/orders/manual", payload).then((r) => r.data),
+    anantaAsk: (question, sessionId, tab, strategy) => client.post("/ananta/ask", { question, session_id: sessionId, tab, strategy }).then((r) => r.data),
+    backtestRun: (payload) => client.post("/backtest/run", payload).then((r) => r.data),
     // --- Competition Demo Workspace ---
     demoStatus: () => client.get("/admin/demo/status").then((r) => r.data),
     demoLoad: () => client.post("/admin/demo/load").then((r) => r.data),

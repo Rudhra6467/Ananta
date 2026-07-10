@@ -46,6 +46,9 @@ export const api = {
   portfolio: () => get<any>("/portfolio"),
   closePosition: (base: string) => post<any>(`/positions/${base}/close`),
   manualOrder: (payload: Record<string, any>) => post<any>("/orders/manual", payload),
+  anantaAsk: (question: string, sessionId?: string, tab?: string, strategy?: string) =>
+    post<any>("/ananta/ask", { question, session_id: sessionId, tab, strategy }),
+  backtestRun: (payload: Record<string, any>) => post<any>("/backtest/run", payload),
   candles: (symbol: string, timeframe = "1h", limit = 48) =>
     get<any>(`/market/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=${limit}`),
   levels: (base: string) => get<any>(`/levels/${base}`),

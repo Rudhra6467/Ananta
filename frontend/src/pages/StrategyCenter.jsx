@@ -101,6 +101,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [filters, setFilters] = useState({});   // {field: [values]}
     const [favOnly, setFavOnly] = useState(false);
     const [showFilter, setShowFilter] = useState(false);
+    const [addMenu, setAddMenu] = useState(false);
 
     const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
 
@@ -143,10 +144,25 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                             activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
                         <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
                     </button>
-                    <button data-testid="import-strategy-btn" onClick={onImport}
-                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
-                        <Upload className="w-3 h-3" /> Import Strategy
-                    </button>
+                    <div className="ml-auto relative">
+                        <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddMenu((v) => !v)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
+                            <Plus className={`w-3.5 h-3.5 transition-transform ${addMenu ? "rotate-45" : ""}`} /> Add
+                        </button>
+                        {addMenu && (
+                            <div className="absolute right-0 mt-2 w-56 panel border-atlas-border rounded-xl p-1 z-20" data-testid="add-menu">
+                                <button data-testid="add-menu-import" onClick={() => { setAddMenu(false); onImport(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                    <Upload className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Import Strategy</span>
+                                </button>
+                                <button data-testid="add-menu-manual" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                    <Boxes className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Write Strategy</span>
+                                </button>
+                                <button data-testid="add-menu-ai" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                    <Sparkles className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Describe &amp; Build (AI)</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

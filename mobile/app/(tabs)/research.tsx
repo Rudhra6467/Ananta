@@ -9,6 +9,7 @@ import { useAuth } from "../../src/auth";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Segmented } from "../../src/components/Segmented";
 import { PageHeader } from "../../src/components/PageHeader";
+import { AskAnanta } from "../../src/components/AskAnanta";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { base } from "../../src/format";
 
@@ -78,6 +79,7 @@ export default function Research() {
           />
         )}
       />
+      <AskAnanta tab="research" />
     </View>
   );
 }

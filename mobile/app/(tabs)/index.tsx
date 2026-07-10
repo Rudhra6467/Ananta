@@ -23,20 +23,23 @@ import { Logo } from "../../src/components/Logo";
 import { AITimeline } from "../../src/components/AITimeline";
 import { PositionCard } from "../../src/components/PositionCard";
 import { LoadingView, ErrorView } from "../../src/components/StateView";
+import { TradingWizard } from "../../src/components/TradingWizard";
+import { AskAnanta } from "../../src/components/AskAnanta";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { usd, pct, price, base } from "../../src/format";
 
 const RAIL_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "AVAX/USD"];
 
 async function loadCockpit() {
-  const [portfolio, environment, market, risk, reasoning] = await Promise.all([
+  const [portfolio, environment, market, risk, reasoning, funnel] = await Promise.all([
     api.portfolio(),
     api.getEnvironment(),
     api.marketSnapshots(),
     api.riskStatus(),
     api.reasoning(12),
+    api.researchFunnel().catch(() => null),
   ]);
-  return { portfolio, environment, market, risk, reasoning };
+  return { portfolio, environment, market, risk, reasoning, funnel };
 }
 
 function botStatus(risk: any, positions: any[]) {
@@ -51,6 +54,7 @@ export default function Cockpit() {
   const router = useRouter();
   const { isOwner } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const { data, loading, error, refreshing, refresh } = useFetch(loadCockpit, [], 15000);
 
   const onRetry = useCallback(() => refresh(), [refresh]);
@@ -70,8 +74,14 @@ export default function Cockpit() {
 
   const railMap = new Map(snaps.map((s) => [s.symbol, s]));
   const rail = snaps.length ? snaps : RAIL_SYMBOLS.map((sym) => railMap.get(sym)).filter(Boolean);
+  const fn = (data!.funnel && (data!.funnel.funnel || data!.funnel)) || {};
+  const mScanned = fn.detected ?? "—";
+  const mQualified = fn.qualified ?? "—";
+  const mSetups = fn.executed ?? "—";
+  const mRejected = (typeof fn.detected === "number" && typeof fn.qualified === "number") ? fn.detected - fn.qualified : "—";
 
   return (
+    <View style={styles.fill}>
     <ScrollView
       style={styles.fill}
       contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: spacing.xxl }}
@@ -107,6 +117,20 @@ export default function Cockpit() {
           </Text>
           <Text style={styles.heroToday}>today</Text>
         </View>
+      </View>
+
+      {/* Generation → filter → qualified metrics (2-col) */}
+      <View style={styles.sectionPad}>
+        <View style={styles.metricGrid}>
+          <MetricCell testID="cockpit-metric-setups" label="Setups" value={mSetups} />
+          <MetricCell testID="cockpit-metric-scanned" label="Scanned" value={mScanned} />
+          <MetricCell testID="cockpit-metric-rejected" label="Rejected" value={mRejected} tone={colors.red} />
+          <MetricCell testID="cockpit-metric-qualified" label="Qualified" value={mQualified} tone={colors.teal} />
+        </View>
+        <Pressable testID="cockpit-start-trading" onPress={() => (isOwner ? setWizardOpen(true) : Alert.alert("Owner login required"))} style={styles.startBtn}>
+          <Ionicons name="rocket" size={18} color={colors.bg} />
+          <Text style={styles.startTxt}>Start Trading</Text>
+        </Pressable>
       </View>
 
       {/* Active Watchlist rail */}
@@ -191,6 +215,18 @@ export default function Cockpit() {
       </View>
       <AddAssetModal visible={addOpen} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); refresh(); }} />
     </ScrollView>
+    <TradingWizard visible={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
+    <AskAnanta tab="cockpit" />
+    </View>
+  );
+}
+
+function MetricCell({ label, value, tone, testID }: { label: string; value: any; tone?: string; testID?: string }) {
+  return (
+    <View style={styles.metricCell} testID={testID}>
+      <Text style={type.label}>{label}</Text>
+      <Text style={[styles.metricValue, tone ? { color: tone } : null]}>{String(value)}</Text>
+    </View>
   );
 }
 
@@ -322,4 +358,9 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   statusLabel: { fontSize: 17, fontWeight: "800", marginTop: 2 },
   flat: { color: colors.textMuted, fontSize: 14 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  metricCell: { width: "48%", flexGrow: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md },
+  metricValue: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 2 },
+  startBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 14, marginTop: spacing.md },
+  startTxt: { color: colors.bg, fontWeight: "800", fontSize: 15, letterSpacing: 0.5 },
 });

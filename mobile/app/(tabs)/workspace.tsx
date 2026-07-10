@@ -9,6 +9,8 @@ import { setItem } from "../../src/storage";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
+import { AskAnanta } from "../../src/components/AskAnanta";
+import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { LESSONS } from "../../src/academy";
 
@@ -46,8 +48,10 @@ export default function Workspace() {
   const replayTour = async () => { await setItem("ananta_onboarded", "0"); router.push("/onboarding"); };
 
   return (
+    <View style={styles.fill}>
     <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
-      <PageHeader title="Workspace" question="How is Ananta set up?" />
+      <PageHeader title="Ananta Setup" question="How is my system configured?" />
+      <FirstVisitTip tipKey="workspace" text="Configure your exit engine and risk before going live. Use Replay Guided Tour anytime." />
 
       {/* Engine & Risk */}
       <Card style={{ marginBottom: spacing.md }} testID="ws-settings">
@@ -136,6 +140,8 @@ export default function Workspace() {
         </View>
       </Modal>
     </ScrollView>
+    <AskAnanta tab="workspace" />
+    </View>
   );
 }
 
