@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/context/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import ManualExitButton from "@/components/ManualExitButton";
 import PendingOrders from "@/components/PendingOrders";
@@ -30,14 +31,19 @@ export default function Trade() {
     const [analytics, setAnalytics] = useState(null);
     const [excludeSynthetic, setExcludeSynthetic] = useState(false);
     const [killed, setKilled] = useState(false);
+    const [symbols, setSymbols] = useState([]);
+    const [strategies, setStrategies] = useState([]);
 
     const positions = (portfolio?.positions || []).filter((p) => p.quantity > 0);
     const closed = (trades || []).filter((t) => t.side === "SELL" && (t.status || "FILLED") === "FILLED");
 
+    const reloadStrategies = () => api.strategyMetrics().then((d) => setStrategies(Object.values(d?.metrics || {}))).catch(() => {});
+
     useEffect(() => {
         const load = () => {
             api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {});
-            api.settings().then((s) => setKilled(!!s.manual_kill_switch)).catch(() => {});
+            api.settings().then((s) => { setKilled(!!s.manual_kill_switch); setSymbols(s.enabled_symbols || []); }).catch(() => {});
+            reloadStrategies();
         };
         load();
         const t = setInterval(load, 12000);
@@ -78,21 +84,145 @@ export default function Trade() {
                 </button>
             </div>
 
-            <Tabs defaultValue="positions" className="atlas-tabs">
+            <Tabs defaultValue="orders" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
-                    <SubTab value="positions" label="POSITIONS" count={positions.length} icon={Layers} />
                     <SubTab value="orders" label="ORDERS" count={pending.length} icon={ListOrdered} />
+                    <SubTab value="positions" label="POSITIONS" count={positions.length} icon={Layers} />
                     <SubTab value="history" label="HISTORY" count={closed.length} icon={Archive} />
                     <SubTab value="performance" label="PERFORMANCE" icon={BarChart3} />
                 </TabsList>
 
+                <TabsContent value="orders" className="m-0 space-y-5">
+                    <ManualOrder isOwner={isOwner} symbols={symbols} onDone={() => api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {})} />
+                    <ActiveStrategies isOwner={isOwner} strategies={strategies} onDone={reloadStrategies} />
+                    <PendingOrders pending={pending} />
+                </TabsContent>
                 <TabsContent value="positions" className="m-0"><Holdings positions={positions} portfolio={portfolio} /></TabsContent>
-                <TabsContent value="orders" className="m-0"><PendingOrders pending={pending} /></TabsContent>
                 <TabsContent value="history" className="m-0"><ClosedPositions closed={closed} /></TabsContent>
                 <TabsContent value="performance" className="m-0">
                     <AnalyticsPanel analytics={analytics} excludeSynthetic={excludeSynthetic} onToggleSynthetic={setExcludeSynthetic} />
                 </TabsContent>
             </Tabs>
+        </div>
+    );
+}
+
+function ManualOrder({ isOwner, symbols, onDone }) {
+    const [sym, setSym] = useState("");
+    const [side, setSide] = useState("BUY");
+    const [otype, setOtype] = useState("MARKET");
+    const [notional, setNotional] = useState("100");
+    const [fraction, setFraction] = useState("100");
+    const [limit, setLimit] = useState("");
+    const [busy, setBusy] = useState(false);
+    const symList = symbols || [];
+    const activeSym = sym || symList[0] || "";
+
+    const submit = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        const b = (activeSym || "").split("/")[0];
+        if (!b) { toast.error("Select a symbol"); return; }
+        const payload = { symbol: b, side, order_type: otype };
+        if (side === "BUY") {
+            const n = parseFloat(notional);
+            if (!(n > 0)) { toast.error("Enter a valid USD amount"); return; }
+            payload.notional_usd = n;
+        } else {
+            const f = parseFloat(fraction);
+            if (!(f > 0)) { toast.error("Enter a valid % to sell"); return; }
+            payload.fraction = Math.min(1, Math.max(0, f / 100));
+        }
+        if (otype === "LIMIT") {
+            const lp = parseFloat(limit);
+            if (!(lp > 0)) { toast.error("Enter a valid limit price"); return; }
+            payload.limit_price = lp;
+        }
+        setBusy(true);
+        try {
+            const r = await api.manualOrder(payload);
+            toast.success(r?.resting ? "Limit order resting" : `${side} ${b} filled`);
+            onDone && onDone();
+        } catch (e) { toast.error("Order failed", { description: String(e?.response?.data?.detail || e?.message || e) }); }
+        finally { setBusy(false); }
+    };
+
+    return (
+        <div className="panel border-atlas-border rounded-2xl p-5" data-testid="manual-order-card">
+            <div className="label-tag mb-3">CREATE MANUAL ORDER</div>
+            <div className="flex gap-2 flex-wrap mb-4">
+                {symList.map((s) => {
+                    const b = s.split("/")[0];
+                    return (
+                        <button key={s} data-testid={`manual-order-sym-${b}`} onClick={() => setSym(s)}
+                            className={`text-[11px] font-mono font-bold px-3 py-1.5 rounded-full border transition-colors ${activeSym === s ? "border-atlas-cyan bg-atlas-cyan text-black" : "border-atlas-border text-atlas-textSecondary hover:text-white"}`}>{b}</button>
+                    );
+                })}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+                <Seg options={[["BUY", "BUY"], ["SELL", "SELL"]]} value={side} onChange={setSide} testid="manual-order-side" />
+                <Seg options={[["MARKET", "MARKET"], ["LIMIT", "LIMIT"]]} value={otype} onChange={setOtype} testid="manual-order-type" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                {side === "BUY" ? (
+                    <NumField label="AMOUNT (USD)" value={notional} onChange={setNotional} testid="manual-order-notional" />
+                ) : (
+                    <NumField label="SELL % OF POSITION" value={fraction} onChange={setFraction} testid="manual-order-fraction" />
+                )}
+                {otype === "LIMIT" && <NumField label="LIMIT PRICE" value={limit} onChange={setLimit} testid="manual-order-limit" />}
+            </div>
+            <button data-testid="manual-order-submit" disabled={busy} onClick={submit}
+                className={`mt-4 w-full rounded-lg py-3 font-mono text-xs font-bold tracking-widest transition-colors ${side === "SELL" ? "bg-atlas-negative text-white hover:opacity-90" : "bg-atlas-cyan text-black hover:opacity-90"} disabled:opacity-50`}>
+                {busy ? "PLACING…" : `${side} ${(activeSym || "").split("/")[0]}`}
+            </button>
+        </div>
+    );
+}
+
+function Seg({ options, value, onChange, testid }) {
+    return (
+        <div className="flex bg-atlas-panelHover rounded-lg p-1 border border-atlas-border">
+            {options.map(([k, l]) => (
+                <button key={k} data-testid={`${testid}-${k.toLowerCase()}`} onClick={() => onChange(k)}
+                    className={`flex-1 text-[11px] font-mono font-bold tracking-wider py-2 rounded-md transition-colors ${value === k ? "bg-atlas-cyan text-black" : "text-atlas-textSecondary hover:text-white"}`}>{l}</button>
+            ))}
+        </div>
+    );
+}
+
+function NumField({ label, value, onChange, testid }) {
+    return (
+        <div>
+            <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mb-1">{label}</div>
+            <input data-testid={testid} inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)}
+                className="w-full bg-atlas-bg border border-atlas-border rounded-lg px-3 py-2.5 font-mono text-sm text-white focus:border-atlas-cyan outline-none" />
+        </div>
+    );
+}
+
+function ActiveStrategies({ isOwner, strategies, onDone }) {
+    const toggle = async (key, isOn) => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        try { isOn ? await api.strategySetState(key, { status: "DISABLED" }) : await api.strategySetState(key, { enabled: true }); onDone && onDone(); }
+        catch (e) { toast.error("Toggle failed", { description: String(e?.message || e) }); }
+    };
+    if (!strategies || strategies.length === 0) return null;
+    return (
+        <div className="panel border-atlas-border rounded-2xl p-5" data-testid="active-strategies-card">
+            <div className="label-tag mb-3">ACTIVE STRATEGIES</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {strategies.map((s) => {
+                    const isOn = !!s.enabled && s.status !== "DISABLED" && s.status !== "ERROR";
+                    return (
+                        <div key={s.key} className="flex items-center justify-between rounded-lg border border-atlas-border px-4 py-3 bg-atlas-bg/40">
+                            <div className="min-w-0 mr-3">
+                                <div className="font-mono text-sm text-white font-bold truncate">{s.name}</div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider">{s.status} · {s.trades} trades · WR {s.win_rate}%</div>
+                            </div>
+                            <Switch data-testid={`strategy-toggle-${s.key}`} checked={isOn} onCheckedChange={() => toggle(s.key, isOn)} />
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }

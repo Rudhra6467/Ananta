@@ -35,6 +35,11 @@ export default function Workspace() {
                 <SettingsPage />
             </Section>
 
+            {/* Ask Ananta (AI Copilot) */}
+            <Section icon={Sparkles} title="Ask Ananta" subtitle="Embedded AI copilot — Q&A and action execution">
+                <AskAnantaToggle isOwner={isOwner} />
+            </Section>
+
             {/* Learn & Compete */}
             <Section icon={GraduationCap} title="Learn & Compete" subtitle="Education and the judge-ready demo experience">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
@@ -88,6 +93,31 @@ export default function Workspace() {
                     </div>
                 </div>
             </Section>
+        </div>
+    );
+}
+
+function AskAnantaToggle({ isOwner }) {
+    const [on, setOn] = useState(false);
+    useEffect(() => { api.settings().then((s) => setOn(!!s.ask_ananta_enabled)).catch(() => {}); }, []);
+    const toggle = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        try { const s = await api.updateSettings({ ask_ananta_enabled: !on }); setOn(!!s.ask_ananta_enabled); toast.success(`Ask Ananta ${!on ? "enabled" : "disabled"}`); }
+        catch (e) { toast.error("Update failed", { description: String(e?.message || e) }); }
+    };
+    return (
+        <div className="panel border-atlas-border rounded-xl p-5 flex items-center justify-between gap-4" data-testid="ws-ask-ananta">
+            <div>
+                <div className="font-heading text-base text-atlas-text mb-1">AI Copilot</div>
+                <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed max-w-lg">
+                    An embedded assistant that answers questions about your system and can execute actions
+                    (with a confirmation step). Kept off until launch. LLM is only called when you send a message.
+                </p>
+            </div>
+            <button data-testid="ask-ananta-toggle" onClick={toggle} role="switch" aria-checked={on}
+                className={`relative w-12 h-7 rounded-full border transition-colors shrink-0 ${on ? "bg-atlas-cyan border-atlas-cyan" : "bg-atlas-panelHover border-atlas-border"}`}>
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${on ? "left-6" : "left-0.5"}`} />
+            </button>
         </div>
     );
 }

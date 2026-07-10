@@ -139,6 +139,7 @@ class SettingsUpdate(BaseModel):
     trail_cooldown_seconds: int | None = None
     trading_mode: str | None = None  # PAPER / DRY_RUN / LIVE
     manual_kill_switch: bool | None = None
+    ask_ananta_enabled: bool | None = None
     enabled_symbols: list[str] | None = None
     coinbase_api_key: str | None = None
     coinbase_api_secret: str | None = None
@@ -303,6 +304,149 @@ async def manual_close_position(base: str):
         pass
 
     return {"ok": True, "symbol": symbol, "exit_reason": "MANUAL_EXIT", "trade": trade_doc}
+
+
+class ManualOrderReq(BaseModel):
+    symbol: str                       # base ("BTC") or pair ("BTC/USD")
+    side: str                         # BUY | SELL
+    order_type: str = "MARKET"        # MARKET | LIMIT
+    notional_usd: float | None = None  # BUY sizing (USD to deploy)
+    quantity: float | None = None      # explicit units (BUY or SELL)
+    limit_price: float | None = None   # required for LIMIT
+    fraction: float | None = None      # partial SELL, 0..1 (PAPER)
+
+
+@api_router.post("/orders/manual", dependencies=[Depends(require_owner)])
+async def place_manual_order(order: ManualOrderReq):
+    """Owner manual order — real paper BUY/SELL (market or limit); routes a live
+    order in LIVE/DRY_RUN once the exchange gate is armed. Reuses the same sizing
+    and execution primitives as the engine so fills/fees/P&L stay consistent."""
+    from trading_engine import (
+        _execute_buy, _execute_sell, _execute_partial_sell,
+        _record_live_buy, _record_live_sell, save_portfolio,
+    )
+    from position_watcher import _route_executor
+    from models import TradeLog, AIReasoning, PendingOrder, compute_return_and_hold
+
+    side = (order.side or "").upper()
+    otype = (order.order_type or "MARKET").upper()
+    if side not in ("BUY", "SELL"):
+        raise HTTPException(status_code=400, detail="side must be BUY or SELL")
+    if otype not in ("MARKET", "LIMIT"):
+        raise HTTPException(status_code=400, detail="order_type must be MARKET or LIMIT")
+    if otype == "LIMIT" and not (order.limit_price and order.limit_price > 0):
+        raise HTTPException(status_code=400, detail="limit_price required for LIMIT orders")
+
+    symbol = order.symbol if "/" in order.symbol else f"{order.symbol.upper()}/USD"
+    settings = await load_settings(db)
+    if symbol not in settings.enabled_symbols:
+        raise HTTPException(status_code=400, detail=f"{symbol} is not an enabled symbol")
+
+    snap = await fetch_snapshot(symbol)
+    if snap is None:
+        raise HTTPException(status_code=503, detail=f"No live price for {symbol}; cannot route order")
+
+    portfolio = await load_portfolio(db)
+    executor, trade_mode = await _route_executor(settings)
+
+    reasoning = AIReasoning(
+        symbol=symbol, bias="NEUTRAL", confidence=0.0,
+        reason=f"Manual {side} order (owner-triggered, {otype})",
+        news_summary="(manual order; no AI call)",
+        evidence={"source": "owner", "order_type": otype, "manual": True},
+        decision=side,
+    )
+    await db.reasoning.insert_one(reasoning.model_dump())
+
+    if side == "BUY":
+        ref_price = order.limit_price if (otype == "LIMIT" and order.limit_price) else snap.ask
+        if order.quantity and order.quantity > 0:
+            qty = float(order.quantity)
+        elif order.notional_usd and order.notional_usd > 0:
+            qty = float(order.notional_usd) / ref_price if ref_price > 0 else 0.0
+        else:
+            raise HTTPException(status_code=400, detail="provide notional_usd or quantity for BUY")
+        if qty <= 0:
+            raise HTTPException(status_code=400, detail="computed quantity is zero")
+
+        # LIMIT below market → rest a maker order (PAPER path uses the pending-order engine)
+        if otype == "LIMIT" and order.limit_price < snap.ask and executor is None:
+            pending = PendingOrder(
+                symbol=symbol, side="BUY", quantity=qty, limit_price=float(order.limit_price),
+                mode="PAPER", reasoning_id=reasoning.id,
+            )
+            await db.pending_orders.insert_one(pending.model_dump())
+            return {"ok": True, "resting": True, "order": pending.model_dump()}
+
+        if executor is not None:
+            result = await executor.place_buy(
+                symbol=symbol, desired_notional=qty * snap.ask, max_cash=portfolio.cash,
+                ask=snap.ask, max_spread_pct=settings.max_spread_pct,
+                order_style="POST_ONLY" if otype == "LIMIT" else "MARKET",
+            )
+            trade_doc = await _record_live_buy(
+                db, portfolio, symbol, result, reasoning,
+                macro_confidence=0.0, fusion_summary="MANUAL BUY (owner)", mode=trade_mode,
+            )
+        else:
+            fill_price = snap.ask
+            notional, fee = _execute_buy(portfolio, symbol, qty, fill_price, settings.taker_fee_pct)
+            if notional <= 0:
+                raise HTTPException(status_code=409, detail="Order declined — insufficient cash")
+            trade = TradeLog(
+                symbol=symbol, side="BUY", quantity=qty, price=fill_price, notional=notional,
+                mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, fee_usd=fee,
+                slippage_usd=0.0, note="MANUAL BUY (owner)", strategy="manual",
+            )
+            await db.trades.insert_one(trade.model_dump())
+            await save_portfolio(db, portfolio)
+            trade_doc = trade.model_dump()
+        return {"ok": True, "resting": False, "trade": trade_doc}
+
+    # ---- SELL ----
+    pos = next((p for p in portfolio.positions if p.symbol == symbol and p.quantity > 0), None)
+    if pos is None:
+        raise HTTPException(status_code=404, detail=f"No open position for {symbol} to sell")
+    if otype == "LIMIT" and order.limit_price > snap.bid:
+        raise HTTPException(
+            status_code=400,
+            detail="Resting sell-limit above market isn't supported yet — use Market or a marketable limit.",
+        )
+    fraction = order.fraction
+    if order.quantity and order.quantity > 0:
+        fraction = max(0.0, min(1.0, float(order.quantity) / pos.quantity))
+    fraction = 1.0 if fraction is None else max(0.0, min(1.0, fraction))
+    sell_qty = pos.quantity * fraction
+
+    if executor is not None:
+        result = await executor.place_sell(
+            symbol=symbol, qty=sell_qty, bid=snap.bid, max_spread_pct=settings.max_spread_pct,
+        )
+        trade_doc = await _record_live_sell(
+            db, portfolio, symbol, result, reasoning,
+            macro_confidence=0.0, fusion_summary="MANUAL SELL (owner)",
+            mode=trade_mode, exit_reason="MANUAL_ORDER", expected_trigger_price=snap.bid,
+        )
+    else:
+        if fraction >= 1.0:
+            qty, notional, realized, fee = _execute_sell(portfolio, symbol, snap.bid, settings.taker_fee_pct)
+        else:
+            qty, notional, realized, fee = _execute_partial_sell(portfolio, symbol, snap.bid, fraction, settings.taker_fee_pct)
+        if qty <= 0:
+            raise HTTPException(status_code=409, detail="Sell declined (rounding/empty position)")
+        _ret, _hold = compute_return_and_hold(pos.avg_cost, pos.entry_timestamp, snap.bid)
+        trade = TradeLog(
+            symbol=symbol, side="SELL", quantity=qty, price=snap.bid, notional=notional,
+            mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, pnl=realized, fee_usd=fee,
+            slippage_usd=0.0, note="MANUAL SELL (owner)", exit_reason="MANUAL_ORDER",
+            strategy=pos.strategy, sector=pos.sector, entry_price=pos.avg_cost,
+            entry_timestamp=pos.entry_timestamp, return_pct=_ret, hold_seconds=_hold,
+            trade_result=("WIN" if realized > 0 else "LOSS" if realized < 0 else "BREAKEVEN"),
+        )
+        await db.trades.insert_one(trade.model_dump())
+        await save_portfolio(db, portfolio)
+        trade_doc = trade.model_dump()
+    return {"ok": True, "resting": False, "trade": trade_doc}
 
 
 @api_router.post("/history/clear", dependencies=[Depends(require_owner)])

@@ -1,0 +1,36 @@
+{
+  "summary": "V1 UX Freeze e2e: manual orders + ask_ananta toggle + strategy state toggle. Backend 11/11 pytest passed (POST /api/orders/manual paper BUY market notional, LIMIT-below-market rests, paper SELL fraction, sell-no-position 404, bad-side 400, missing-amount 400, symbol-not-enabled 400, public 403; ask_ananta_enabled PUT+GET persistence; strategy state disable/enable). WEB (/): after clicking bottom-nav-trade, ORDERS subtab is active by default; manual-order-card + active-strategies-card render; strategy-toggle-supertrend flipped true->false; ask-ananta-toggle flipped false->true and persisted (toast 'Ask Ananta disabled' on revert). MOBILE (Expo): owner sign-in + onboarding skip works; Trade tab shows ORDERS default with manual-order-card/submit/notional/side-buy, strategy-toggle-hunter, sticky-ai-coach + sticky-add-strategy; Workspace shows ask-ananta-toggle. No parity divergence.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_manual_order_and_ask_ananta.py",
+    "/app/test_reports/pytest/iter40_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 1500+ lines (Trade + Settings + Watchlist + Backtest + Coach + Research all in one). Consider splitting into routers per domain to keep files under ~700 lines.",
+    "SELL LIMIT above bid raises 400 (limit_price > snap.bid) but the check uses order.limit_price directly without a None-guard when otype=='LIMIT' and limit_price is None — earlier LIMIT block already validates limit_price>0, so this is safe; still worth an explicit assert for clarity."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter40_manual_order_and_ask_ananta.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — PREVIEW only)",
+  "seed_data_creation": "None. Manual paper BUY (BTC $20, ETH $30, ARB $20) and paper SELL 50% ETH were placed against the paper ledger as expected by the review request.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auth token localStorage key on WEB is 'ananta_owner_token' (not ananta_auth_token). AppShell renders tabs client-side; there is no /trade or /workspace route — click [data-testid='bottom-nav-trade' / -workspace'] instead. First-visit onboarding is gated by localStorage['ananta_onboarded']; set it to '1' to skip. Global conftest.py auto-injects owner Bearer into mutating requests — to test public 403 you must bypass requests.Session (use urllib). Mobile app has an owner login screen + a per-session onboarding animation ending in 'ENTER ANANTA' (SKIP works too).",
+  "rca of the issue": "N/A — no bugs found."
+}

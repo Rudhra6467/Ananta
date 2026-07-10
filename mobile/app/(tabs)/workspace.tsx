@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, Modal, Alert, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, Modal, Alert, ActivityIndicator, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -59,6 +59,19 @@ export default function Workspace() {
             <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={saveSetting} />
           </>
         ) : <ActivityIndicator color={colors.teal} />}
+      </Card>
+
+      {/* AI Copilot toggle (Ask Ananta) */}
+      <Card style={{ marginBottom: spacing.md }} testID="ws-copilot">
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <SectionLabel>ASK ANANTA (AI COPILOT)</SectionLabel>
+            <Text style={type.small}>Embedded AI assistant that answers questions and can execute actions with confirmation. Off until launch.</Text>
+          </View>
+          <Switch testID="ask-ananta-toggle" value={!!settings?.ask_ananta_enabled} disabled={!isOwner}
+            onValueChange={async (v) => { if (!isOwner) return Alert.alert("Owner login required"); try { const s = await api.updateSettings({ ask_ananta_enabled: v }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); } }}
+            trackColor={{ true: colors.tealDim, false: colors.cardBorder }} thumbColor={settings?.ask_ananta_enabled ? colors.teal : colors.textFaint} />
+        </View>
       </Card>
 
       {/* Competition Demo */}

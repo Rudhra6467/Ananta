@@ -331,6 +331,7 @@ class RiskSettings(BaseModel):
     # operational
     trading_mode: Literal["PAPER", "DRY_RUN", "LIVE"] = "PAPER"
     manual_kill_switch: bool = False  # explicit halt
+    ask_ananta_enabled: bool = False  # owner feature toggle: embedded AI copilot (off until launch)
     enabled_symbols: List[str] = Field(default_factory=lambda: ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "XRP/USD", "PAXG/USD", "LINK/USD", "AAVE/USD", "ARB/USD", "RENDER/USD"])
     # exchange API keys (stored encrypted-at-rest in real prod; here plain for demo)
     coinbase_api_key: str = ""
