@@ -1,3 +1,24 @@
+## 2026-07-11f — Launch Page refit + Sign Up funnel + Dashboard status toast (web)
+
+- **Launch Page** (`pages/LaunchPage.jsx`): refit to a single screen (`h-screen overflow-hidden`,
+  tightened spacing) so header + hero + 2 CTAs + 3 feature cards + tagline fit without scroll.
+  "Skip to homepage" moved to a fixed **bottom-right** pill (`data-testid=skip-to-homepage`).
+  All CTAs (Start Free Trial, Watch Video, feature cards, top-right profile) now route a PUBLIC
+  visitor to `/signup`; the owner goes straight to `/`.
+- **Sign Up page** (new `pages/SignUp.jsx`, route `/signup` in `App.js`): single-screen name+email
+  form that funnels into the existing Waitlist Access-Gate — submit calls `POST /api/access/request`,
+  shows a success toast, then routes to `/`. Owner bypasses to `/`. Includes a bottom-right skip link.
+- **Dashboard status toast** (`pages/Dashboard.jsx`): one-time-per-session toast (4s) reading
+  "Ananta Status: 4 paper trading strategies are currently live and monitoring the markets." with a
+  "View Active Strategies" action that switches to the Strategy tab. Fixed a React.StrictMode
+  double-mount issue by stamping the `ananta_status_toast_seen` sessionStorage flag INSIDE the
+  timeout (with a re-check guard) so the toast reliably fires exactly once.
+- Verified: iter47 testing agent — backend 6/6 pass; SignUp submit navigates home in ~0.07s (real
+  browser); launch single-screen + CTA funnel confirmed; Dashboard toast confirmed firing after fix.
+- Note: the screenshot (Playwright) tool intermittently showed app-initiated POSTs hanging in this
+  Cloudflare-fronted preview — NOT reproducible in normal browser automation; backend healthy.
+
+
 ## 2026-07-11e — Research validate multi-select + Workspace "AI Analytics" compact copilot (web)
 
 - **Research › Validate › step 1** (`components/lab/ResearchWizard.jsx`): "Choose a strategy" → **"Choose strategies"**.
