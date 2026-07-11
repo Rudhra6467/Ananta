@@ -29,6 +29,20 @@ on malformed AI extraction. Mobile Ask Ananta chip scoped to Cockpit+Workspace v
 Roadmap agreed with owner: Phase 2 Launch Hardening (break-testing), Phase 3 Performance profiling,
 Phase 4 Production (enable Ask Ananta → deploy → onboard) — NO new large features until stable.
 
+### 2026-07-11b — Launch Hardening Phase 2/3 continued (tested — iter45)
+**Double-submit guard (web):** `cmut()` in api.js coalesces identical in-flight non-idempotent mutations
+(manualOrder, closePosition, importApprove, resetPortfolio, freshStart, clearHistory) — a double-click fires
+ONE request. Verified: 5 rapid clicks on manual BUY → exactly 1 POST + 1 fill.
+**Session-expiry (both platforms):** `require_owner` now returns **401** for EXPIRED/INVALID tokens and **403**
+for no-token/role-insufficient (public viewer). Web axios interceptor on 401 clears the token + dispatches
+`ananta:session-expired`; AuthContext flips to read-only + toasts "Session expired — please sign in again."
+Mobile clears the stored token on 401 → returns to login. Verified end-to-end (screenshot: toast + auto-logout).
+Auth change made per JWT playbook (401 vs 403 convention); +3 tests in test_auth.py (8 pass); all bad-token
+assertions across suites accept (401,403) so no regression.
+**Performance (Phase 3):** measured all key endpoints — the only outlier was GET /api/risk/status (~2.2s cold,
+CCXT fetch). Now serves the warm cached snapshot (get_cached_snapshot) with a 1.5s bounded cold fallback →
+~0.09s; shape unchanged; critical daily-loss/manual kill-switches unaffected. Every measured endpoint now <0.13s.
+
 
 ### 2026-07-04 — WS2 Hunter Continuation + WS3 Research Lab redesign SHIPPED (backend + web, tested)
 **WS2:** new independent `continuation` executor — buys shallow pullbacks in an established uptrend (50-EMA rising, 20>50, dip to 20-EMA support with volume dry-up, 40-62 RSI). Routed (TREND_UP/NEUTRAL), wired live + backtest, 6 tests pass.

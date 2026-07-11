@@ -97,16 +97,23 @@ def is_owner_request(request: Request) -> bool:
 
 
 async def require_owner(request: Request) -> dict:
-    """FastAPI dependency: 403 unless a valid owner token is present."""
+    """FastAPI dependency for owner-only routes.
+
+    Status semantics (so the frontend can react correctly):
+    - 403 when NO token is present (public read-only visitor) or the token is valid
+      but lacks the owner role — a legitimate app state, no re-login prompt.
+    - 401 when a token IS present but is EXPIRED or INVALID/tampered — the owner
+      session died; the frontend clears it and prompts a fresh login.
+    """
     token = _extract_token(request)
     if not token:
         raise HTTPException(status_code=403, detail="Owner authentication required.")
     try:
         jwt.decode(token, _secret(), algorithms=[JWT_ALG])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=403, detail="Session expired. Please log in again.")
+        raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=403, detail="Invalid authentication token.")
+        raise HTTPException(status_code=401, detail="Invalid authentication token.")
     p = _valid_owner_payload(token)
     if not p:
         raise HTTPException(status_code=403, detail="Owner access required.")

@@ -53,6 +53,27 @@ async def test_require_owner_403_without_token():
 
 
 @pytest.mark.asyncio
+async def test_require_owner_401_on_expired_token():
+    import jwt as _jwt
+    from datetime import UTC, datetime, timedelta
+    expired = _jwt.encode(
+        {"sub": "owner@ananta.ai", "role": "owner", "type": "access",
+         "exp": datetime.now(UTC) - timedelta(minutes=1)},
+        auth._secret(), algorithm=auth.JWT_ALG)
+    with pytest.raises(HTTPException) as ei:
+        await auth.require_owner(_FakeReq(headers={"Authorization": f"Bearer {expired}"}))
+    assert ei.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_require_owner_401_on_tampered_token():
+    tok = auth.create_access_token("owner@ananta.ai") + "tamper"
+    with pytest.raises(HTTPException) as ei:
+        await auth.require_owner(_FakeReq(headers={"Authorization": f"Bearer {tok}"}))
+    assert ei.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_require_owner_ok_with_token():
     tok = auth.create_access_token("owner@ananta.ai")
     p = await auth.require_owner(_FakeReq(headers={"Authorization": f"Bearer {tok}"}))
