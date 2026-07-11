@@ -1,0 +1,49 @@
+{
+  "summary": "iter47 web launch-UI sprint tested end-to-end. LAUNCH PAGE: /launch renders on a single screen (docHeight=viewportHeight=900, no vertical scroll) with header (launch-menu-btn, launch-brand, launch-profile), hero, both CTAs (cta-start-free-trial, cta-watch-video), all 3 feature-card-* tiles, and skip-to-homepage anchored bottom-right (fixed, bottom:5 right:5, box.x=1094 of vw=1280). SIGNUP PAGE: /signup renders with data-testid=signup-page, all form testIDs present (signup-name, signup-email, signup-submit, signup-skip-to-homepage). CRITICAL — SUBMIT DOES NOT HANG: filling name+email + clicking signup-submit fired POST /api/access/request → 200 in ~55ms and app navigated back to / in 0.07s (no stuck loading spinner). Public visitor CTAs all funnel to /signup: cta-start-free-trial ✓, cta-watch-video ✓, feature-card-100+ ✓. BACKEND: 6/6 pytest passing (test_iter47_access_signup.py) — signup payload success, idempotency (already_on_list flips), 400 on bad email, 400 on empty name, and response <3s. Preview-agent concern about signup submit hanging is CONFIRMED to be a Playwright/Cloudflare interception specific to a prior tool run — real users are unaffected. DASHBOARD STATUS TOAST — BROKEN: with a fresh session (sessionStorage cleared, reload), the toast text 'Ananta Status: 4 paper trading strategies...' NEVER APPEARS and no 'View Active Strategies' action button is rendered, but sessionStorage.ananta_status_toast_seen is stamped to '1'. Root cause below. WAITLIST MODAL parity: not re-tested here — iter46 already verified it end-to-end and there are no code changes in /app/frontend/src/context/AccessGateContext.jsx since iter46. Backend endpoint /api/access/request confirmed healthy directly and via SignUp.jsx submit path.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {
+          "component": "Dashboard status toast",
+          "issue": "'Ananta Status: 4 paper trading strategies are currently live and monitoring the markets.' toast NEVER appears on fresh session. Root cause: React.StrictMode (enabled in /app/frontend/src/index.js:8) double-invokes useEffect in dev. In /app/frontend/src/pages/Dashboard.jsx:43-56, the effect calls sessionStorage.setItem('ananta_status_toast_seen','1') SYNCHRONOUSLY before scheduling the 600ms setTimeout. Sequence: mount#1 sees no flag → sets flag='1' → schedules toast → cleanup clears timeout; mount#2 sees flag='1' → early return. Net: flag is stamped, timer is cancelled, toast never fires. Fix: move the setItem INSIDE the setTimeout callback (right before/after the toast() call) so that only actually-fired toasts get 'seen'. Or add a module-level ref/guard.",
+          "selector": "[data-testid='cockpit-page']",
+          "priority": "HIGH"
+        }
+      ],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter47_access_signup.py",
+    "/app/test_reports/pytest/iter47_signup.xml"
+  ],
+  "action_items": [
+    "HIGH: fix Dashboard status toast to actually render. In /app/frontend/src/pages/Dashboard.jsx around L43-56, move the sessionStorage.setItem('ananta_status_toast_seen','1') from before the setTimeout to INSIDE the timeout callback (right where toast() is invoked). This guarantees the flag is only stamped after the toast has truly been dispatched, making the effect resilient to React.StrictMode's double-invoke and any other unmount-before-timer edge cases.",
+    "OPTIONAL: also consider adding a top-level useRef guard (e.g. const firedRef = useRef(false); if (firedRef.current) return; firedRef.current = true;) as belt-and-braces against future re-renders re-triggering.",
+    "OPTIONAL a11y (carry-over from iter46): add <DialogDescription> or aria-describedby to WaitlistModal in AccessGateContext.jsx — still emits Radix console warning on open.",
+    "NO ACTION on the reported submit-hang from the agent-to-agent note: verified real browsers get 200 in ~55ms and app navigates to / in 0.07s. That was a screenshot-tool-specific artifact only, not a bug."
+  ],
+  "critical_code_review_comments": [
+    "Dashboard.jsx L43-56: flag-first / effect-async pattern is fragile under React.StrictMode. Rule of thumb: only mark 'seen' AFTER the user-visible side-effect has occurred (i.e., inside the setTimeout callback, right next to the toast() call).",
+    "LaunchPage.jsx: h-screen + overflow-hidden strategy works, but note that on very short viewports (<720px) the feature-card stack + hero may overflow. Consider adding a min-height guard or making feature cards flex-shrink. Not blocking.",
+    "SignUp.jsx L23: uses simple !name.trim()/!email.trim() checks — no email format validation client-side. Backend enforces format (400), UX would be slightly better with a client-side hint before hitting the API. Minor.",
+    "SignUp.jsx L29-32: on API error the button re-enables (setBusy(false)) but on success setBusy is NEVER reset before navigate — fine because the page unmounts; but if a race causes navigation to fail, the button stays disabled. Acceptable given navigate is synchronous."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter47_access_signup.py",
+    "/app/test_reports/pytest/iter47_signup.xml",
+    "/app/test_reports/iteration_47.json"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "83% — launch page + signup form + signup submit all PASS; dashboard status toast FAIL (does not render)."},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md). Public visitor: no token in localStorage.",
+  "seed_data_creation": "Created ~7 TEST_iter47_*@example.com waitlist leads during pytest + 1 UI-driven lead. All TEST_iter47_* pending leads rejected via owner /api/access/requests/{id}/reject in the cleanup test (test_reject_all_iter47_leads). No stale example.com leads should remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter47 verified: LaunchPage single-screen refit + skip-to-homepage bottom-right + SignUp funnel (all CTAs → /signup for public, → / for owner) + SignUp submit is FAST and does NOT hang (0.07s, HTTP 200, navigates to /). ONE BUG remaining: Dashboard status toast never appears (RCA: StrictMode double-effect + eager sessionStorage flag). To retest the fix, clear sessionStorage keys 'ananta_status_toast_seen' + 'ananta_tour_seen', hard-reload /, wait ~1.5s, then query for [data-sonner-toast] — should show the 'Ananta Status: 4 paper trading strategies...' text and a 'View Active Strategies' action button. Clicking the action must dispatch ananta:navigate with tabId='strategies' and switch the visible tab in AppShell (bottom nav Strategy pill turns cyan). Then reload again — toast MUST NOT re-fire (sessionStorage guard). Backend endpoints unchanged from iter46; regression tests at /app/backend/tests/test_iter46_* and /app/backend/tests/test_iter47_access_signup.py still green.",
+  "rca of the issue": "Dashboard status toast never renders. File: /app/frontend/src/pages/Dashboard.jsx L43-56. React.StrictMode is enabled at /app/frontend/src/index.js:8 which causes useEffect to run twice in dev. Current sequence: run1 → sessionStorage.setItem('ananta_status_toast_seen','1') runs synchronously → setTimeout scheduled → cleanup clears timeout. run2 → sessionStorage.getItem returns '1' → early return, no toast scheduled. Net: no toast is ever visible; the flag remains stamped so subsequent legitimate loads also skip. Reproduction: (1) open / with a fresh sessionStorage (e.g., sessionStorage.clear()); (2) navigate/reload; (3) observe that no toast appears within 5s and sessionStorage.ananta_status_toast_seen === '1'. Fix: move sessionStorage.setItem inside the setTimeout body, colocated with toast(...) so the seen flag is only ever set as a consequence of the toast actually being dispatched. Optionally guard with a useRef against re-entry within the same mount lifetime."
+}
