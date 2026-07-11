@@ -157,6 +157,47 @@ async def root():
     }
 
 
+@api_router.get("/health/selfcheck")
+async def health_selfcheck():
+    """Consolidated, fast, credit-free health probe for the Cockpit first-run self-check.
+    One call replaces several: backend, MongoDB (bounded ping), market-data freshness
+    (from the in-memory cache, no network), and the trading engine loop status."""
+    import market_data as _md  # noqa: PLC0415
+    out = {"backend": {"ok": True}, "ts": datetime.now(UTC).isoformat()}
+
+    # MongoDB — bounded ping so a DB stall can't hang the probe.
+    t0 = time.time()
+    try:
+        await asyncio.wait_for(db.command("ping"), timeout=2.0)
+        out["database"] = {"ok": True, "latency_ms": round((time.time() - t0) * 1000, 1)}
+    except Exception:  # noqa: BLE001
+        out["database"] = {"ok": False, "latency_ms": None}
+
+    # Market data — freshness from the warm cache (no exchange call).
+    stats = _md.cache_stats()
+    fresh = stats["freshest_age_s"] is not None and stats["freshest_age_s"] < 60
+    out["market_data"] = {"ok": fresh, **stats}
+
+    # Engine loop status + last activity age (most recent reasoning row as proxy).
+    running = trading_loop.is_running
+    last_age = None
+    try:
+        last = await asyncio.wait_for(
+            db.reasoning.find({}, {"_id": 0, "timestamp": 1}).sort("timestamp", -1).limit(1).to_list(1),
+            timeout=1.5)
+        if last and last[0].get("timestamp"):
+            dt = datetime.fromisoformat(last[0]["timestamp"])
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            last_age = round((datetime.now(UTC) - dt).total_seconds(), 0)
+    except Exception:  # noqa: BLE001
+        last_age = None
+    out["engine"] = {"ok": running, "running": running, "last_activity_age_s": last_age}
+
+    out["ok"] = out["backend"]["ok"] and out["database"]["ok"]
+    return out
+
+
 @api_router.get("/market/snapshots")
 async def market_snapshots():
     settings = await load_settings(db)

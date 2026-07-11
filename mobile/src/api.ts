@@ -45,6 +45,7 @@ export const api = {
 
   // market + portfolio
   marketSnapshots: () => get<any>("/market/snapshots"),
+  healthSelfcheck: () => get<any>("/health/selfcheck"),
   portfolio: () => get<any>("/portfolio"),
   closePosition: (base: string) => post<any>(`/positions/${base}/close`),
   manualOrder: (payload: Record<string, any>) => post<any>("/orders/manual", payload),

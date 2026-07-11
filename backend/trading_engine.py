@@ -1532,6 +1532,10 @@ class TradingLoop:
         self._stop.clear()
         self._task = asyncio.create_task(self._run())
 
+    @property
+    def is_running(self) -> bool:
+        return bool(self._task and not self._task.done())
+
     async def stop(self):
         self._stop.set()
         if self._task:

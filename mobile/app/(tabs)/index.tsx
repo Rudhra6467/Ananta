@@ -25,6 +25,7 @@ import { PositionCard } from "../../src/components/PositionCard";
 import { LoadingView, ErrorView } from "../../src/components/StateView";
 import { TradingWizard } from "../../src/components/TradingWizard";
 import { AskAnanta } from "../../src/components/AskAnanta";
+import { SystemHealthChip } from "../../src/components/SystemHealthChip";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { usd, pct, price, base } from "../../src/format";
 
@@ -103,6 +104,10 @@ export default function Cockpit() {
 
       {/* AI Coach headline banner (credit-free) */}
       <CoachBanner />
+
+      <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+        <SystemHealthChip />
+      </View>
 
       {/* Portfolio hero */}
       <View style={styles.hero}>

@@ -17,6 +17,7 @@ import WatchlistControl from "@/components/WatchlistControl";
 import TradingWizard from "@/components/TradingWizard";
 import { Rocket } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
+import SystemHealthChip from "@/components/SystemHealthChip";
 
 const SILVER = "#C0C5CE";
 const GREEN = "#10B981";
@@ -53,6 +54,9 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-5" data-testid="cockpit-page">
+            <div className="flex justify-end -mb-1">
+                <SystemHealthChip />
+            </div>
             {/* Action hub — dual control row directly beneath Account Value */}
             <div className="grid grid-cols-2 gap-3">
                 <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}

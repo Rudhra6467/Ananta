@@ -165,6 +165,17 @@ async def warm_snapshots(symbols: list[str]) -> None:
         await fetch_snapshots(stale)
 
 
+def cache_stats() -> dict:
+    """Non-blocking snapshot-cache health (no network). Used by /health/selfcheck."""
+    now = time.time()
+    ages = [now - ts for ts, _ in _CACHE.values()]
+    return {
+        "cached_symbols": len(_CACHE),
+        "freshest_age_s": round(min(ages), 1) if ages else None,
+        "stalest_age_s": round(max(ages), 1) if ages else None,
+    }
+
+
 # ---------------- 1h OHLCV fetch (for adaptive sizing classifier) ----------------
 def _fetch_ohlcv_1h_sync(symbol: str, limit: int = 750) -> list[list[float]]:
     """Try Kraken first, then Coinbase. Returns CCXT-format OHLCV
