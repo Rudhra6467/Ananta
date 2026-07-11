@@ -2753,9 +2753,10 @@ async def import_approve(draft_id: str):
 
 
 @api_router.post("/library/imports/{draft_id}/backtest-preview", dependencies=[Depends(require_owner)])
-async def import_backtest_preview(draft_id: str, symbol: str = "BTC/USD", days: int = 30, exchange: str = "kraken"):
+async def import_backtest_preview(draft_id: str, symbol: str | None = None, days: int = 30, exchange: str = "kraken"):
     """P2: prove an imported strategy is executable BEFORE approval — replay its compiled
-    declarative spec over real historical OHLCV. Fails clearly if the import did not compile."""
+    declarative spec over real historical OHLCV. Fails clearly if the import did not compile.
+    When `symbol` is omitted, infer a sensible crypto pair from the draft (Ananta is spot-crypto)."""
     import asyncio  # noqa: PLC0415
     from declarative_backtest import run_declarative_backtest  # noqa: PLC0415
     from declarative_engine import validate_spec  # noqa: PLC0415
@@ -2769,6 +2770,20 @@ async def import_backtest_preview(draft_id: str, symbol: str = "BTC/USD", days: 
     if not (doc.get("declarable") and v["ok"] and spec.get("entry")):
         raise HTTPException(status_code=422,
             detail="This import did not compile to executable rules: " + "; ".join(v["issues"] or [doc.get("declarative_reason") or "not compilable"]))
+
+    settings = await load_settings(db)
+    enabled = settings.enabled_symbols or ["BTC/USD"]
+    note = None
+    if not symbol:
+        # infer from the draft's preferred coins, else fall back to a liquid enabled pair
+        cands = doc.get("preferred_coins") or doc.get("symbols") or []
+        pick = next((c for c in cands if isinstance(c, str) and "/" in c and c in enabled), None)
+        if not pick:
+            pick = next((c for c in cands if isinstance(c, str) and "/" in c), None)
+        symbol = pick or ("BTC/USD" if "BTC/USD" in enabled else enabled[0])
+        mkt = doc.get("market_type") or []
+        if mkt and not any("crypto" in str(m).lower() for m in mkt):
+            note = f"Ananta is spot-crypto only — backtested on {symbol} as a proxy for a {', '.join(mkt)} strategy."
     params = dict(doc.get("engine_params") or {})
     days = max(7, min(90, days))
     try:
@@ -2785,7 +2800,8 @@ async def import_backtest_preview(draft_id: str, symbol: str = "BTC/USD", days: 
     await db.strategy_imports.update_one({"id": draft_id},
         {"$set": {"backtested": True, "preview_backtest": {**hist, "symbol": symbol, "days": days,
                   "bars": metrics["bars"], "at": _strat_now_iso()}, "updated_at": _strat_now_iso()}})
-    return {"id": draft_id, "symbol": symbol, "days": days, "historical_results": hist, "bars": metrics["bars"]}
+    return {"id": draft_id, "symbol": symbol, "days": days, "historical_results": hist,
+            "bars": metrics["bars"], "note": note}
 
 
 @api_router.post("/library/{lib_id}/backtest", dependencies=[Depends(require_owner)])
