@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
-    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Pencil,
+    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -17,7 +17,7 @@ export default function ResearchWizard() {
     const [step, setStep] = useState(0);
     const [strategies, setStrategies] = useState([]);
     const [assets, setAssets] = useState([]);
-    const [strat, setStrat] = useState("hunter");
+    const [strat, setStrat] = useState([]);
     const [picked, setPicked] = useState([]);
     const [period, setPeriod] = useState("1m");
     const [runMC, setRunMC] = useState(true);
@@ -28,7 +28,7 @@ export default function ResearchWizard() {
     const [metrics, setMetrics] = useState({});
 
     useEffect(() => {
-        api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
+        api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat([l[0].key]); }).catch(() => {});
         api.strategyMetrics().then((d) => setMetrics(d?.metrics || {})).catch(() => {});
         api.labCoverage().then((c) => {
             const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
@@ -40,12 +40,13 @@ export default function ResearchWizard() {
     }, []);
 
     const toggleAsset = (s) => setPicked((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
-    const canNext = (step === 0 && strat) || (step === 1 && picked.length) || step === 2 || step === 3;
+    const toggleStrat = (k) => setStrat((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
+    const canNext = (step === 0 && strat.length) || (step === 1 && picked.length) || step === 2 || step === 3;
 
     const run = async () => {
         setPhase("running"); setProgress(5); setResult(null); setMc(null); setStep(4);
         try {
-            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, strategies: [strat], exit_method: "fixed" });
+            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, strategies: strat, exit_method: "fixed" });
             let done = false;
             for (let i = 0; i < 60 && !done; i++) {
                 await new Promise((r) => setTimeout(r, 1500));
@@ -94,18 +95,22 @@ export default function ResearchWizard() {
             {phase !== "running" && phase !== "done" && (
                 <div className="min-h-[180px]">
                     {step === 0 && (
-                        <StepShell title="Choose a strategy" hint="Which engine do you want to validate?">
+                        <StepShell title="Choose strategies" hint="Tick one or more engines to validate together.">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="wizard-strategies">
                                 {strategies.map((s) => {
                                     const m = metrics[s.key];
                                     const on = !!m?.enabled && m?.status !== "DISABLED" && m?.status !== "ERROR";
-                                    const edit = (e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "strategies" } })); };
+                                    const checked = strat.includes(s.key);
                                     return (
-                                        <button key={s.key} data-testid={`wizard-strat-${s.key}`} onClick={() => setStrat(s.key)}
-                                            className={`panel border rounded-lg px-3 py-2.5 text-left transition-colors ${strat === s.key ? "border-atlas-cyan bg-atlas-cyan/5" : "border-atlas-border hover:border-atlas-textTertiary"}`}>
+                                        <button key={s.key} data-testid={`wizard-strat-${s.key}`} onClick={() => toggleStrat(s.key)}
+                                            role="checkbox" aria-checked={checked}
+                                            className={`panel border rounded-lg px-3 py-2.5 text-left transition-colors ${checked ? "border-atlas-cyan bg-atlas-cyan/5" : "border-atlas-border hover:border-atlas-textTertiary"}`}>
                                             <div className="flex items-center justify-between gap-2">
                                                 <div className="font-heading text-[13px] text-atlas-text truncate">{s.name}</div>
-                                                <Pencil data-testid={`wizard-strat-edit-${s.key}`} onClick={edit} className="w-3.5 h-3.5 text-atlas-textTertiary hover:text-atlas-cyan shrink-0" />
+                                                <span data-testid={`wizard-strat-check-${s.key}`}
+                                                    className={`w-4 h-4 rounded grid place-items-center border shrink-0 transition-colors ${checked ? "bg-atlas-cyan border-atlas-cyan text-atlas-bg" : "border-atlas-textTertiary"}`}>
+                                                    {checked && <Check className="w-3 h-3" />}
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 mt-1" data-testid={`wizard-strat-status-${s.key}`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${on ? "bg-atlas-positive" : "bg-atlas-textTertiary"}`} />
@@ -169,7 +174,7 @@ export default function ResearchWizard() {
                     <div className="w-full max-w-md h-2 rounded-full bg-atlas-panel overflow-hidden">
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period}</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period}</div>
                 </div>
             )}
 

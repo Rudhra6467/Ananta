@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
     SlidersHorizontal, GraduationCap, Trophy, Activity, Info, LogOut, CheckCircle2, XCircle, ChevronRight,
-    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles,
+    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles, ArrowUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -33,14 +33,14 @@ export default function Workspace() {
         <div className="space-y-5 pb-24" data-testid="workspace-page">
             <Tabs defaultValue="ai" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
-                    <WSTab value="ai" label="ALL AI INFO" icon={Sparkles} />
+                    <WSTab value="ai" label="AI ANALYTICS" icon={Sparkles} />
                     <WSTab value="engine" label="ENGINE & RISK" icon={SlidersHorizontal} />
                     <WSTab value="learn" label="LEARNING HUB" icon={GraduationCap} />
                 </TabsList>
 
                 <TabsContent value="ai" className="m-0 space-y-6">
                     <Section icon={Sparkles} title="Ask Ananta" subtitle="Embedded AI copilot — Q&A and action execution">
-                        <AskAnantaToggle isOwner={isOwner} />
+                        <AiCopilotCompact isOwner={isOwner} />
                     </Section>
                     <Section icon={Archive} title="Closed Trades History" subtitle="Your completed round-trips">
                         <ClosedTradesHistory trades={trades} />
@@ -112,27 +112,43 @@ function WSTab({ value, label, icon: Icon }) {
     );
 }
 
-function AskAnantaToggle({ isOwner }) {
+function AiCopilotCompact({ isOwner }) {
     const [on, setOn] = useState(false);
+    const [q, setQ] = useState("");
     useEffect(() => { api.settings().then((s) => setOn(!!s.ask_ananta_enabled)).catch(() => {}); }, []);
     const toggle = async () => {
         if (!isOwner) { toast.error("Owner login required"); return; }
         try { const s = await api.updateSettings({ ask_ananta_enabled: !on }); setOn(!!s.ask_ananta_enabled); toast.success(`Ask Ananta ${!on ? "enabled" : "disabled"}`); }
         catch (e) { toast.error("Update failed", { description: String(e?.message || e) }); }
     };
+    const send = () => {
+        const text = q.trim();
+        if (!text) return;
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        if (!on) { toast.error("Turn Ask Ananta on to chat"); return; }
+        window.dispatchEvent(new CustomEvent("ananta:ask", { detail: { text } }));
+        setQ("");
+    };
     return (
-        <div className="panel border-atlas-border rounded-xl p-5 flex items-center justify-between gap-4" data-testid="ws-ask-ananta">
-            <div>
-                <div className="font-heading text-base text-atlas-text mb-1">AI Copilot</div>
-                <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed max-w-lg">
-                    An embedded assistant that answers questions about your system and can execute actions
-                    (with a confirmation step). Kept off until launch. LLM is only called when you send a message.
-                </p>
+        <div className="flex flex-wrap items-center gap-3" data-testid="ws-ask-ananta">
+            {/* chip-sized launcher + on/off toggle (matches the floating chip) */}
+            <div className={`flex items-center gap-2.5 rounded-full pl-4 pr-2.5 py-2 font-mono text-xs font-bold shrink-0 ${on ? "bg-atlas-cyan text-black" : "bg-atlas-panelHover text-atlas-textSecondary border border-atlas-border"}`}>
+                <Sparkles className="w-4 h-4" /> Ask Ananta
+                <button data-testid="ask-ananta-toggle" onClick={toggle} role="switch" aria-checked={on}
+                    className={`relative w-8 h-[18px] rounded-full transition-colors ${on ? "bg-black/75" : "bg-atlas-border"}`}>
+                    <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all ${on ? "left-[16px]" : "left-[2px]"}`} />
+                </button>
             </div>
-            <button data-testid="ask-ananta-toggle" onClick={toggle} role="switch" aria-checked={on}
-                className={`relative w-12 h-7 rounded-full border transition-colors shrink-0 ${on ? "bg-atlas-cyan border-atlas-cyan" : "bg-atlas-panelHover border-atlas-border"}`}>
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${on ? "left-6" : "left-0.5"}`} />
-            </button>
+            {/* small inline chat bar */}
+            <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                <input data-testid="ws-ask-input" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
+                    placeholder="Ask about your system…"
+                    className="flex-1 bg-atlas-bg border border-atlas-border rounded-full px-4 py-2 font-mono text-[12px] text-white focus:border-atlas-cyan outline-none" />
+                <button data-testid="ws-ask-send" onClick={send} aria-label="Send"
+                    className="w-9 h-9 rounded-full bg-atlas-cyan text-black grid place-items-center shrink-0 hover:brightness-110 active:scale-95 transition-all">
+                    <ArrowUp className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     );
 }

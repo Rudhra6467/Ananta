@@ -1,3 +1,19 @@
+## 2026-07-11e — Research validate multi-select + Workspace "AI Analytics" compact copilot (web)
+
+- **Research › Validate › step 1** (`components/lab/ResearchWizard.jsx`): "Choose a strategy" → **"Choose strategies"**.
+  Removed the per-card pencil/edit button; each strategy is now a **tick-box (multi-select)** — pick several engines
+  to validate together. Clicking a card toggles its checkbox (ticked = selected). `strat` is now an array; the run
+  passes `strategies: strat` (backend `labCreateRun` already accepts an array). Verified 1→3→2 selection.
+- **Workspace tab rename**: "ALL AI INFO" → **"AI ANALYTICS"**.
+- **AI Copilot compacted** (`pages/Workspace.jsx` → `AiCopilotCompact`): replaced the large descriptive card with a
+  chip-sized "Ask Ananta" pill + on/off toggle (matches the floating bottom-left chip) **plus a small inline chat bar**.
+  Typing a question + send dispatches `ananta:ask`; the floating AskAnanta panel opens and answers (AskAnanta now
+  listens for that event; `send` refactored to a stable `useCallback`). Saves vertical space.
+- These target the web app (responsive, incl. mobile-width bottom nav) — the surface in the shared screenshots.
+
+---
+
+
 ## 2026-07-11d — Ask Ananta ON + public Launch/Landing page (web)
 
 - **Ask Ananta enabled** (`settings.ask_ananta_enabled = true`) so the owner can test the copilot before launch.

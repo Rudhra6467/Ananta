@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, X, ArrowUp, Zap } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -44,6 +44,33 @@ export default function AskAnanta({ tab }) {
     }, []);
     useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
 
+    const send = useCallback(async (text) => {
+        const question = (text || "").trim();
+        if (!question) return;
+        setMsgs((m) => [...m, { role: "user", text: question }]);
+        setQ(""); setBusy(true);
+        try {
+            const r = await api.anantaAsk(question, session.current, canonicalTab);
+            session.current = r.session_id;
+            setMsgs((m) => [...m, { role: "assistant", text: r.answer, actions: r.actions || [] }]);
+        } catch (e) {
+            setMsgs((m) => [...m, { role: "assistant", text: e?.response?.data?.detail || e?.message || "Ask Ananta unavailable." }]);
+        } finally { setBusy(false); }
+    }, [canonicalTab]);
+
+    // Let other surfaces (Workspace "AI Analytics" compact chat bar) open the copilot
+    // and hand off a typed question.
+    useEffect(() => {
+        const onAsk = (e) => {
+            if (!enabled) return;
+            setOpen(true);
+            const text = e?.detail?.text;
+            if (text) send(text);
+        };
+        window.addEventListener("ananta:ask", onAsk);
+        return () => window.removeEventListener("ananta:ask", onAsk);
+    }, [enabled, send]);
+
     // Public visitors see the copilot chip but opening it is gated to the waitlist.
     if (!isOwner) {
         return (
@@ -63,20 +90,6 @@ export default function AskAnanta({ tab }) {
             if (!next) setOpen(false);
             toast.success(`Ask Ananta ${next ? "on" : "off"}`);
         } catch (err) { toast.error("Toggle failed", { description: String(err?.message || err) }); }
-    };
-
-    const send = async (text) => {
-        const question = (text || "").trim();
-        if (!question) return;
-        setMsgs((m) => [...m, { role: "user", text: question }]);
-        setQ(""); setBusy(true);
-        try {
-            const r = await api.anantaAsk(question, session.current, canonicalTab);
-            session.current = r.session_id;
-            setMsgs((m) => [...m, { role: "assistant", text: r.answer, actions: r.actions || [] }]);
-        } catch (e) {
-            setMsgs((m) => [...m, { role: "assistant", text: e?.response?.data?.detail || e?.message || "Ask Ananta unavailable." }]);
-        } finally { setBusy(false); }
     };
 
     const runAction = async (a) => {
