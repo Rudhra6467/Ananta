@@ -61,7 +61,7 @@ import ai_analyst
 from auth import authenticate, is_owner_request, require_owner, seed_owner
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
-from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, warm_snapshots
+from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
 from models import MarketSnapshot
 from news_source import get_cache_info, get_current_summary
 from position_watcher import PositionWatcher
@@ -627,8 +627,19 @@ async def risk_status():
     # use latest reasoning to estimate macro confidence; fallback to settings.min_confidence
     last = await db.reasoning.find({}, {"_id": 0}).sort("timestamp", -1).limit(1).to_list(1)
     macro_conf = float(last[0]["confidence"]) if last else 0.0
-    # average spread across enabled symbols (or query primary)
-    snap = await fetch_snapshot(settings.enabled_symbols[0]) if settings.enabled_symbols else None
+    # Spread kill-switch needs a market snapshot. Serve the warm cache instantly
+    # (kept fresh by the background warmer + frequent /market/snapshots polling); only
+    # cold-fetch when nothing is cached, bounded by a timeout so an exchange hang can
+    # never stall the risk panel. The critical daily-loss + manual kill-switches don't
+    # depend on the live spread, so a synthesized fallback stays safe.
+    snap = None
+    sym = settings.enabled_symbols[0] if settings.enabled_symbols else "BTC/USD"
+    snap = get_cached_snapshot(sym)
+    if snap is None:
+        try:
+            snap = await asyncio.wait_for(fetch_snapshot(sym), timeout=1.5)
+        except Exception:  # noqa: BLE001
+            snap = None
     if snap is None:
         # synthesize a minimal snapshot to evaluate manual kill / daily-loss switches anyway
         snap = MarketSnapshot(symbol="BTC/USD", price=0, bid=0, ask=0, spread_pct=0.0, orderbook_imbalance=0.0, exchange="unknown")

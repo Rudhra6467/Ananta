@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { toast } from "sonner";
 import api, { TOKEN_KEY } from "@/lib/api";
 
 const AuthContext = createContext(null);
@@ -20,6 +21,19 @@ export function AuthProvider({ children }) {
             })
             .finally(() => { if (active) setReady(true); });
         return () => { active = false; };
+    }, []);
+
+    // Global session-expiry handling: a 401 from any call flips us to logged-out
+    // (read-only) state and tells the user, instead of silently failing writes.
+    useEffect(() => {
+        const onExpired = () => {
+            setOwner((prev) => {
+                if (prev) toast.error("Session expired — please sign in again.");
+                return null;
+            });
+        };
+        window.addEventListener("ananta:session-expired", onExpired);
+        return () => window.removeEventListener("ananta:session-expired", onExpired);
     }, []);
 
     const login = useCallback(async (email, password) => {

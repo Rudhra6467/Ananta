@@ -1,0 +1,57 @@
+{
+  "summary": "iter45 launch-hardening verified on shared backend + web + mobile. BACKEND: 5/5 new pytests PASS (test_iter45_hardening.py) — (a) GET /api/risk/status returns correct shape {status:{spread_breach, daily_loss_breach, confidence_breach, manual_kill}, thresholds:{max_spread_pct,max_daily_loss_pct,min_confidence}, trading_mode, manual_kill_switch}; (b) warm latency ~85ms across 5 curl samples (target <500ms) — matches the ~0.09s claim; (c) bad Bearer -> clean JSON 4xx no Traceback; (d) mutation with bad Bearer -> clean 4xx no leak; (e) 3 concurrent identical mutations return structured non-500. WEB (viewport 1440x900, owner logged in, welcome overlay skipped): all 5 tabs render, no app-error-boundary triggered; AskAnanta chip scoping REGRESSION-PASS — chip visible on Cockpit + Workspace only (Trade/Strategy/Research have no chip). Double-submit guard VERIFIED: rapid 5x sync clicks on [data-testid=manual-order-submit] resulted in exactly 1 POST /api/orders/manual + 1 'BUY ARB filled' toast + $100 deployed increment (not $500) — cmut() coalescing works. Session-expiry FE plumbing works: dispatching window 'ananta:session-expired' event flips owner pill off + shows toast 'Session expired — please sign in again.' + shows 'PUBLIC READ-ONLY VIEW' banner (verified). Reloading with a bad token also clears TOKEN_KEY via AuthProvider.me() catch. MOBILE (Expo web preview, viewport 390x844): all 5 tabs render, biometric+onboarding bypass works; AskAnanta chip scoping FIXED FROM ITER44 — chip visible on tab-index + tab-workspace only, dom_count=0 on tab-trade/strategy/research (iter44 leak resolved). HOWEVER: CRITICAL INTEGRATION ISSUE — backend auth.py `require_owner` (L103-109) raises HTTP **403** (NOT 401) for expired/tampered Bearer tokens. Verified: `GET /api/auth/me` with garbage bearer -> 403; `POST /api/auth/login` with wrong password -> 401. Therefore the new 401 interceptor in api.js L35 and api.ts L23 will fire on wrong-password login only, but will NEVER fire during real session expiry (which is the whole point of this iteration). Session expiry recovery today works only via AuthProvider.me() catch on next reload — the toast + immediate logout on the currently-open tab claimed in the changelog will not appear because the 401 branch is unreachable in normal flow.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/auth/me and all `require_owner` endpoints", "issue": "Returns 403 for expired/invalid/tampered tokens instead of 401. This makes the new FE session-expiry handler unreachable in real usage — api.js:35 and api.ts:23 only trigger on 401. Change auth.py:106-109 to raise HTTPException(status_code=401,...) for ExpiredSignatureError + InvalidTokenError + missing-header cases (keep 403 only for a valid token whose role is insufficient at L112). Standard REST convention: 401=unauthenticated, 403=forbidden-despite-auth.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Session expiry recovery", "issue": "api.js:35 handles only status===401. Because backend returns 403 for expired tokens, the toast + immediate 'ananta:session-expired' dispatch never fires during a real expiry — user only gets logged out on next full reload via AuthProvider.me() catch. Either fix the backend to return 401 (preferred) or extend api.js to also treat 403 with a 'Session expired'/'Invalid authentication token'/'Owner authentication required' detail as an expiry event.", "affected_selectors": ["[data-testid=owner-session]"]}
+      ],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Session expiry token cleanup", "issue": "api.ts:23 only clears TOKEN_KEY when res.status===401. Backend returns 403 for expired/tampered tokens, so the stored token is NEVER auto-cleared during real expiry on mobile — user stays 'logged in' with a dead token until the app forces a full storage reset. Mirror the recommended backend fix, or extend api.ts to also clear on 403 when detail includes 'expired'/'Invalid authentication token'.", "affected_testIDs": []}
+      ],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Session-expiry auto-logout", "platform": "web+mobile", "issue": "Both surfaces have the exact same integration gap due to backend returning 403 instead of 401 — the new plumbing is present on both platforms but unreachable in the primary usage path.", "expected": "Real expired token → toast + immediate logout to read-only (web) / return to login (mobile).", "actual": "Real expired token → backend returns 403 → FE 401 branch does not fire → user stuck with stale UI until page reload or fresh login."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter45_hardening.py",
+    "/app/test_reports/pytest/iter45_hardening.xml"
+  ],
+  "action_items": [
+    "BACKEND (HIGH): Change /app/backend/auth.py L106-109 to raise HTTPException(status_code=401,...) for ExpiredSignatureError + InvalidTokenError + missing-Authorization cases. Keep 403 only at L112 for role-insufficient (valid token, wrong role). This unlocks the iter45 web toast + mobile auto-logout claimed in the changelog. After the backend change, no FE code change is required — api.js:35 and api.ts:23 will start firing correctly in real expiry.",
+    "OPTIONAL FE fallback if backend cannot change: extend api.js interceptor to also match (status===403 && detail.includes('Session expired'|'Invalid authentication token'|'Owner authentication required')) as an expiry event; same in mobile api.ts.",
+    "Add an e2e test that FORGES an expired JWT (past exp) with the real JWT_SECRET and asserts /api/auth/me returns 401 and the FE toast fires — this would have caught the mismatch."
+  ],
+  "critical_code_review_comments": [
+    "auth.py:106-109 conflates authentication failure (should be 401) with authorization failure (should be 403). This directly undermines the iter45 FE session-expiry contract even though the FE code is correct.",
+    "api.js:79 cmut() key is `${method}:${url}:${JSON.stringify(data)}` — payload order matters. If a caller stringifies keys in different order in successive frames the coalescing breaks. Consider sorting keys before stringify, or use a stable-serializer. Not a bug today (all callers build the same object literal) but a latent footgun.",
+    "api.js:41 network-drop toast is deduped by _lastToastAt<4000ms only — a longer outage will re-toast every 4s. Consider suppressing repeats until any successful response resets the flag.",
+    "AuthContext.jsx:31 the toast fires inside a setState updater — React StrictMode may double-invoke updaters in dev, causing a duplicate toast in dev-mode. Move the toast call OUT of setOwner((prev)=>...) into a separate branch that reads owner via a ref, e.g. use useRef+useEffect to observe owner transitions rather than side-effecting inside setState.",
+    "mobile api.ts:23 uses `deleteItem(TOKEN_KEY)` but does not surface a user-visible signal (no toast, no navigation reset). On native the app will keep whatever screen it was on with a stale header — consider dispatching a DeviceEventEmitter event that a top-level AuthProvider listens to for parity with web AuthContext."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter45_hardening.py",
+    "/app/test_reports/iteration_45.json"
+  ],
+  "success_rate": {"backend": "100% (5/5 iter45 tests + latency target met)", "frontend": "80% (chip scoping fixed on mobile, double-submit works; session-expiry integration blocked by backend 403 mismatch)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (PREVIEW). Web: set localStorage 'ananta_owner_token'. Mobile web preview: also set 'ananta_biometric_enabled'='0' and 'ananta_onboarded'='1' to bypass biometric + welcome overlay.",
+  "seed_data_creation": "Placed ONE $100 paper BUY ARB order during double-submit test (visible in Trade history). No settings mutations left behind.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter45 iter45: risk/status warm-cache latency + shape PASS (~85ms). AskAnanta chip scoping is now correct on BOTH platforms (iter44 mobile leak fixed). Web double-submit coalescing via cmut() PASS (5 rapid clicks -> 1 network request, 1 order, 1 toast). PRIMARY OUTSTANDING BUG: backend auth.py:103-109 returns 403 for expired/invalid tokens, but FE interceptors (api.js:35 + api.ts:23) only handle 401 — so the new session-expiry toast+auto-logout will not fire in real usage. E1 must fix auth.py to raise 401 for auth-failures, keeping 403 only for role-insufficient. After that fix, re-run this test file plus a forged-expired-JWT e2e to confirm the toast appears. No new seed data other than one paper BUY ARB order left in Trade history.",
+  "rca of the issue": "RCA — session-expiry integration gap: E1's iter45 wired the FE correctly (api.js:31-47 clears TOKEN_KEY on 401 and dispatches 'ananta:session-expired'; AuthContext.jsx:28-37 listens and toasts + flips isOwner->false; mobile api.ts:22-24 clears token on 401). But backend auth.py:103-109 (`require_owner`) raises HTTPException(status_code=403,...) for jwt.ExpiredSignatureError, jwt.InvalidTokenError, and missing Bearer. Verified via `curl -H 'Authorization: Bearer garbage' /api/auth/me` -> 403 and `curl POST /api/auth/login` with wrong password -> 401. Because expired sessions cannot yield a 401, the interceptor's 401 branch is unreachable in real usage, so the toast + immediate logout code path is effectively dead. Reproduction: (1) log in as owner on web; (2) in another tab, restart backend with a different JWT_SECRET (or wait until token expiry_ttl); (3) attempt any owner action — current behaviour: silent 403 in devtools, no toast, owner pill still shows, user is confused; expected behaviour: 'Session expired' toast + auto-logout to read-only. Mitigation: change auth.py L106-109 to `status_code=401` (401=missing/expired auth, 403=insufficient role) — this is the industry-standard mapping used by every OAuth2/JWT recipe and requires zero FE changes."
+}

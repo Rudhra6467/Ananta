@@ -1,5 +1,5 @@
 // Ananta.AI mobile API client. Reuses the shared FastAPI /api backend.
-import { getItem } from "./storage";
+import { getItem, deleteItem } from "./storage";
 
 export const TOKEN_KEY = "ananta_owner_token";
 
@@ -20,6 +20,8 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
+    // Expired/invalid session: drop the stale token so the app returns to login.
+    if (res.status === 401) { try { await deleteItem(TOKEN_KEY); } catch {} }
     const detail = data && typeof data === "object" ? data.detail : data;
     const msg = typeof detail === "string" ? detail : `Request failed (${res.status})`;
     const err: any = new Error(msg);

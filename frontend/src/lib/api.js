@@ -34,6 +34,9 @@ client.interceptors.response.use(
         const status = error?.response?.status;
         if (status === 401) {
             localStorage.removeItem(TOKEN_KEY);
+            // Notify AuthContext so React state flips to logged-out immediately
+            // (no stale isOwner until a manual reload).
+            if (typeof window !== "undefined") window.dispatchEvent(new Event("ananta:session-expired"));
         } else if (!error?.response) {
             if (error?.code !== "ERR_CANCELED") _softToast("Network issue — retrying shortly. Check your connection.");
         } else if (status >= 500) {
@@ -67,12 +70,26 @@ function cget(url, ttl = 8000) {
     return p;
 }
 
+// Double-submit guard: coalesce identical, non-idempotent mutations that are still
+// in flight (a double-click fires ONE request; both callers get the same promise —
+// no duplicate order / close / approve / reset). Sequential calls after completion
+// still work normally.
+const _mutInflight = new Map();
+function cmut(method, url, data) {
+    const key = `${method}:${url}:${data !== undefined ? JSON.stringify(data) : ""}`;
+    if (_mutInflight.has(key)) return _mutInflight.get(key);
+    const req = data !== undefined ? client[method](url, data) : client[method](url);
+    const p = req.then((r) => r.data).finally(() => _mutInflight.delete(key));
+    _mutInflight.set(key, p);
+    return p;
+}
+
 export const api = {
     health: () => client.get("/").then((r) => r.data),
     marketSnapshots: () => cget("/market/snapshots", 4000),
     portfolio: () => cget("/portfolio", 4000),
-    resetPortfolio: () => client.post("/portfolio/reset").then((r) => r.data),
-    closePosition: (base) => client.post(`/positions/${base}/close`).then((r) => r.data),
+    resetPortfolio: () => cmut("post", "/portfolio/reset"),
+    closePosition: (base) => cmut("post", `/positions/${base}/close`),
     trades: (limit = 50) => client.get(`/trades?limit=${limit}`).then((r) => r.data),
     reasoning: (limit = 50, symbol, executedOnly = false) => {
         const params = new URLSearchParams({ limit: String(limit) });
@@ -87,9 +104,7 @@ export const api = {
     candles: (symbol, timeframe = "1h", limit = 48) =>
         cget(`/market/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=${limit}`, 60000),
     clearHistory: (alsoResetPortfolio = false) =>
-        client
-            .post(`/history/clear?also_reset_portfolio=${alsoResetPortfolio}`)
-            .then((r) => r.data),
+        cmut("post", `/history/clear?also_reset_portfolio=${alsoResetPortfolio}`),
     runCycleSymbol: (symbol) => {
         // backend accepts base symbol like BTC -> BTC/USD, or BTC/USD encoded
         const base = symbol.split("/")[0];
@@ -106,7 +121,7 @@ export const api = {
     pendingOrders: () => client.get("/pending_orders").then((r) => r.data),
     getEnvironment: () => client.get("/environment").then((r) => r.data),
     setEnvironment: (mode) => client.post(`/environment/${mode}`).then((r) => r.data),
-    manualOrder: (payload) => client.post("/orders/manual", payload).then((r) => r.data),
+    manualOrder: (payload) => cmut("post", "/orders/manual", payload),
     anantaAsk: (question, sessionId, tab, strategy) => client.post("/ananta/ask", { question, session_id: sessionId, tab, strategy }).then((r) => r.data),
     backtestRun: (payload) => client.post("/backtest/run", payload).then((r) => r.data),
     // --- Competition Demo Workspace ---
@@ -134,7 +149,7 @@ export const api = {
     researchZoneEffectiveness: () => cget("/research/zone_effectiveness"),
     researchStrategySandbox: () => cget("/research/strategy_sandbox"),
     researchStrategyLab: () => cget("/research/strategy_lab"),
-    freshStart: () => client.post("/admin/fresh-start").then((r) => r.data),
+    freshStart: () => cmut("post", "/admin/fresh-start"),
     researchStagedExit: () => cget("/research/staged_exit"),
     // --- Research Lab (offline strategy validation) ---
     labCoverage: () => client.get("/lab/data/coverage").then((r) => r.data),
@@ -183,7 +198,7 @@ export const api = {
     importGet: (id) => client.get(`/library/imports/${id}`).then((r) => r.data),
     importUpdate: (id, patch) => client.put(`/library/imports/${id}`, { patch }).then((r) => r.data),
     importDelete: (id) => client.delete(`/library/imports/${id}`).then((r) => r.data),
-    importApprove: (id) => client.post(`/library/imports/${id}/approve`).then((r) => r.data),
+    importApprove: (id) => cmut("post", `/library/imports/${id}/approve`),
     importBacktestPreview: (id, symbol = "BTC/USD", days = 30) =>
         client.post(`/library/imports/${id}/backtest-preview?symbol=${encodeURIComponent(symbol)}&days=${days}`).then((r) => r.data),
     // Active Watchlist
