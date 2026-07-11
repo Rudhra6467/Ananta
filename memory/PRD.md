@@ -775,3 +775,19 @@ Remaining polish / backlog (non-blocking):
 - Nice-to-have: word-boundary matching in _parse_ananta_intents; extract ananta router from server.py
   (>2900 lines); distinct mobile Manual/AI strategy builders (currently both route to /library/import);
   animated auto-centering subtab underline (Trade currently uses Segmented control).
+
+## V1 UX FREEZE — Layout Refinement (2026-07-11)
+Enhancement across 4 tabs on BOTH web + mobile (parity), tested iter 42 (backend 18/18; web+mobile green):
+- COCKPIT: dual action row [Start Trading | Weekly AI Review] under Account Value; Weekly AI Review
+  opens coach review modal (api.coachReview /coach/weekly-review). Scanning-engine metric MATRIX reflow:
+  Setups|Scanned / Rejected|Qualified (2x2) + Regime full-width base (regime = latest reasoning bias).
+- TRADE→ORDERS: "Create Your Order" — Amount input + Select-Crypto dropdown (live ≈units estimate) +
+  Buy/Sell & Market/Limit paired pills + single Buy CTA (token pill-grid removed). Active Strategies
+  capped at top 3 with "Show More" (+3). Mobile symbol picker = modal list.
+- RESEARCH LAB (ResearchWizard step-0 / mobile Validate): brain icon removed, "Paper" label replaced by
+  live On/Off status synced with Trade toggles (via strategyMetrics), pencil edit icon (→ Strategy Center),
+  ~50% smaller cards.
+- WORKSPACE: "Emergency Stop" → "STOP ANANTA" (Settings.jsx kill button; mobile ws-stop-ananta on Engine
+  & Risk title axis). Split into 3 subtabs — All AI Info / Engine & Risk / Learning Hub (web Tabs, mobile
+  Segmented).
+- Fixed: mobile Trade crash (data.market.snapshots array access). Added web MatrixCell data-testids for parity.

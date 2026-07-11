@@ -122,10 +122,10 @@ function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
                 <RefreshCw className="w-4 h-4" />
             </button>
             <div className="grid grid-cols-2 gap-2">
-                <MatrixCell label="Setups" value={total} />
-                <MatrixCell label="Scanned" value={scanned} />
-                <MatrixCell label="Rejected" value={rejected} valueClass="text-atlas-negative" />
-                <MatrixCell label="Qualified" value={qualified} valueClass="text-atlas-positive" />
+                <MatrixCell testid="cockpit-metric-setups" label="Setups" value={total} />
+                <MatrixCell testid="cockpit-metric-scanned" label="Scanned" value={scanned} />
+                <MatrixCell testid="cockpit-metric-rejected" label="Rejected" value={rejected} valueClass="text-atlas-negative" />
+                <MatrixCell testid="cockpit-metric-qualified" label="Qualified" value={qualified} valueClass="text-atlas-positive" />
             </div>
             <div className="mt-2 rounded-lg border border-atlas-border px-4 py-2.5 flex items-center justify-between" data-testid="regime-cell">
                 <span className="label-tag">Regime</span>
@@ -135,9 +135,9 @@ function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
     );
 }
 
-function MatrixCell({ label, value, valueClass = "text-atlas-text" }) {
+function MatrixCell({ label, value, valueClass = "text-atlas-text", testid }) {
     return (
-        <div className="rounded-lg border border-atlas-border px-4 py-3">
+        <div className="rounded-lg border border-atlas-border px-4 py-3" data-testid={testid}>
             <div className="label-tag">{label}</div>
             <div className={`font-mono text-xl font-bold tabular-nums mt-0.5 ${valueClass}`}>{value}</div>
         </div>
