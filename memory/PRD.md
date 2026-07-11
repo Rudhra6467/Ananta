@@ -791,3 +791,26 @@ Enhancement across 4 tabs on BOTH web + mobile (parity), tested iter 42 (backend
   & Risk title axis). Split into 3 subtabs — All AI Info / Engine & Risk / Learning Hub (web Tabs, mobile
   Segmented).
 - Fixed: mobile Trade crash (data.market.snapshots array access). Added web MatrixCell data-testids for parity.
+
+## P2 COMPLETE — Imported strategies → executable declarative rules (2026-07-11)
+Tested iter 43 (backend pytest 5/5 + HTTP e2e; web + mobile import UI parity; registry restored to 11):
+- declarative_engine.py: exported SUPPORTED_FNS/SUPPORTED_OPS + validate_spec() (deterministic capability check).
+- import_ai.py: AI extraction now emits a `declarative` block (indicators/entry/exit/params) constrained to
+  engine primitives (long-only spot).
+- strategy_import.py: validate_declarative() gates `declarable` on BOTH the AI claim AND validate_spec;
+  draft carries declarable/declarative_spec/engine_params/issues (added to LIBRARY_FIELDS).
+- strategy/declarative_defs.py: runtime registry `_IMPORTED` + register_imported/unregister_imported/
+  imported_keys/all_declarative_keys; is_declarative/get_declarative_spec now include imports; register_imported
+  auto-builds a StrategySchema (ParamSpecs from engine_params + risk params) → full registry/config/metrics parity.
+- trading_engine.py: live loop iterates all_declarative_keys() (imports auto-eligible when enabled).
+- server.py: POST /api/library/imports/{id}/backtest-preview (proves executability pre-approve; 422 if not
+  compilable, 403 without owner); approve wires engine_key+wireable+spec+params and register_imported();
+  _bootstrap_declarative rehydrates imported strategies on startup (survives restart).
+- UI: ExecutableRules panel on web ImportStrategyModal + mobile import.tsx — COMPILES/METADATA badge, compiled
+  ENTRY/EXIT/PARAMS, "Run backtest preview" → historical metrics. api.importBacktestPreview added (web+mobile).
+- Backlog follow-ups (non-blocking): backtest-preview pins BTC/USD (infer from market_type); TTL/cleanup for
+  orphan non-compilable drafts.
+
+### KNOWN PRE-EXISTING FLAKE (not introduced by P2): tests/test_iter39_phase_b.py::test_backtest_requires_owner
+can report 200 in-suite though the route is correctly owner-gated (curl + isolated pytest both 403 with no token).
+Verify auth via a standalone no-token request, not the legacy in-suite ordering.
