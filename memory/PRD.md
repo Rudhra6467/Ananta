@@ -19,6 +19,13 @@ preventing DB bloat from un-compilable AI extractions. Verified by `tests/test_i
 **Console warnings (P3, cleaned):** mobile `shadowOpacity` → `boxShadow: "none"` (research tabBar);
 StrategyCenter leaderboard-sort + detail-status native `<select>` → shadcn `Select` (removes `<span>`-in-`<option>`
 DOM-nesting warning from the visual editor). Lint clean.
+**Launch-Hardening (Phase 2 start, tested — iter44):** web global `ErrorBoundary` (branded fallback + Reload,
+no white-screen) wrapping App/routes; web axios response interceptor (401 clears token, single deduped toast on
+network drop / 5xx); mobile expo-router `ErrorBoundary` export (reuses `ErrorView` + retry); backend global
+exception handler returns clean JSON 500 (no stack leak); `POST /library/import/analyze` returns 422 (not 500)
+on malformed AI extraction. Mobile Ask Ananta chip scoped to Cockpit+Workspace via `useSegments` route gate
+(fixes leak onto other tabs since (tabs) screens stay mounted). Backend 12-test suite `test_iter44_launch_hardening.py`
++ web + mobile all verified.
 Roadmap agreed with owner: Phase 2 Launch Hardening (break-testing), Phase 3 Performance profiling,
 Phase 4 Production (enable Ask Ananta → deploy → onboard) — NO new large features until stable.
 

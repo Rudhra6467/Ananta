@@ -181,7 +181,7 @@ export default function Workspace() {
         </View>
       </Modal>
     </ScrollView>
-    <AskAnanta tab="workspace" />
+    <AskAnanta tab="workspace" routeName="workspace" />
     </View>
   );
 }

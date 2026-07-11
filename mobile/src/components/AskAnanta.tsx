@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Modal, TextInput, ScrollView, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../api";
 import { useAuth } from "../auth";
@@ -17,9 +17,10 @@ const SUGGESTIONS: Record<string, string[]> = {
 
 type Msg = { role: "user" | "assistant"; text: string; actions?: any[] };
 
-export function AskAnanta({ tab }: { tab: string }) {
+export function AskAnanta({ tab, routeName }: { tab: string; routeName: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const segments = useSegments();
   const { isOwner } = useAuth();
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -36,6 +37,12 @@ export function AskAnanta({ tab }: { tab: string }) {
   }, []);
 
   if (!isOwner) return null;
+
+  // (tabs) screens stay mounted after first visit, so gate this fixed-position chip to
+  // the tab it belongs to — otherwise it leaks onto Trade/Strategy/Research.
+  const last = segments[segments.length - 1] as string | undefined;
+  const activeRoute = !last || last === "(tabs)" ? "index" : last;
+  if (activeRoute !== routeName) return null;
 
   const toggleEnabled = async () => {
     try {
@@ -94,7 +101,7 @@ export function AskAnanta({ tab }: { tab: string }) {
       </View>
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <View style={styles.wrap}>
+        <View style={styles.wrap} testID="ask-ananta-panel">
           <View style={[styles.panel, { paddingBottom: insets.bottom + spacing.md }]}>
             <View style={styles.head}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

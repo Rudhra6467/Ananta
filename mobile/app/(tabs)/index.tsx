@@ -231,7 +231,7 @@ export default function Cockpit() {
     </ScrollView>
     <TradingWizard visible={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
     <WeeklyReviewModal visible={weeklyOpen} onClose={() => setWeeklyOpen(false)} />
-    <AskAnanta tab="cockpit" />
+    <AskAnanta tab="cockpit" routeName="index" />
     </View>
   );
 }
