@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useState } from "react";
 import { Sparkles, Lock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
@@ -68,6 +68,7 @@ function WaitlistModal({ feature, onClose }) {
                     <DialogTitle className="flex items-center gap-2 font-heading text-atlas-text">
                         <Lock className="w-4 h-4 text-atlas-cyan" /> Request early access
                     </DialogTitle>
+                    <DialogDescription className="sr-only">Join the Ananta waitlist to unlock the full experience.</DialogDescription>
                 </DialogHeader>
                 {done ? (
                     <div className="text-center py-4 space-y-2">
