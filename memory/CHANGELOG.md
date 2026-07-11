@@ -1,3 +1,41 @@
+## 2026-07-11c (iter46) — Phase 3/4 + Access-Gate Waitlist MVP + System Health self-check (web + mobile)
+
+### Enhancement — System Health self-check chip (Phase 3 client health strip)
+- Backend `GET /api/health/selfcheck` (fast, credit-free, ~0.17s): backend, MongoDB (bounded ping),
+  market-data freshness (warm cache, no network), trading-engine loop status + last activity age.
+- Compact Cockpit chip that expands into a popover (web) / bottom sheet (mobile) — low-footprint per
+  owner's "use a dropdown if it eats screen space" note. Rows: Backend, Database, Market Data, Engine, Session.
+- Added `trading_loop.is_running` + `market_data.cache_stats()`.
+
+### Access-Gate / Waitlist MVP (Option A — lead capture, no public accounts yet)
+- New `access_requests` collection + endpoints: `POST /api/access/request` (PUBLIC, idempotent per email,
+  400 on bad email/empty name); `GET /api/access/requests` (owner); `POST /api/access/requests/{id}/{approve|reject}` (owner).
+  Deliberately separate from the auth layer so we can upgrade to real accounts later without refactoring.
+- Web: `AccessGateProvider` + `useAccessGate` + Waitlist modal wrap the app. `gate(feature)` → owner passes,
+  public opens the Waitlist modal. Wired: Ask Ananta (chip visible, open gated), System Health (pill visible,
+  expand gated), MetricExplainer (i) gated, onboarding tour gated.
+- Owner: all info UI always available; onboarding auto-shows once per SESSION (not a permanent "don't show
+  again") and is always re-launchable; no waitlist ever shown to owner.
+- Mobile is login-first → added a "Request early access" CTA on the login screen → same Waitlist modal;
+  gate infra also wired into mobile Ask Ananta / System Health for future parity.
+- a11y: added `DialogDescription` to the web Waitlist modal.
+
+### Phase 2/3 hardening recap (iter45, same push): web double-submit coalescing; session-expiry (auth
+  returns 401 for expired/invalid tokens, 403 for public → FE auto-logout + toast); `/risk/status` warm-cache
+  fix (~2.2s→0.09s).
+
+### Testing / Deployment
+- Testing agent iter46: GREEN across shared backend + web + mobile; no owner-flow regressions.
+- `conftest.bind_loop_local_db()` fixes cross-file asyncio event-loop rebinding — full direct-DB suite
+  order-independent (23 passed together). New tests: test_iter46_access_waitlist.py, test_iter46_http_access_and_health.py.
+- `deployment_agent` pre-launch scan: PASS, no blockers.
+
+### Launch (Phase 4 — owner-driven)
+- Ask Ananta left OFF by default; owner flips on when ready. Deploy (web + mobile build) via the Emergent Publish button.
+
+---
+
+
 ## 2026-07-09 (iter39) — Phase B COMPLETION: declarative exits + real backtest + Deploy/Backtest UI (tested, no LLM cost)
 
 Rounded out Phase B so wired catalog strategies trade their own logic end-to-end and carry real metrics.
