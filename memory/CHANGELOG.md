@@ -1,3 +1,21 @@
+## 2026-07-11d — Ask Ananta ON + public Launch/Landing page (web)
+
+- **Ask Ananta enabled** (`settings.ask_ananta_enabled = true`) so the owner can test the copilot before launch.
+- **New marketing launch page** at web route `/launch` (`frontend/src/pages/LaunchPage.jsx`), modeled on the
+  shared reference: hamburger menu (left), centered Ananta brand (logo + wordmark sized ~50% larger than the
+  reference), top-right "Skip to homepage" link + profile/owner-login icon. Hero "Your 24/7 AI Trading Assistant"
+  + subtitle, teal "Start Free Trial" and outlined "Watch Video 3min" CTAs, and 3 clickable feature cards
+  (Strategies / AI Assistant / Research Lab) with themed colored icons on a dark grid + teal-glow backdrop.
+- Everything is clickable and on-brand (teal #14E0C9 accent = logo/mobile brand color, atlas dark theme):
+  Start Free Trial / Watch Video / feature cards / menu items → owner goes straight into the app, public opens
+  the "Request early access" waitlist modal. Skip-to-homepage + profile icon → app homepage "/".
+- Verified on desktop (1280) and mobile portrait (430) viewports; owner vs public branching confirmed.
+- Note: launch page lives at `/launch` (share this link with new customers); can be promoted to site root later
+  without disrupting the owner app or existing tests.
+
+---
+
+
 ## 2026-07-11c (iter46) — Phase 3/4 + Access-Gate Waitlist MVP + System Health self-check (web + mobile)
 
 ### Enhancement — System Health self-check chip (Phase 3 client health strip)
