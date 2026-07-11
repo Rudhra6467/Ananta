@@ -27,7 +27,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
@@ -2678,9 +2678,14 @@ async def import_analyze(payload: ImportAnalyzeReq):
         logger.error("import analyze failed: %s", e)
         raise HTTPException(status_code=502, detail=f"AI extraction error: {e}")
 
-    draft = strategy_import.build_draft(
-        raw_source=raw, source_format=fmt, detected=detected,
-        extraction=extraction, name_override=payload.name)
+    try:
+        draft = strategy_import.build_draft(
+            raw_source=raw, source_format=fmt, detected=detected,
+            extraction=extraction, name_override=payload.name)
+    except (KeyError, TypeError, ValueError) as e:
+        logger.warning("import build_draft failed on malformed extraction: %s", e)
+        raise HTTPException(status_code=422,
+            detail="The AI extraction was malformed and could not be structured. Try again or paste cleaner source.") from e
     await db.strategy_imports.insert_one({**draft})
     draft.pop("_id", None)
     return draft
@@ -2908,6 +2913,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Production safety net: log the full stack for observability but return a clean,
+    non-leaking JSON 500 so the client never receives a raw stack trace / HTML error page.
+    HTTPException / validation errors are handled by FastAPI's own handlers before this."""
+    logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error. Please try again."})
 
 
 # ---- lifecycle ----

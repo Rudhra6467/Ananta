@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -15,6 +16,32 @@ client.interceptors.request.use((config) => {
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
+
+// Global API-failure recovery: surface a single (deduped) toast for network drops
+// and 5xx server errors so a silent failure never leaves the operator guessing.
+// Expected 4xx (401/403/404/422) are left to the calling component — it renders
+// contextual messaging. A 401 additionally clears the stale token.
+let _lastToastAt = 0;
+function _softToast(msg) {
+    const now = Date.now();
+    if (now - _lastToastAt < 4000) return; // dedupe bursts (Reports fires ~8 reads)
+    _lastToastAt = now;
+    toast.error(msg);
+}
+client.interceptors.response.use(
+    (r) => r,
+    (error) => {
+        const status = error?.response?.status;
+        if (status === 401) {
+            localStorage.removeItem(TOKEN_KEY);
+        } else if (!error?.response) {
+            if (error?.code !== "ERR_CANCELED") _softToast("Network issue — retrying shortly. Check your connection.");
+        } else if (status >= 500) {
+            _softToast("The server hit a temporary error. Please try again.");
+        }
+        return Promise.reject(error);
+    },
+);
 
 // Stale-while-revalidate GET cache: instant data on quick tab revisits + in-flight
 // dedup (the Reports tab fires ~8 reads at once). Credit-free, purely client-side.

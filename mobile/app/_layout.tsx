@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider, useAuth } from "../src/auth";
 import { registerForPushNotificationsAsync } from "../src/push";
 import { getItem } from "../src/storage";
-import { LoadingView } from "../src/components/StateView";
+import { LoadingView, ErrorView } from "../src/components/StateView";
 import { LockScreen } from "../src/components/LockScreen";
 import { colors } from "../src/theme";
 
@@ -76,6 +76,18 @@ export default function RootLayout() {
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// expo-router catches render/runtime errors in this segment and renders this
+// branded fallback (with retry) instead of a red LogBox / blank screen.
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return (
+    <SafeAreaProvider>
+      <View style={styles.fill} testID="app-error-boundary">
+        <ErrorView message={error?.message || "An unexpected error occurred."} onRetry={retry} />
+      </View>
+    </SafeAreaProvider>
   );
 }
 

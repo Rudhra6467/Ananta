@@ -1,0 +1,50 @@
+{
+  "summary": "iter44 Launch-Hardening verification across shared backend + web + mobile. Backend: 12/12 new pytest checks PASS (test_iter44_launch_hardening.py) covering (a) POST /api/library/import/analyze returns 400 'raw_content is required' on empty/whitespace (not 500), (b) garbage raw_content returns clean JSON 400/422/502 with no 'Traceback'/'at 0x' leak, (c) analyze requires owner, (d) bad Bearer token returns clean JSON 4xx, (e) settings.ask_ananta_enabled is a bool and GET/PUT round-trips + persists via mongo, (f) /api/ananta/ask is blocked when disabled, (g) P2 import formats/detect endpoints ok, invalid draft id backtest-preview returns clean 4xx JSON. Existing test_iter44_orphan_purge.py also 1/1 PASS. Global unhandled-exception handler present at server.py L2918 (returns non-leaking 500 JSON). WEB (owner logged in via localStorage token, viewport 1440x900): Cockpit shows ask-ananta-chip with ask-ananta-switch aria-checked=false (default OFF) and ask-ananta-open disabled; Trade/Strategy/Research show NO chip (correctly gated by AppShell.jsx L127 `[dashboard, workspace].includes(active)`); Workspace shows chip. Toggling switch ON via chip flips aria-checked→true, persists to backend (GET /api/settings ⇒ ask_ananta_enabled:true), opening panel reveals ask-ananta-switch-panel + ask-ananta-close; sending 'What is the current market regime?' returned a full multi-paragraph LLM answer (screenshot verified). Toggling OFF via panel switch closes the panel and chip returns in OFF style. Rapid 6-tab navigation did NOT trigger app-error-boundary. Empty raw_content from browser fetch returns clean 400 JSON {'detail':'raw_content is required'} with content-type application/json. 401 test: forced bad Bearer returned 403 JSON (backend uses require_owner returning 403 for tampered tokens; still clean, no whitescreen). MOBILE (Expo web preview, viewport 390x844, biometric bypass + onboarding skip): Cockpit shows ask-ananta-chip with OFF switch; Workspace shows chip AND workspace's own ask-ananta-toggle switch row. Toggle ON via chip switch persists to backend (ask_ananta_enabled:true), opening the panel shows suggested prompts + ask-ananta-switch-panel + ask-ananta-close; send flow enters keyboard text and dispatches. Panel close via X returns to chip. HOWEVER: PARITY BUG — the chip is ALSO visible on Trade / Strategy / Research on mobile (should be Cockpit + Workspace only). Web correctly hides it via active-tab check in AppShell.jsx; mobile mounts <AskAnanta /> inside index.tsx and workspace.tsx and expo-router keeps mounted (tabs) screens alive in the web preview so the fixed-position chip from index/workspace leaks into the other tab screens. This violates the explicit acceptance criterion ('NOT present on Trade/Strategy/Research'). All other iter44 features verified working.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [
+        {"component": "AskAnanta chip scoping", "issue": "Chip is visible on Trade/Strategy/Research tabs on mobile (should be Cockpit + Workspace only). Fixed-position chip mounted inside app/(tabs)/index.tsx L234 and app/(tabs)/workspace.tsx L184 leaks into other tabs because expo-router keeps (tabs) screens mounted. Need to gate the render with useSegments()/usePathname() or move AskAnanta into a shared tabs layout that reads the current route and only renders on 'index' or 'workspace'.", "testID": "ask-ananta-chip", "priority": "HIGH"},
+        {"component": "AskAnanta panel wrapper testID", "issue": "The mobile <Modal> panel does not expose a testID='ask-ananta-panel' on its outer container (only its children have testIDs). Add testID='ask-ananta-panel' to the Modal or its top-level View at src/components/AskAnanta.tsx L96-98 for parity with web.", "testID": "ask-ananta-panel", "priority": "LOW"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "AskAnanta chip tab scoping", "platform": "mobile", "issue": "Chip appears on ALL 5 tabs on mobile; on web it appears only on Cockpit + Workspace as required", "expected": "Chip hidden on Trade/Strategy/Research on both platforms", "actual": "Web: correct. Mobile: chip visible on Trade/Strategy/Research too (residual from index.tsx / workspace.tsx staying mounted in expo-router (tabs))."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter44_launch_hardening.py",
+    "/app/backend/tests/test_iter44_orphan_purge.py",
+    "/app/test_reports/pytest/iter44_launch_hardening.xml"
+  ],
+  "action_items": [
+    "MOBILE: Fix AskAnanta chip so it renders ONLY on Cockpit + Workspace. Options: (a) render <AskAnanta /> once at the (tabs) layout using useSegments()/usePathname() and gate on route name; (b) inside AskAnanta.tsx, useSegments() and return null when current segment is not 'index' | 'workspace'. Reference: /app/mobile/app/(tabs)/index.tsx:234 and /app/mobile/app/(tabs)/workspace.tsx:184.",
+    "MOBILE (minor): Add testID='ask-ananta-panel' to the outer <Modal>/View in /app/mobile/src/components/AskAnanta.tsx around L96-98 for parity with web and to enable robust panel-visibility assertions in tests."
+  ],
+  "critical_code_review_comments": [
+    "Global exception handler at server.py L2918 correctly logs stack (logger.exception) but returns generic 'Internal server error' with no traceback — good. Consider also adding a request-id header echoed back so users can quote it when reporting issues.",
+    "server.py L2666-2688 import_analyze: empty check → 400, malformed extraction → 422, AI upstream → 502. Clean 4xx path but the raw AI extraction is fully awaited inside the try; a very large raw_content could still hit the 30s axios client timeout on the web side without a specific 413 gate — consider capping raw_content length (e.g., 32 KB) before invoking the LLM to fail fast and preserve credits.",
+    "api.js L34-42: 401 clears TOKEN_KEY but does not reset any in-memory auth-context state; a route that reads useAuth().isOwner will keep isOwner=true until next reload. Consider also broadcasting via window event so AuthContext re-checks /api/auth/me and flips isOwner→false, avoiding a stale 'Owner' pill in the header until reload.",
+    "ErrorBoundary.jsx is class-based and top-level only; consider wrapping each tab's <Component /> so a Research crash doesn't unmount the entire shell (bottom nav becomes unusable behind the fallback). Currently a single global boundary — acceptable but not granular.",
+    "AskAnanta.jsx polls /api/settings every 20s (setInterval L40). With 5 tabs + Ask Ananta only active on 2, that's still one extra read per 20s on every session — consider bumping to 60s or replacing with a window-focus trigger to reduce backend chatter."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter44_launch_hardening.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "92% (mobile chip scoping bug)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (PREVIEW). Web token: localStorage 'ananta_owner_token'. Mobile: set localStorage 'ananta_biometric_enabled'='0' and 'ananta_onboarded'='1', log in via /api/auth/login, store token, reload. Mobile tab testIDs: tab-index (Cockpit), tab-trade, tab-strategy, tab-research, tab-workspace.",
+  "seed_data_creation": "None. Toggled settings.ask_ananta_enabled during test and restored to false at end. No mongo test docs left behind.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter44 backend hardening + Ask Ananta scoping is COMPLETE except for one mobile parity bug: AskAnanta chip renders on all 5 mobile tabs because it's mounted inside index.tsx + workspace.tsx and expo-router keeps (tabs) screens mounted, so the chip's fixed-position View leaks across tabs in the Expo web preview. Web is correctly scoped via AppShell.jsx L127. To retest the mobile fix, use tab-index / tab-trade / tab-strategy / tab-research / tab-workspace testIDs and confirm [data-testid='ask-ananta-chip'] is null on Trade/Strategy/Research. Backend suite path: /app/backend/tests/test_iter44_launch_hardening.py (12 tests, 100% pass). All ErrorBoundary + 500-handler + 400/422 paths verified.",
+  "rca of the issue": "Mobile parity bug RCA: on web, AppShell.jsx L127 does `{['dashboard','workspace'].includes(TABS[active].id) && <AskAnanta />}` — a single conditional-mounted instance. On mobile, expo-router (tabs) uses a bottom Tab navigator that keeps mounted screens alive on tab switch (default). Because <AskAnanta /> is placed INSIDE index.tsx (L234) and workspace.tsx (L184), and its chip uses `position:'absolute'/bottom:78`, the chip DOM node from a previously-visited (tabs)/index screen remains rendered even after the user switches to (tabs)/trade — so users on Trade/Strategy/Research still see the chip. Reproduction: log in as owner on mobile preview, land on Cockpit (chip renders), tap tab-trade — chip still visible. Fix: gate the render using useSegments() or usePathname() inside AskAnanta.tsx (early-return null when the last segment is not 'index' | 'workspace'), OR lift AskAnanta into (tabs)/_layout.tsx and use the same segment check. Mitigation until fix: users can still toggle it OFF via workspace toggle to remove it from view."
+}
