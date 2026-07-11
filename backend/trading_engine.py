@@ -43,7 +43,7 @@ from squeeze import evaluate_squeeze
 from continuation import evaluate_continuation
 from strategy_runtime import overlay_settings, resolve_active_params, resolve_full_params
 from declarative_engine import evaluate as decl_evaluate
-from strategy.declarative_defs import DECLARATIVE_KEYS, get_declarative_spec
+from strategy.declarative_defs import all_declarative_keys, get_declarative_spec
 from circuit_breaker import evaluate_breaker
 
 logger = logging.getLogger(__name__)
@@ -1417,7 +1417,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and bars_1h and len(bars_1h) >= 30
         )
         if decl_eligible:
-            for _dkey in DECLARATIVE_KEYS:
+            for _dkey in all_declarative_keys():
                 if trade_doc is not None:
                     break
                 if not strategy_entry_allowed(strategy_states, _dkey):

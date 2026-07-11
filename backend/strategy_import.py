@@ -198,6 +198,40 @@ def _clamp(v, lo, hi, default):
         return default
 
 
+def validate_declarative(decl: dict) -> dict:
+    """Validate the AI-extracted declarative block against the live engine's primitives.
+    Returns {compilable, params, spec, issues}. compilable=True only when the spec both
+    claims compilable AND passes the deterministic engine validator."""
+    from declarative_engine import validate_spec  # local import avoids cycle at module load
+
+    decl = decl or {}
+    params = decl.get("params") or {}
+    spec = {
+        "indicators": decl.get("indicators") or {},
+        "entry": decl.get("entry") or [],
+        "exit": decl.get("exit") or [],
+        "entry_reason": decl.get("entry_reason") or "Imported strategy entry",
+    }
+    if not isinstance(params, dict):
+        params = {}
+    # coerce param values to numbers where possible
+    clean_params = {}
+    for k, v in params.items():
+        try:
+            fv = float(v)
+            clean_params[k] = int(fv) if float(fv).is_integer() else fv
+        except (TypeError, ValueError):
+            continue
+    res = validate_spec(spec)
+    ai_claim = bool(decl.get("compilable"))
+    compilable = ai_claim and res["ok"] and bool(spec["entry"])
+    issues = list(res["issues"])
+    if ai_claim and not res["ok"]:
+        issues.insert(0, "AI marked this compilable but the rules do not map to supported primitives.")
+    return {"compilable": compilable, "params": clean_params, "spec": spec,
+            "issues": issues, "reason": decl.get("reason") or ""}
+
+
 def build_draft(*, raw_source: str, source_format: str, detected: dict,
                 extraction: dict, name_override: str | None = None) -> dict:
     """Compose a draft document (persisted in `strategy_imports`) from the AI extraction.
@@ -211,6 +245,7 @@ def build_draft(*, raw_source: str, source_format: str, detected: dict,
     conv = ex.get("conversion") or {}
     conv_conf = _clamp(conv.get("confidence_score"), 0, 100, conf)
     validation = validate_extraction(ex)
+    decl = validate_declarative(ex.get("declarative") or {})
 
     label = ADAPTERS.get(source_format).label if ADAPTERS.get(source_format) else source_format
     tf = ex.get("timeframe") or (ex.get("timeframes") or ["1H"])[0]
@@ -267,6 +302,12 @@ def build_draft(*, raw_source: str, source_format: str, detected: dict,
         "conversion_missing": conv.get("missing_logic") or [],
         "conversion_warnings": conv.get("warnings") or [],
         "validation": validation,
+        # --- declarative compilation (P2: imported → executable) ---
+        "declarable": decl["compilable"],
+        "declarative_spec": decl["spec"],
+        "engine_params": decl["params"],
+        "declarative_issues": decl["issues"],
+        "declarative_reason": decl["reason"],
         "raw_source": (raw_source or "")[:20000],
         "status": "draft",
         "created_at": now,
@@ -286,6 +327,7 @@ LIBRARY_FIELDS = [
     "long_short_support", "indicators", "position_sizing", "volatility_preference",
     "expected_holding_period", "strengths", "weaknesses", "tags",
     "conversion_confidence", "conversion_report", "validation",
+    "declarable", "declarative_spec", "engine_params",
 ]
 
 

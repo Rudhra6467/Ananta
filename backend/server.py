@@ -2509,6 +2509,17 @@ async def _bootstrap_declarative():
         await db.strategy_library.update_one(
             {"id": lib_id}, {"$set": {"engine_key": ekey, "wireable": True}})
 
+    # (3) rehydrate IMPORTED declarative strategies into the runtime registry (P2).
+    from strategy.declarative_defs import register_imported  # noqa: PLC0415
+    cursor = db.strategy_library.find(
+        {"imported": True, "wireable": True, "declarative_spec": {"$exists": True}}, {"_id": 0})
+    async for d in cursor:
+        ekey = d.get("engine_key")
+        spec = d.get("declarative_spec")
+        if ekey and spec and (spec.get("entry")):
+            register_imported(ekey, d.get("name") or ekey, d.get("description") or "",
+                              spec, d.get("engine_params") or {})
+
 
 @api_router.post("/library/seed", dependencies=[Depends(require_owner)])
 async def library_seed_endpoint(force: bool = Query(False)):
@@ -2722,11 +2733,59 @@ async def import_approve(draft_id: str):
     lib_doc = strategy_import.to_library_doc(doc)
     if await db.strategy_library.find_one({"id": lib_doc["id"]}, {"_id": 1}):
         lib_doc["id"] = f"{lib_doc['id']}-{uuid.uuid4().hex[:4]}"
+
+    # P2: if the import compiled to the declarative engine, wire it as an executable strategy.
+    if doc.get("declarable") and (doc.get("declarative_spec") or {}).get("entry"):
+        from strategy.declarative_defs import register_imported  # noqa: PLC0415
+        ekey = lib_doc["id"]
+        lib_doc["engine_key"] = ekey
+        lib_doc["wireable"] = True
+        lib_doc["declarative_spec"] = doc["declarative_spec"]
+        lib_doc["engine_params"] = doc.get("engine_params") or {}
+        register_imported(ekey, lib_doc["name"], lib_doc.get("description") or "",
+                           doc["declarative_spec"], doc.get("engine_params") or {})
+
     await db.strategy_library.insert_one({**lib_doc})
     await db.strategy_imports.update_one({"id": draft_id},
         {"$set": {"status": "approved", "approved_library_id": lib_doc["id"], "updated_at": _strat_now_iso()}})
     lib_doc.pop("_id", None)
     return {"approved": True, "library_id": lib_doc["id"], "strategy": lib_doc}
+
+
+@api_router.post("/library/imports/{draft_id}/backtest-preview", dependencies=[Depends(require_owner)])
+async def import_backtest_preview(draft_id: str, symbol: str = "BTC/USD", days: int = 30, exchange: str = "kraken"):
+    """P2: prove an imported strategy is executable BEFORE approval — replay its compiled
+    declarative spec over real historical OHLCV. Fails clearly if the import did not compile."""
+    import asyncio  # noqa: PLC0415
+    from declarative_backtest import run_declarative_backtest  # noqa: PLC0415
+    from declarative_engine import validate_spec  # noqa: PLC0415
+    from backtest import fetch_history  # noqa: PLC0415
+
+    doc = await db.strategy_imports.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="import draft not found")
+    spec = doc.get("declarative_spec") or {}
+    v = validate_spec(spec)
+    if not (doc.get("declarable") and v["ok"] and spec.get("entry")):
+        raise HTTPException(status_code=422,
+            detail="This import did not compile to executable rules: " + "; ".join(v["issues"] or [doc.get("declarative_reason") or "not compilable"]))
+    params = dict(doc.get("engine_params") or {})
+    days = max(7, min(90, days))
+    try:
+        candles = await asyncio.to_thread(fetch_history, symbol, days, "1h", exchange)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"could not fetch history: {e}") from e
+    if len(candles) < 60:
+        raise HTTPException(status_code=422, detail="insufficient historical data for a backtest")
+    metrics = await asyncio.to_thread(run_declarative_backtest, spec, candles, params, stop_pct=8.0)
+    hist = {k: metrics[k] for k in ("roi", "win_rate", "profit_factor", "sharpe", "sortino",
+                                    "max_drawdown", "avg_trade", "trade_count")}
+    await db.strategy_imports.update_one({"id": draft_id},
+        {"$set": {"backtested": True, "preview_backtest": {**hist, "symbol": symbol, "days": days,
+                  "bars": metrics["bars"], "at": _strat_now_iso()}, "updated_at": _strat_now_iso()}})
+    return {"id": draft_id, "symbol": symbol, "days": days, "historical_results": hist, "bars": metrics["bars"]}
 
 
 @api_router.post("/library/{lib_id}/backtest", dependencies=[Depends(require_owner)])

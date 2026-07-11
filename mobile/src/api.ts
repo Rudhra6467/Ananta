@@ -112,6 +112,8 @@ export const api = {
   importList: () => get<any>("/library/imports"),
   importUpdate: (id: string, patch: any) => put<any>(`/library/imports/${id}`, { patch }),
   importApprove: (id: string) => post<any>(`/library/imports/${id}/approve`, {}),
+  importBacktestPreview: (id: string, symbol = "BTC/USD", days = 30) =>
+    post<any>(`/library/imports/${id}/backtest-preview?symbol=${encodeURIComponent(symbol)}&days=${days}`, {}),
   analyticsLeaderboard: (sort = "health", source = "all") => get<any>(`/analytics/leaderboard?sort=${sort}&source=${source}`),
   watchlistSearch: (q = "") => get<any>(`/watchlist/search?q=${encodeURIComponent(q)}`),
   watchlistAdd: (symbol: string) => post<any>("/watchlist/add", { symbol }),

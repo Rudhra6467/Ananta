@@ -255,3 +255,69 @@ def evaluate(spec: dict, bars: list, params: dict) -> DeclSignal:
     latest = {k: (round(v[-1], 6) if v and v[-1] is not None else None) for k, v in series.items()}
     reason = spec.get("entry_reason", "declarative entry") if entry else ""
     return DeclSignal(entry=entry, exit=exit_, reason=reason, indicators=latest)
+
+
+# ---------------- capability surface + spec validator (Import Pipeline P2) ---------------- #
+# Required numeric params per indicator fn (used to validate imported declarative specs).
+SUPPORTED_FNS: dict[str, list[str]] = {
+    "ema": ["period"], "sma": ["period"], "rsi": ["period"], "atr": ["period"],
+    "macd_line": ["fast", "slow"], "macd_signal": ["fast", "slow", "signal"],
+    "macd_hist": ["fast", "slow", "signal"],
+    "bb_lower": ["period", "std"], "bb_upper": ["period", "std"], "bb_mid": ["period"],
+    "donchian_high": ["period"], "donchian_low": ["period"],
+    "atr_breakout_level": ["period", "k"],
+    "keltner_upper": ["ema_period", "atr_period", "mult"], "keltner_mid": ["ema_period"],
+    "supertrend_dir": ["atr_period", "multiplier"], "supertrend_line": ["atr_period", "multiplier"],
+}
+SUPPORTED_OPS: set[str] = {"cross_above", "cross_below", "gt", "lt", "gte", "lte", "rising", "falling"}
+
+
+def _operand_valid(ref, indicator_ids: set) -> bool:
+    if isinstance(ref, (int, float)):
+        return True
+    if isinstance(ref, str):
+        if ref.startswith("$"):
+            return len(ref) > 1
+        return ref in _PRICE_IDX or ref == "prev_close" or ref in indicator_ids
+    return False
+
+
+def validate_spec(spec: dict) -> dict:
+    """Deterministically verify a declarative spec compiles against THIS engine's primitives.
+    Returns {ok, issues:[str]} — used to gate imported strategies as executable/wireable."""
+    issues: list[str] = []
+    if not isinstance(spec, dict):
+        return {"ok": False, "issues": ["spec is not an object"]}
+    indicators = spec.get("indicators") or {}
+    if not isinstance(indicators, dict):
+        issues.append("indicators must be an object")
+        indicators = {}
+    ids = set(indicators.keys())
+    for iid, ispec in indicators.items():
+        if not isinstance(ispec, dict) or "fn" not in ispec:
+            issues.append(f"indicator '{iid}' missing fn")
+            continue
+        fn = ispec.get("fn")
+        if fn not in SUPPORTED_FNS:
+            issues.append(f"unsupported indicator fn '{fn}' (id '{iid}')")
+            continue
+        for req in SUPPORTED_FNS[fn]:
+            if req not in ispec:
+                issues.append(f"indicator '{iid}' ({fn}) missing param '{req}'")
+    entry = spec.get("entry") or []
+    exit_ = spec.get("exit") or []
+    if not isinstance(entry, list) or not entry:
+        issues.append("entry must be a non-empty list of conditions")
+        entry = entry if isinstance(entry, list) else []
+    for grp, conds in (("entry", entry), ("exit", exit_ if isinstance(exit_, list) else [])):
+        for j, c in enumerate(conds):
+            if not isinstance(c, dict) or "op" not in c or "lhs" not in c:
+                issues.append(f"{grp}[{j}] missing op/lhs")
+                continue
+            if c["op"] not in SUPPORTED_OPS:
+                issues.append(f"{grp}[{j}] unsupported op '{c['op']}'")
+            if not _operand_valid(c.get("lhs"), ids):
+                issues.append(f"{grp}[{j}] invalid lhs operand '{c.get('lhs')}'")
+            if "rhs" in c and not _operand_valid(c.get("rhs"), ids):
+                issues.append(f"{grp}[{j}] invalid rhs operand '{c.get('rhs')}'")
+    return {"ok": len(issues) == 0, "issues": issues}

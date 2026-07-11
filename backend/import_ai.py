@@ -66,8 +66,30 @@ SYSTEM_PROMPT = (
     '     "missing_logic": ["logic that was ambiguous or could not be fully extracted"],\n'
     '     "warnings": ["conversion caveats the user should review"],\n'
     '     "notes": "a detailed multi-sentence conversion report explaining the mapping decisions"\n'
+    "  },\n"
+    '  "declarative": {\n'
+    '     "compilable": true|false,\n'
+    '     "reason": "one sentence: why it is or is not compilable to Ananta rule engine",\n'
+    '     "params": {"flat numeric tunables referenced by $name e.g. ema_fast: 12"},\n'
+    '     "indicators": {"<id>": {"fn": "<supported fn>", "<param>": number_or_$ref}},\n'
+    '     "entry": [{"lhs": "<operand>", "op": "<supported op>", "rhs": "<operand>"}],\n'
+    '     "exit":  [{"lhs": "<operand>", "op": "<supported op>", "rhs": "<operand>"}],\n'
+    '     "entry_reason": "short human-readable reason string"\n'
     "  }\n"
-    "}\n"
+    "}\n\n"
+    "DECLARATIVE COMPILER RULES (critical): entry conditions are AND-ed (all true), exit conditions "
+    "are OR-ed (any true) and may be []. Use ONLY the primitives below; if the strategy needs anything "
+    "else set declarative.compilable=false and still return your best-effort partial mapping.\n"
+    "  Supported indicator fns + required params:\n"
+    "    ema{period}, sma{period}, rsi{period}, atr{period}, macd_line{fast,slow}, "
+    "macd_signal{fast,slow,signal}, macd_hist{fast,slow,signal}, bb_lower{period,std}, "
+    "bb_upper{period,std}, bb_mid{period}, donchian_high{period}, donchian_low{period}, "
+    "atr_breakout_level{period,k}, keltner_upper{ema_period,atr_period,mult}, "
+    "keltner_mid{ema_period}, supertrend_dir{atr_period,multiplier}, supertrend_line{atr_period,multiplier}.\n"
+    "  Supported ops: cross_above, cross_below, gt, lt, gte, lte, rising, falling.\n"
+    "  Operands (lhs/rhs): an indicator id you defined | a price field (open/high/low/close/prev_close) "
+    "| a number | a $paramName that MUST exist in declarative.params.\n"
+    "  Ananta is LONG-ONLY spot: entry = the long trigger, exit = the flatten trigger."
 )
 
 

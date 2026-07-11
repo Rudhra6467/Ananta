@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Loader2, Upload, Sparkles, AlertTriangle, CheckCircle2, Info, XCircle, ArrowLeft,
-    FileCode2, Braces, GitBranch, Store, ShieldCheck,
+    FileCode2, Braces, GitBranch, Store, ShieldCheck, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -244,6 +244,9 @@ function ReviewStep({ draft, setDraft, onBack, onImported }) {
                 </div>
             )}
 
+            {/* Executable rules (P2: imported → declarative engine) */}
+            <ExecutableRules draft={draft} />
+
             {/* editable metadata */}
             <div className="panel p-4 space-y-3">
                 <div className="label-tag">Review &amp; Edit Metadata</div>
@@ -294,6 +297,55 @@ function ReviewStep({ draft, setDraft, onBack, onImported }) {
         </div>
     );
 }
+
+function ExecutableRules({ draft }) {
+    const [running, setRunning] = useState(false);
+    const [bt, setBt] = useState(draft.preview_backtest || null);
+    const spec = draft.declarative_spec || {};
+    const declarable = !!draft.declarable;
+    const fmtCond = (c) => `${c.lhs} ${String(c.op).replace("_", " ")}${c.rhs !== undefined ? " " + c.rhs : ""}`;
+    const runPreview = async () => {
+        setRunning(true);
+        try {
+            const r = await api.importBacktestPreview(draft.id, "BTC/USD", 30);
+            setBt({ ...r.historical_results, bars: r.bars });
+            toast.success("Backtest preview complete", { description: `${r.bars} bars` });
+        } catch (e) { toast.error("Preview failed", { description: String(e?.response?.data?.detail || e?.message || e) }); }
+        finally { setRunning(false); }
+    };
+    return (
+        <div className="panel p-4" data-testid="import-executable">
+            <div className="label-tag mb-2 flex items-center gap-2"><Zap className="w-3.5 h-3.5 text-atlas-cyan" /> Executable Rules</div>
+            <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 mb-3 font-mono text-[10px] font-bold border ${declarable ? "border-atlas-positive/40 text-atlas-positive bg-atlas-positive/10" : "border-atlas-warning/40 text-atlas-warning bg-atlas-warning/10"}`} data-testid="import-declarable-badge">
+                {declarable ? <><CheckCircle2 className="w-3 h-3" /> COMPILES TO ENGINE · RUNNABLE</> : <><AlertTriangle className="w-3 h-3" /> METADATA ONLY · NOT AUTO-EXECUTABLE</>}
+            </div>
+            {declarable ? (
+                <div className="space-y-2 font-mono text-[11px]">
+                    <div><span className="text-atlas-textTertiary">ENTRY (all): </span><span className="text-atlas-text">{(spec.entry || []).map(fmtCond).join("  AND  ")}</span></div>
+                    <div><span className="text-atlas-textTertiary">EXIT (any): </span><span className="text-atlas-text">{(spec.exit || []).map(fmtCond).join("  OR  ") || "structural stop only"}</span></div>
+                    <div><span className="text-atlas-textTertiary">PARAMS: </span><span className="text-atlas-text">{Object.entries(draft.engine_params || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—"}</span></div>
+                    <div className="pt-2 flex items-center gap-3 flex-wrap">
+                        <Button data-testid="import-backtest-preview-btn" onClick={runPreview} disabled={running} size="sm"
+                            className="bg-atlas-cyan text-black hover:brightness-110 font-mono text-[11px] font-bold rounded-lg">
+                            {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Run backtest preview"}
+                        </Button>
+                        {bt && (
+                            <span data-testid="import-preview-result" className="font-mono text-[11px] text-atlas-textSecondary">
+                                ROI <b className={bt.roi >= 0 ? "text-atlas-positive" : "text-atlas-negative"}>{bt.roi}%</b> · WR {bt.win_rate}% · PF {bt.profit_factor} · {bt.trade_count} trades ({bt.bars} bars)
+                            </span>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">
+                    {draft.declarative_reason || "This strategy uses logic Ananta's rule engine can't replicate yet — it's saved as a reference blueprint."}
+                    {(draft.declarative_issues?.length > 0) && <span className="block mt-1 text-atlas-warning">Issues: {draft.declarative_issues.slice(0, 3).join("; ")}</span>}
+                </p>
+            )}
+        </div>
+    );
+}
+
 
 function ConfidenceCard({ value = 0 }) {
     const pct = Math.max(0, Math.min(100, value));

@@ -157,6 +157,8 @@ export const api = {
     importUpdate: (id, patch) => client.put(`/library/imports/${id}`, { patch }).then((r) => r.data),
     importDelete: (id) => client.delete(`/library/imports/${id}`).then((r) => r.data),
     importApprove: (id) => client.post(`/library/imports/${id}/approve`).then((r) => r.data),
+    importBacktestPreview: (id, symbol = "BTC/USD", days = 30) =>
+        client.post(`/library/imports/${id}/backtest-preview?symbol=${encodeURIComponent(symbol)}&days=${days}`).then((r) => r.data),
     // Active Watchlist
     watchlistSearch: (q = "") => client.get(`/watchlist/search?q=${encodeURIComponent(q)}`).then((r) => r.data),
     watchlistAdd: (symbol) => client.post("/watchlist/add", { symbol }).then((r) => r.data),

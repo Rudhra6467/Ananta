@@ -167,13 +167,63 @@ DECLARATIVE: dict[str, dict] = {
 
 DECLARATIVE_KEYS = list(DECLARATIVE.keys())
 
+# ---- runtime registry for IMPORTED declarative strategies (Import Pipeline P2) ----
+# Approved imports that compile to the declarative engine are registered here so they gain
+# full parity with catalog strategies (registry, metrics, configs, backtest, live loop).
+_IMPORTED: dict[str, dict] = {}
+
+
+def register_imported(key: str, name: str, description: str, spec: dict,
+                      params: dict, dna: StrategyDNA | None = None) -> None:
+    """Register (or replace) an imported declarative strategy at runtime.
+    `params` is a flat {id: number} of the spec's tunables; each becomes a ParamSpec so the
+    Research Lab form + per-strategy configs + resolve_full_params all work unchanged."""
+    _IMPORTED[key] = {"name": name, "description": description, "spec": spec, "params": params}
+    pspecs: list[ParamSpec] = []
+    for pid, val in (params or {}).items():
+        try:
+            fval = float(val)
+        except (TypeError, ValueError):
+            continue
+        is_int = float(fval).is_integer() and abs(fval) < 1000
+        pspecs.append(ParamSpec(
+            id=pid, label=pid.replace("_", " ").title(),
+            type=_T.INT if is_int else _T.FLOAT, default=(int(fval) if is_int else fval),
+            min=(0 if fval >= 0 else fval * 4), max=(max(fval * 4, 10) if fval >= 0 else 0),
+            step=(1.0 if is_int else 0.1), group=_G.ENTRY, engine_backed=False,
+            help="Imported strategy parameter."))
+    register(StrategySchema(
+        key=key, version="1.0.0", name=name, description=description,
+        dna=dna or StrategyDNA(purpose=description or "Imported strategy", works_best="—", avoid="—",
+                               risk="Moderate", holding="Hours-days", preferred_coins=["BTC/USD"],
+                               confidence=55, tags=["imported"]),
+        params=pspecs + _risk_params(),
+    ))
+
+
+def unregister_imported(key: str) -> None:
+    _IMPORTED.pop(key, None)
+
+
+def imported_keys() -> list[str]:
+    return list(_IMPORTED.keys())
+
+
+def all_declarative_keys() -> list[str]:
+    return DECLARATIVE_KEYS + list(_IMPORTED.keys())
+
+
+def imported_default_params(key: str) -> dict:
+    d = _IMPORTED.get(key)
+    return dict(d["params"]) if d else {}
+
 
 def is_declarative(key: str) -> bool:
-    return key in DECLARATIVE
+    return key in DECLARATIVE or key in _IMPORTED
 
 
 def get_declarative_spec(key: str) -> dict | None:
-    d = DECLARATIVE.get(key)
+    d = DECLARATIVE.get(key) or _IMPORTED.get(key)
     return d["spec"] if d else None
 
 
