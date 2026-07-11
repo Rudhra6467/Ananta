@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Info } from "lucide-react";
+import { useAccessGate } from "@/context/AccessGateContext";
 
 /**
  * Clickable metric explainer — tap the (i) to see what a metric means, its quality
@@ -35,6 +36,7 @@ const METRICS = {
 export default function MetricExplainer({ metric, value, className = "", side = "top" }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
+    const { gate } = useAccessGate();
     const m = METRICS[metric];
 
     useEffect(() => {
@@ -52,7 +54,7 @@ export default function MetricExplainer({ metric, value, className = "", side = 
 
     return (
         <span ref={ref} className={`relative inline-flex ${className}`}>
-            <button type="button" data-testid={`metric-explainer-${metric}`} onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+            <button type="button" data-testid={`metric-explainer-${metric}`} onClick={(e) => { e.stopPropagation(); if (gate("Detailed metric explanations")) setOpen((v) => !v); }}
                 className="text-atlas-textTertiary hover:text-atlas-cyan transition-colors" aria-label={`What is ${m.title}?`}>
                 <Info className="w-3.5 h-3.5" />
             </button>

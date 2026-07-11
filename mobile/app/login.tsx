@@ -12,11 +12,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
+import { useAccessGate } from "../src/access";
 import { Logo } from "../src/components/Logo";
 import { colors, spacing, radius, type } from "../src/theme";
 
 export default function Login() {
   const { login } = useAuth();
+  const { gate } = useAccessGate();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +48,7 @@ export default function Login() {
         <View style={styles.brand}>
           <Logo size={48} showWord />
           <Text style={[type.bodyMuted, { marginTop: spacing.md, textAlign: "center" }]}>
-            The operator's cockpit. Monitor the algorithm, manage positions, stay in control.
+            The operator&apos;s cockpit. Monitor the algorithm, manage positions, stay in control.
           </Text>
         </View>
 
@@ -105,6 +107,11 @@ export default function Login() {
         <Text style={[type.small, { textAlign: "center", marginTop: spacing.xl }]}>
           Single-operator access · sessions secured on-device
         </Text>
+
+        <Pressable testID="request-access-btn" onPress={() => gate("Full Ananta access")} style={styles.requestBtn}>
+          <Ionicons name="mail-outline" size={15} color={colors.teal} />
+          <Text style={styles.requestTxt}>Not the owner? Request early access</Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
@@ -144,4 +151,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   submitText: { color: colors.bg, fontWeight: "800", fontSize: 16 },
+  requestBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: spacing.lg, paddingVertical: spacing.sm },
+  requestTxt: { color: colors.teal, fontWeight: "700", fontSize: 13 },
 });

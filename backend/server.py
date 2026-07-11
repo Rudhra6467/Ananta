@@ -198,6 +198,73 @@ async def health_selfcheck():
     return out
 
 
+# ---------------------------------------------------------------------------- #
+# ACCESS WAITLIST (MVP lead capture). Public visitors can request access to gated
+# features; the owner reviews/approves later. Kept intentionally separate from the
+# auth layer so we can upgrade to full public accounts later without refactoring.
+# ---------------------------------------------------------------------------- #
+class AccessRequestReq(BaseModel):
+    name: str
+    email: str
+    feature: str | None = None
+    platform: str | None = None
+
+
+def _valid_email(email: str) -> bool:
+    if not email or email.count("@") != 1:
+        return False
+    local, _, domain = email.partition("@")
+    return bool(local) and "." in domain and not domain.startswith(".") and not domain.endswith(".")
+
+
+@api_router.post("/access/request")
+async def access_request(body: AccessRequestReq):
+    """PUBLIC: capture a Name + Email waitlist lead when a visitor hits a gated feature.
+    Idempotent per email (re-submits update the record + bump attempts, never duplicate)."""
+    name = (body.name or "").strip()
+    email = (body.email or "").strip().lower()
+    if not name or not email:
+        raise HTTPException(status_code=400, detail="Name and email are required.")
+    if not _valid_email(email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    now = datetime.now(UTC).isoformat()
+    existing = await db.access_requests.find_one({"email": email}, {"_id": 0, "status": 1})
+    if existing:
+        await db.access_requests.update_one(
+            {"email": email},
+            {"$set": {"name": name, "last_feature": body.feature, "platform": body.platform, "updated_at": now},
+             "$inc": {"attempts": 1}})
+        return {"ok": True, "status": existing.get("status", "pending"), "already_on_list": True}
+    doc = {"id": uuid.uuid4().hex, "name": name, "email": email, "status": "pending",
+           "feature": body.feature, "platform": body.platform, "attempts": 1,
+           "created_at": now, "updated_at": now}
+    await db.access_requests.insert_one({**doc})
+    return {"ok": True, "status": "pending", "already_on_list": False}
+
+
+@api_router.get("/access/requests", dependencies=[Depends(require_owner)])
+async def access_requests_list(status: str | None = Query(None)):
+    """OWNER: review captured waitlist leads (newest first)."""
+    q = {"status": status} if status else {}
+    docs = await db.access_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return {"requests": docs, "count": len(docs)}
+
+
+@api_router.post("/access/requests/{rid}/{action}", dependencies=[Depends(require_owner)])
+async def access_request_action(rid: str, action: str):
+    """OWNER: approve or reject a waitlist lead. (Approval is recorded now; wiring it to a
+    real account happens in the future accounts upgrade — the schema is ready.)"""
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be approve or reject")
+    status = "approved" if action == "approve" else "rejected"
+    r = await db.access_requests.update_one(
+        {"id": rid}, {"$set": {"status": status, "updated_at": datetime.now(UTC).isoformat()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="access request not found")
+    return {"ok": True, "id": rid, "status": status}
+
+
+
 @api_router.get("/market/snapshots")
 async def market_snapshots():
     settings = await load_settings(db)

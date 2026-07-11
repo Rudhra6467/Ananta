@@ -3,6 +3,7 @@ import { Sparkles, X, ArrowUp, Zap } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useAccessGate } from "@/context/AccessGateContext";
 
 const SUGGESTIONS = {
     cockpit: ["Today's performance", "Why were setups rejected?", "What's the market regime?", "Start paper trading"],
@@ -26,6 +27,7 @@ const Switch = ({ testid, on, onToggle, track }) => (
 export default function AskAnanta({ tab }) {
     const canonicalTab = TAB_MAP[tab] || tab;
     const { isOwner } = useAuth();
+    const { gate } = useAccessGate();
     const [enabled, setEnabled] = useState(false);
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState("");
@@ -42,7 +44,15 @@ export default function AskAnanta({ tab }) {
     }, []);
     useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
 
-    if (!isOwner) return null;
+    // Public visitors see the copilot chip but opening it is gated to the waitlist.
+    if (!isOwner) {
+        return (
+            <button data-testid="ask-ananta-chip" onClick={() => gate("Ask Ananta AI Copilot")}
+                className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-full bg-atlas-cyan text-black font-mono text-xs font-bold px-4 py-2 shadow-lg hover:brightness-110 active:scale-95 transition-all">
+                <Sparkles className="w-4 h-4" /> Ask Ananta
+            </button>
+        );
+    }
 
     const toggleEnabled = async (e) => {
         e?.stopPropagation?.();

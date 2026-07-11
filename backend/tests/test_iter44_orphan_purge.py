@@ -21,6 +21,8 @@ FIXTURES = [
 
 def test_purge_orphan_import_drafts():
     async def run():
+        from conftest import bind_loop_local_db
+        bind_loop_local_db()
         col = server.db.strategy_imports
         ids = [f["id"] for f in FIXTURES]
         await col.delete_many({"id": {"$in": ids}})

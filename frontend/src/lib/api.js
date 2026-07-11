@@ -87,6 +87,9 @@ function cmut(method, url, data) {
 export const api = {
     health: () => client.get("/").then((r) => r.data),
     healthSelfcheck: () => client.get("/health/selfcheck").then((r) => r.data),
+    accessRequest: (payload) => client.post("/access/request", payload).then((r) => r.data),
+    accessRequests: (status) => cget(`/access/requests${status ? `?status=${status}` : ""}`, 5000),
+    accessRequestAction: (id, action) => cmut("post", `/access/requests/${id}/${action}`),
     marketSnapshots: () => cget("/market/snapshots", 4000),
     portfolio: () => cget("/portfolio", 4000),
     resetPortfolio: () => cmut("post", "/portfolio/reset"),

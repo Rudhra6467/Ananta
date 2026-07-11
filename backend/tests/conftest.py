@@ -13,6 +13,23 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 
+def bind_loop_local_db():
+    """Rebind server.db to a motor client bound to the CURRENT running event loop.
+
+    The module-level motor client caches the first io loop it sees, so direct-DB
+    tests that each call asyncio.run() (a fresh loop per test) otherwise fail with
+    'Event loop is closed' when run together. Call this as the first line inside the
+    test's async body to keep such tests order-independent."""
+    import os as _os
+
+    import server as _server
+    from motor.motor_asyncio import AsyncIOMotorClient as _Client
+
+    _server.db = _Client(_os.environ["MONGO_URL"])[_os.environ["DB_NAME"]]
+
+
+
+
 # --- Owner auth injection for HTTP integration tests (Phase 3.5) ---
 # Mutating endpoints are now 403-guarded. This autouse fixture logs in as the
 # owner once and attaches the Bearer token to MUTATING requests only (POST/PUT/

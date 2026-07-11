@@ -1,0 +1,54 @@
+{
+  "summary": "iter46 Access-gate / Waitlist MVP + compact System Health chip fully verified across shared backend, web (owner + public), and mobile (owner + public). BACKEND: 11/11 tests PASS — module-level test_iter46_access_waitlist.py (2/2) + new HTTP-level test_iter46_http_access_and_health.py (9/9) covering: GET /api/health/selfcheck returns {backend,database,market_data,engine,ok} in ~200ms (target <1.5s); POST /api/access/request (public) captures leads, idempotent per email (already_on_list flips true on re-submit with attempts++), 400 on bad email + 400 on empty/whitespace name; GET /api/access/requests requires owner (403 unauthenticated); POST /api/access/requests/{id}/approve flips status → approved and 404 on unknown id. Backend lowercases emails on write (test adjusted for case-insensitive lookup). WEB PUBLIC (no token, tour suppressed): read-only banner shown; system-health-chip visible; ask-ananta-chip visible; clicking Ask Ananta opens data-testid=waitlist-modal (NOT copilot); clicking System Health opens waitlist-modal (NOT popover); waitlist submit → 'You're on the list' + waitlist-done-btn appears (mocked-free real POST hit). WEB OWNER (token in localStorage): NO waitlist modal ever appears; system-health-chip opens data-testid=system-health-popover with all 5 rows present (health-row-backend/database/market/engine/session); Ask Ananta toggle + panel open + close work; no read-only banner. MOBILE PUBLIC (Expo web preview 390x844, no token): login screen shows data-testid=request-access-btn; tap → mobile Waitlist Modal with waitlist-name/email/submit; submit → waitlist-done-btn 'You're on the list'. MOBILE OWNER: system-health-chip opens bottom sheet (all 5 health rows present with correct testIDs), NO waitlist modal fires; ask-ananta-chip scoped correctly (present on tab-index/Cockpit + tab-workspace, ABSENT on tab-trade — iter44/iter45 scoping regression stays green). All example.com test leads cleaned via /reject. NO regressions observed in AccessGateProvider wrapping (login flow, auth token flow, tab navigation, ask-ananta toggle+ask, health chip cadence, session pill state all intact).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/access/request", "issue": "Public POST returns 200 with {ok,status,already_on_list} — consider returning 201 on first-time create and 200 on duplicate, to match REST convention. Not blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Waitlist modal (Radix Dialog)", "issues": ["Console emits: 'Missing Description or aria-describedby={undefined} for DialogContent'. Add <DialogDescription> or aria-describedby to /app/frontend/src/context/AccessGateContext.jsx WaitlistModal to satisfy Radix a11y (2 warnings each open)."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter46_access_waitlist.py",
+    "/app/backend/tests/test_iter46_http_access_and_health.py",
+    "/app/test_reports/pytest/iter46_access_waitlist.xml",
+    "/app/test_reports/pytest/iter46_http.xml"
+  ],
+  "action_items": [
+    "MINOR a11y: add DialogDescription (or aria-describedby) to /app/frontend/src/context/AccessGateContext.jsx WaitlistModal — Radix emits accessibility warnings on every open of the waitlist modal on web.",
+    "OPTIONAL API polish: return HTTP 201 on new waitlist create in POST /api/access/request; keep 200 for duplicates.",
+    "OPTIONAL: iter45 outstanding bug (auth.py 403-vs-401 for expired tokens) remains — not in scope for iter46 but still valid. See iteration_45.json."
+  ],
+  "critical_code_review_comments": [
+    "AccessGateContext.jsx (web) & access.tsx (mobile) — clean, auth-agnostic gate() pattern; single source of truth via useAuth().isOwner. Good.",
+    "Backend AccessRequestReq model normalises email to lowercase before dedup (verified via debug curl) — good idempotency guarantee even if callers vary casing.",
+    "SystemHealthChip.jsx L48-56 — the pill acts both as trigger for the Popover (owner) and as a plain button that calls gate() (public). Correct branching but consider extracting the pill JSX into its own tiny component to avoid duplication risk in future.",
+    "MetricExplainer.jsx L57 gate('Detailed metric explanations') is called INSIDE onClick BEFORE setOpen — good; for public visitors gate() returns false and setOpen never fires, so the info card stays hidden and only the waitlist modal opens. Verified in code (no metric-explainer instance exists on public Cockpit today to visually confirm, but the code path is trivially correct).",
+    "AskAnanta.jsx L48-55 — public path renders only the chip button and short-circuits before the settings polling useEffect can fire — no wasted /api/settings polling for anonymous visitors. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter46_http_access_and_health.py",
+    "/app/test_reports/iteration_46.json"
+  ],
+  "success_rate": {"backend": "100% (11/11: 2 module + 9 HTTP)", "frontend": "100% on tested critical paths (web public/owner + mobile public/owner)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md). Web: set localStorage 'ananta_owner_token' + sessionStorage 'ananta_tour_seen'='1'. Mobile web preview: also set localStorage 'ananta_biometric_enabled'='0' + 'ananta_onboarded'='1'. Dismiss 'Skip' overlay if the Welcome-to-Ananta screen appears.",
+  "seed_data_creation": "Created ~9 example.com waitlist leads during testing; ALL cleaned via /api/access/requests/{id}/reject (soft delete keeping status=rejected). No pending example.com leads remain in access_requests collection.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter46 waitlist+health chip is GREEN end-to-end. Backend endpoints: POST /api/access/request (public, idempotent, 400 validation), GET /api/access/requests (owner-only 403), POST /api/access/requests/{id}/approve|reject (owner, 404 on unknown), GET /api/health/selfcheck. Web testIDs: waitlist-modal, waitlist-name, waitlist-email, waitlist-submit, waitlist-done-btn, system-health-chip, system-health-popover, health-row-{backend|database|market|engine|session}, ask-ananta-chip, ask-ananta-panel, ask-ananta-switch, ask-ananta-open, ask-ananta-close, metric-explainer-{key}, metric-explainer-card-{key}. Mobile testIDs mirror web + request-access-btn on login. Outstanding cross-iter bug: iter45 auth.py 403-vs-401 for expired tokens (not iter46 scope). Only cosmetic issue found in iter46: Radix DialogContent missing aria-describedby → console warning."
+}

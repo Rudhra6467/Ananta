@@ -3,12 +3,14 @@ import { Activity, CheckCircle2, XCircle, Loader2, ChevronDown } from "lucide-re
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useAccessGate } from "@/context/AccessGateContext";
 
 // Compact first-run / ongoing health self-check. Renders as a small pill that
 // expands into a popover with per-system detail — deliberately low-footprint so
 // it never eats Cockpit vertical space.
 export default function SystemHealthChip() {
     const { isOwner } = useAuth();
+    const { gate } = useAccessGate();
     const [data, setData] = useState(null);
     const [err, setErr] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -42,17 +44,23 @@ export default function SystemHealthChip() {
     const dot = loading ? "bg-atlas-textTertiary" : err || !allOk ? "bg-atlas-negative" : "bg-atlas-positive";
     const label = loading ? "Checking…" : err ? "Systems degraded" : allOk ? "All systems OK" : "Attention needed";
 
+    const pill = (
+        <button data-testid="system-health-chip"
+            onClick={isOwner ? undefined : () => gate("Detailed system health")}
+            className="flex items-center gap-2 rounded-full border border-atlas-border bg-atlas-panel px-3 py-1.5 font-mono text-[10px] tracking-wide text-atlas-textSecondary hover:border-atlas-textTertiary hover:text-atlas-text transition-colors">
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className={`w-2 h-2 rounded-full ${dot}`} />}
+            <Activity className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{label}</span>
+            <ChevronDown className="w-3 h-3 opacity-60" />
+        </button>
+    );
+
+    // Public visitors see the surface status pill but expanding detail is gated.
+    if (!isOwner) return pill;
+
     return (
         <Popover>
-            <PopoverTrigger asChild>
-                <button data-testid="system-health-chip"
-                    className="flex items-center gap-2 rounded-full border border-atlas-border bg-atlas-panel px-3 py-1.5 font-mono text-[10px] tracking-wide text-atlas-textSecondary hover:border-atlas-textTertiary hover:text-atlas-text transition-colors">
-                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className={`w-2 h-2 rounded-full ${dot}`} />}
-                    <Activity className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{label}</span>
-                    <ChevronDown className="w-3 h-3 opacity-60" />
-                </button>
-            </PopoverTrigger>
+            <PopoverTrigger asChild>{pill}</PopoverTrigger>
             <PopoverContent align="end" data-testid="system-health-popover"
                 className="w-64 panel border-atlas-border p-3 space-y-1.5">
                 <div className="font-heading text-sm text-atlas-text mb-1 flex items-center gap-2">

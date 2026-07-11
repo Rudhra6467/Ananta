@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider, useAuth } from "../src/auth";
+import { AccessGateProvider } from "../src/access";
 import { registerForPushNotificationsAsync } from "../src/push";
 import { getItem } from "../src/storage";
 import { LoadingView, ErrorView } from "../src/components/StateView";
@@ -71,8 +72,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.fill}>
       <SafeAreaProvider>
         <AuthProvider>
-          <StatusBar style="light" />
-          <RootNav />
+          <AccessGateProvider>
+            <StatusBar style="light" />
+            <RootNav />
+          </AccessGateProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

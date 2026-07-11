@@ -14,6 +14,7 @@ import AnantaLogo from "@/components/AnantaLogo";
 import OnboardingPipeline from "@/components/OnboardingPipeline";
 import AskAnanta from "@/components/AskAnanta";
 import { useAuth } from "@/context/AuthContext";
+import { useAccessGate } from "@/context/AccessGateContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
 const TABS = [
@@ -57,20 +58,22 @@ export default function AppShell() {
 
 function Shell() {
     const { ready, isOwner } = useAuth();
+    const { gate } = useAccessGate();
     const [active, setActive] = useState(0);
     const [dir, setDir] = useState(1);
     const touch = useRef(null);
     const hidden = useHideOnScroll(60);
     const [tourOpen, setTourOpen] = useState(false);
 
-    // First-visit onboarding gate (shows once); re-launchable via the 'ananta:tour' event.
+    // Onboarding tour. Owner: auto-open once per browser session, always re-launchable,
+    // never permanently dismissed (no "don't show again"). Public: gated to the waitlist.
     useEffect(() => {
-        if (!localStorage.getItem("ananta_onboarded")) setTourOpen(true);
-        const onTour = () => setTourOpen(true);
+        if (isOwner && !sessionStorage.getItem("ananta_tour_seen")) setTourOpen(true);
+        const onTour = () => { if (isOwner) setTourOpen(true); else gate("Guided onboarding tour"); };
         window.addEventListener("ananta:tour", onTour);
         return () => window.removeEventListener("ananta:tour", onTour);
-    }, []);
-    const closeTour = () => { localStorage.setItem("ananta_onboarded", "1"); setTourOpen(false); };
+    }, [isOwner, gate]);
+    const closeTour = () => { sessionStorage.setItem("ananta_tour_seen", "1"); setTourOpen(false); };
 
     const go = (i) => {
         if (i < 0 || i >= TABS.length || i === active) return;

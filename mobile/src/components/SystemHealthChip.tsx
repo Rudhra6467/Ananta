@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../api";
 import { useAuth } from "../auth";
+import { useAccessGate } from "../access";
 import { colors, spacing, type, radius } from "../theme";
 
 // Compact system health chip — a small pill that opens a bottom sheet with detail.
@@ -11,6 +12,7 @@ import { colors, spacing, type, radius } from "../theme";
 export function SystemHealthChip() {
   const insets = useSafeAreaInsets();
   const { isOwner } = useAuth();
+  const { gate } = useAccessGate();
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export function SystemHealthChip() {
 
   return (
     <>
-      <Pressable testID="system-health-chip" onPress={() => setOpen(true)} style={styles.chip} hitSlop={6}>
+      <Pressable testID="system-health-chip" onPress={() => { if (isOwner) setOpen(true); else gate("Detailed system health"); }} style={styles.chip} hitSlop={6}>
         <View style={[styles.dot, { backgroundColor: dotColor }]} />
         <Ionicons name="pulse" size={13} color={colors.textMuted} />
         <Text style={styles.chipTxt}>{label}</Text>

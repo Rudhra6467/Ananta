@@ -5,6 +5,7 @@ import { useRouter, useSegments } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../api";
 import { useAuth } from "../auth";
+import { useAccessGate } from "../access";
 import { colors, spacing, type, radius } from "../theme";
 
 const SUGGESTIONS: Record<string, string[]> = {
@@ -22,6 +23,7 @@ export function AskAnanta({ tab, routeName }: { tab: string; routeName: string }
   const router = useRouter();
   const segments = useSegments();
   const { isOwner } = useAuth();
+  const { gate } = useAccessGate();
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -36,13 +38,22 @@ export function AskAnanta({ tab, routeName }: { tab: string; routeName: string }
     return () => clearInterval(t);
   }, []);
 
-  if (!isOwner) return null;
-
   // (tabs) screens stay mounted after first visit, so gate this fixed-position chip to
   // the tab it belongs to — otherwise it leaks onto Trade/Strategy/Research.
   const last = segments[segments.length - 1] as string | undefined;
   const activeRoute = !last || last === "(tabs)" ? "index" : last;
   if (activeRoute !== routeName) return null;
+
+  // Public visitors see the copilot chip but opening it is gated to the waitlist.
+  if (!isOwner) {
+    return (
+      <Pressable testID="ask-ananta-chip" onPress={() => gate("Ask Ananta AI Copilot")}
+        style={[styles.chip, { bottom: insets.bottom + 78, backgroundColor: colors.teal }]}>
+        <Ionicons name="sparkles" size={18} color={colors.bg} />
+        <Text style={[styles.chipTxt, { color: colors.bg }]}>Ask Ananta</Text>
+      </Pressable>
+    );
+  }
 
   const toggleEnabled = async () => {
     try {
