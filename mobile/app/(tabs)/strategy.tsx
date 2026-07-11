@@ -9,7 +9,6 @@ import { Card } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
 import { AddStrategySheet } from "../../src/components/AddStrategySheet";
-import { AskAnanta } from "../../src/components/AskAnanta";
 import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { pct } from "../../src/format";
@@ -179,7 +178,6 @@ export default function StrategyLibrary() {
       </Modal>
     </ScrollView>
     <AddStrategySheet visible={addOpen} onClose={() => setAddOpen(false)} />
-    <AskAnanta tab="strategy" />
     </View>
   );
 }

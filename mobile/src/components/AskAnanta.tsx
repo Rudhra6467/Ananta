@@ -23,22 +23,28 @@ export function AskAnanta({ tab }: { tab: string }) {
   const { isOwner } = useAuth();
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(true);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const session = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    api.settings().then((s: any) => setEnabled(!!s?.ask_ananta_enabled)).catch(() => {});
+    const load = () => api.settings().then((s: any) => setEnabled(!!s?.ask_ananta_enabled)).catch(() => {});
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
   }, []);
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => setExpanded(false), 3500);
-    return () => clearTimeout(t);
-  }, [open]);
 
-  if (!enabled || !isOwner) return null;
+  if (!isOwner) return null;
+
+  const toggleEnabled = async () => {
+    try {
+      const s = await api.updateSettings({ ask_ananta_enabled: !enabled });
+      const next = !!s?.ask_ananta_enabled;
+      setEnabled(next);
+      if (!next) setOpen(false);
+    } catch (e: any) { Alert.alert("Toggle failed", e?.message || String(e)); }
+  };
 
   const send = async (text: string) => {
     const question = (text || "").trim();
@@ -73,11 +79,19 @@ export function AskAnanta({ tab }: { tab: string }) {
 
   return (
     <>
-      <Pressable testID="ask-ananta-chip" onPress={() => setOpen(true)}
-        style={[styles.chip, { bottom: insets.bottom + 78 }, expanded && open ? null : styles.chipCollapsed]}>
-        <Ionicons name="sparkles" size={18} color={colors.bg} />
-        <Text style={styles.chipTxt}>Ask Ananta</Text>
-      </Pressable>
+      <View testID="ask-ananta-chip"
+        style={[styles.chip, { bottom: insets.bottom + 78, backgroundColor: enabled ? colors.teal : colors.bgElevated, borderWidth: enabled ? 0 : 1, borderColor: colors.cardBorder }]}>
+        <Pressable testID="ask-ananta-open" onPress={() => enabled && setOpen(true)} disabled={!enabled}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Ionicons name="sparkles" size={18} color={enabled ? colors.bg : colors.textMuted} />
+          <Text style={[styles.chipTxt, { color: enabled ? colors.bg : colors.textMuted }]}>Ask Ananta</Text>
+        </Pressable>
+        <Pressable testID="ask-ananta-switch" onPress={toggleEnabled} hitSlop={8}
+          accessibilityRole="switch" accessibilityState={{ checked: enabled }}
+          style={[styles.track, { backgroundColor: enabled ? "rgba(0,0,0,0.5)" : colors.cardBorder }]}>
+          <View style={[styles.thumb, { left: enabled ? 16 : 2 }]} />
+        </Pressable>
+      </View>
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={styles.wrap}>
@@ -87,7 +101,14 @@ export function AskAnanta({ tab }: { tab: string }) {
                 <Ionicons name="sparkles" size={18} color={colors.teal} />
                 <Text style={type.h3}>Ask Ananta</Text>
               </View>
-              <Pressable testID="ask-ananta-close" onPress={() => setOpen(false)} hitSlop={10}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                <Pressable testID="ask-ananta-switch-panel" onPress={toggleEnabled} hitSlop={8}
+                  accessibilityRole="switch" accessibilityState={{ checked: enabled }}
+                  style={[styles.track, { backgroundColor: enabled ? colors.teal : colors.cardBorder }]}>
+                  <View style={[styles.thumb, { left: enabled ? 16 : 2 }]} />
+                </Pressable>
+                <Pressable testID="ask-ananta-close" onPress={() => setOpen(false)} hitSlop={10}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
+              </View>
             </View>
 
             <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
@@ -133,9 +154,10 @@ export function AskAnanta({ tab }: { tab: string }) {
 }
 
 const styles = StyleSheet.create({
-  chip: { position: "absolute", left: spacing.md, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.teal, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 10, elevation: 5 },
-  chipCollapsed: {},
-  chipTxt: { color: colors.bg, fontWeight: "800", fontSize: 13 },
+  chip: { position: "absolute", left: spacing.md, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: radius.pill, paddingLeft: spacing.md, paddingRight: 8, paddingVertical: 8, elevation: 5 },
+  chipTxt: { fontWeight: "800", fontSize: 13 },
+  track: { width: 32, height: 18, borderRadius: 9, justifyContent: "center" },
+  thumb: { position: "absolute", top: 2, width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff" },
   wrap: { flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay },
   panel: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

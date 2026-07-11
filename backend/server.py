@@ -2491,6 +2491,19 @@ async def _seed_library_if_empty():
         await db.strategy_library.insert_many(library())
 
 
+async def _purge_orphan_import_drafts(ttl_hours: int = 48):
+    """TTL cleanup for the `strategy_imports` collection: delete abandoned import drafts
+    (never approved) older than ttl_hours so orphan / non-compilable AI extractions can't
+    bloat the DB. Approved drafts (already copied into strategy_library) are always kept.
+    created_at is stored as a UTC ISO string, so lexicographic `$lt` == chronological."""
+    cutoff = (datetime.now(UTC) - timedelta(hours=ttl_hours)).isoformat()
+    r = await db.strategy_imports.delete_many(
+        {"status": {"$ne": "approved"}, "created_at": {"$lt": cutoff}})
+    if r.deleted_count:
+        logger.info("Purged %d orphan import draft(s) older than %dh.", r.deleted_count, ttl_hours)
+
+
+
 async def _bootstrap_declarative():
     """Idempotent Phase B bootstrap: (1) seed strategy_meta for each wireable declarative
     strategy so only the default-enabled batch trades (others start DISABLED); owner
@@ -2922,6 +2935,7 @@ async def _deferred_startup():
             await db.users.create_index("email", unique=True)
             await _seed_library_if_empty()
             await _bootstrap_declarative()
+            await _purge_orphan_import_drafts()
             logger.info("Deferred DB bootstrap complete (attempt %d).", attempt)
             break
         except Exception as e:  # noqa: BLE001

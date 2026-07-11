@@ -7,6 +7,22 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+### 2026-07-11 — Launch-Hardening pass: Ask Ananta on-chip toggle + P2 TTL cleanup + console cleanup
+**Ask Ananta inline switch (web + mobile, tested):** the copilot chip now renders for the owner even when
+disabled, with a small slide switch (right=on / left=off, default OFF) directly on the chip AND in the open
+panel header. Flipping it writes `ask_ananta_enabled` to backend settings (syncs with the Workspace config row
++ mobile). The launcher is now scoped to **Cockpit + Workspace tabs only** (removed from Trade/Strategy/Research
+on both surfaces). Owner can turn it on to test and off again from the chip itself.
+**P2 import TTL cleanup (backend, tested):** `_purge_orphan_import_drafts(ttl_hours=48)` deletes abandoned,
+never-approved `strategy_imports` drafts older than 48h on startup (approved/library strategies always kept),
+preventing DB bloat from un-compilable AI extractions. Verified by `tests/test_iter44_orphan_purge.py` (1 pass).
+**Console warnings (P3, cleaned):** mobile `shadowOpacity` → `boxShadow: "none"` (research tabBar);
+StrategyCenter leaderboard-sort + detail-status native `<select>` → shadcn `Select` (removes `<span>`-in-`<option>`
+DOM-nesting warning from the visual editor). Lint clean.
+Roadmap agreed with owner: Phase 2 Launch Hardening (break-testing), Phase 3 Performance profiling,
+Phase 4 Production (enable Ask Ananta → deploy → onboard) — NO new large features until stable.
+
+
 ### 2026-07-04 — WS2 Hunter Continuation + WS3 Research Lab redesign SHIPPED (backend + web, tested)
 **WS2:** new independent `continuation` executor — buys shallow pullbacks in an established uptrend (50-EMA rising, 20>50, dip to 20-EMA support with volume dry-up, 40-62 RSI). Routed (TREND_UP/NEUTRAL), wired live + backtest, 6 tests pass.
 **WS3:** Research Lab now has Mode A (Current Prod) / B (Param Opt) / C (Presets — 4 canned strategies); Sharpe/Sortino/profit-factor metrics; auto-recommendation verdicts; 15m/30m/1h multi-TF comparison + best-TF verdict; expandable per-run detail in the UI. Verified by testing agent (web+backend) iteration 16.

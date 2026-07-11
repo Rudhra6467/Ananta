@@ -15,6 +15,14 @@ const SUGGESTIONS = {
 // AppShell tab ids → canonical backend tab names.
 const TAB_MAP = { dashboard: "cockpit", trade: "trade", strategies: "strategy", research: "research", workspace: "workspace" };
 
+const Switch = ({ testid, on, onToggle, track }) => (
+    <button data-testid={testid} role="switch" aria-checked={on} onClick={onToggle}
+        title={on ? "Turn Ask Ananta off" : "Turn Ask Ananta on"}
+        className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${on ? track : "bg-atlas-border"}`}>
+        <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all ${on ? "left-[16px]" : "left-[2px]"}`} />
+    </button>
+);
+
 export default function AskAnanta({ tab }) {
     const canonicalTab = TAB_MAP[tab] || tab;
     const { isOwner } = useAuth();
@@ -34,7 +42,18 @@ export default function AskAnanta({ tab }) {
     }, []);
     useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
 
-    if (!enabled || !isOwner) return null;
+    if (!isOwner) return null;
+
+    const toggleEnabled = async (e) => {
+        e?.stopPropagation?.();
+        try {
+            const s = await api.updateSettings({ ask_ananta_enabled: !enabled });
+            const next = !!s.ask_ananta_enabled;
+            setEnabled(next);
+            if (!next) setOpen(false);
+            toast.success(`Ask Ananta ${next ? "on" : "off"}`);
+        } catch (err) { toast.error("Toggle failed", { description: String(err?.message || err) }); }
+    };
 
     const send = async (text) => {
         const question = (text || "").trim();
@@ -65,16 +84,23 @@ export default function AskAnanta({ tab }) {
     return (
         <>
             {!open && (
-                <button data-testid="ask-ananta-chip" onClick={() => setOpen(true)}
-                    className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-full bg-atlas-cyan text-black font-mono text-xs font-bold px-4 py-2.5 shadow-lg hover:brightness-110 active:scale-95 transition-all">
-                    <Sparkles className="w-4 h-4" /> Ask Ananta
-                </button>
+                <div data-testid="ask-ananta-chip"
+                    className={`fixed bottom-24 left-4 z-40 flex items-center gap-2.5 rounded-full font-mono text-xs font-bold pl-4 pr-2.5 py-2 shadow-lg transition-all ${enabled ? "bg-atlas-cyan text-black" : "bg-atlas-panelHover text-atlas-textSecondary border border-atlas-border"}`}>
+                    <button data-testid="ask-ananta-open" onClick={() => enabled && setOpen(true)} disabled={!enabled}
+                        className={`flex items-center gap-2 transition-transform ${enabled ? "hover:brightness-110 active:scale-95" : "cursor-default"}`}>
+                        <Sparkles className="w-4 h-4" /> Ask Ananta
+                    </button>
+                    <Switch testid="ask-ananta-switch" on={enabled} onToggle={toggleEnabled} track="bg-black/75" />
+                </div>
             )}
             {open && (
                 <div data-testid="ask-ananta-panel" className="fixed bottom-24 left-4 z-40 w-[min(400px,calc(100vw-2rem))] panel border-atlas-border rounded-2xl overflow-hidden flex flex-col shadow-2xl" style={{ maxHeight: "70vh" }}>
                     <div className="flex items-center justify-between px-4 py-3 border-b border-atlas-border">
                         <div className="flex items-center gap-2 font-heading text-base text-atlas-text"><Sparkles className="w-4 h-4 text-atlas-cyan" /> Ask Ananta</div>
-                        <button data-testid="ask-ananta-close" onClick={() => setOpen(false)} className="text-atlas-textSecondary hover:text-white"><X className="w-5 h-5" /></button>
+                        <div className="flex items-center gap-3">
+                            <Switch testid="ask-ananta-switch-panel" on={enabled} onToggle={toggleEnabled} track="bg-atlas-cyan" />
+                            <button data-testid="ask-ananta-close" onClick={() => setOpen(false)} className="text-atlas-textSecondary hover:text-white"><X className="w-5 h-5" /></button>
+                        </div>
                     </div>
                     <div ref={scrollRef} className="flex-1 overflow-y-auto atlas-scroll p-4 space-y-3">
                         {msgs.length === 0 ? (

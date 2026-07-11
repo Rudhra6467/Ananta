@@ -9,7 +9,6 @@ import { useAuth } from "../../src/auth";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Segmented } from "../../src/components/Segmented";
 import { PageHeader } from "../../src/components/PageHeader";
-import { AskAnanta } from "../../src/components/AskAnanta";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { base } from "../../src/format";
 
@@ -79,7 +78,6 @@ export default function Research() {
           />
         )}
       />
-      <AskAnanta tab="research" />
     </View>
   );
 }
@@ -312,7 +310,7 @@ function Mini({ label, value, color }: { label: string; value: string; color?: s
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  tabBar: { backgroundColor: colors.bg, shadowOpacity: 0, elevation: 0, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  tabBar: { backgroundColor: colors.bg, boxShadow: "none", elevation: 0, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   indicator: { backgroundColor: colors.teal, height: 2.5, borderRadius: 2 },
   tabLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.2, textTransform: "none" },
   runBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.md },

@@ -124,7 +124,7 @@ function Shell() {
             <BottomNav active={active} onSelect={go} />
 
             <OnboardingPipeline open={tourOpen} onClose={closeTour} />
-            <AskAnanta tab={TABS[active].id} />
+            {["dashboard", "workspace"].includes(TABS[active].id) && <AskAnanta tab={TABS[active].id} />}
 
 
             <Toaster

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LabModal from "@/components/lab/LabModal";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
 import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
@@ -227,10 +228,15 @@ export function StrategyLeaderboard({ onOpen }) {
         <div className="panel p-4" data-testid="strategy-leaderboard">
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <div className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">STRATEGY LEADERBOARD</span></div>
-                <select data-testid="leaderboard-sort-select" value={sort} onChange={(e) => setSort(e.target.value)}
-                    className="bg-atlas-panel border border-atlas-border rounded px-2.5 py-1.5 font-mono text-[11px] text-atlas-text focus:border-atlas-cyan outline-none">
-                    {opts.map((o) => <option key={o} value={o}>Sort: {LB_LABELS[o] || o}</option>)}
-                </select>
+                <Select value={sort} onValueChange={setSort}>
+                    <SelectTrigger data-testid="leaderboard-sort-select"
+                        className="w-auto bg-atlas-panel border-atlas-border rounded px-2.5 py-1.5 font-mono text-[11px] text-atlas-text focus:border-atlas-cyan h-auto gap-1.5">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[11px]">
+                        {opts.map((o) => <SelectItem key={o} value={o} className="font-mono text-[11px]">{`Sort: ${LB_LABELS[o] || o}`}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="space-y-1">
                 {rows.map((r) => (
@@ -381,10 +387,15 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${STATUS[status]}`} data-testid="detail-status">{status}</span>
-                        <select data-testid="detail-status-select" value={status} onChange={(e) => setState({ status: e.target.value })} disabled={!isOwner}
-                            className="bg-atlas-panel border border-atlas-border rounded-lg px-2.5 py-1.5 font-mono text-[10px] text-atlas-text disabled:opacity-50">
-                            {Object.keys(STATUS).map((st) => <option key={st} value={st}>{st}</option>)}
-                        </select>
+                        <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
+                            <SelectTrigger data-testid="detail-status-select"
+                                className="w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-1.5 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
+                                {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
                 {/* headline metrics */}
