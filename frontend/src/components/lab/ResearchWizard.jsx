@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
-    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw,
+    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -25,9 +25,11 @@ export default function ResearchWizard() {
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState(null);
     const [mc, setMc] = useState(null);
+    const [metrics, setMetrics] = useState({});
 
     useEffect(() => {
         api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
+        api.strategyMetrics().then((d) => setMetrics(d?.metrics || {})).catch(() => {});
         api.labCoverage().then((c) => {
             const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
             setAssets(avail);
@@ -93,15 +95,25 @@ export default function ResearchWizard() {
                 <div className="min-h-[180px]">
                     {step === 0 && (
                         <StepShell title="Choose a strategy" hint="Which engine do you want to validate?">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="wizard-strategies">
-                                {strategies.map((s) => (
-                                    <button key={s.key} data-testid={`wizard-strat-${s.key}`} onClick={() => setStrat(s.key)}
-                                        className={`panel border rounded-xl p-4 text-left transition-colors ${strat === s.key ? "border-atlas-cyan bg-atlas-cyan/5" : "border-atlas-border hover:border-atlas-textTertiary"}`}>
-                                        <Brain className={`w-5 h-5 mb-2 ${strat === s.key ? "text-atlas-cyan" : "text-atlas-textTertiary"}`} />
-                                        <div className="font-heading text-sm text-atlas-text">{s.name}</div>
-                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5 capitalize">{s.status?.toLowerCase() || "paper"}</div>
-                                    </button>
-                                ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="wizard-strategies">
+                                {strategies.map((s) => {
+                                    const m = metrics[s.key];
+                                    const on = !!m?.enabled && m?.status !== "DISABLED" && m?.status !== "ERROR";
+                                    const edit = (e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "strategies" } })); };
+                                    return (
+                                        <button key={s.key} data-testid={`wizard-strat-${s.key}`} onClick={() => setStrat(s.key)}
+                                            className={`panel border rounded-lg px-3 py-2.5 text-left transition-colors ${strat === s.key ? "border-atlas-cyan bg-atlas-cyan/5" : "border-atlas-border hover:border-atlas-textTertiary"}`}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="font-heading text-[13px] text-atlas-text truncate">{s.name}</div>
+                                                <Pencil data-testid={`wizard-strat-edit-${s.key}`} onClick={edit} className="w-3.5 h-3.5 text-atlas-textTertiary hover:text-atlas-cyan shrink-0" />
+                                            </div>
+                                            <div className="flex items-center gap-1.5 mt-1" data-testid={`wizard-strat-status-${s.key}`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${on ? "bg-atlas-positive" : "bg-atlas-textTertiary"}`} />
+                                                <span className={`font-mono text-[10px] font-bold ${on ? "text-atlas-positive" : "text-atlas-textTertiary"}`}>{on ? "ON · LIVE" : "OFF"}</span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </StepShell>
                     )}

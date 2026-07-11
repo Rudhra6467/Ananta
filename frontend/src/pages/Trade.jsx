@@ -25,7 +25,7 @@ function fmtDuration(seconds) {
 const pnlCls = (v) => (v > 0 ? "text-atlas-positive" : v < 0 ? "text-atlas-negative" : "text-atlas-textSecondary");
 
 export default function Trade() {
-    const { portfolio, trades } = useAppData();
+    const { portfolio, trades, snapshots } = useAppData();
     const { isOwner } = useAuth();
     const [pending, setPending] = useState([]);
     const [analytics, setAnalytics] = useState(null);
@@ -93,7 +93,7 @@ export default function Trade() {
                 </TabsList>
 
                 <TabsContent value="orders" className="m-0 space-y-5">
-                    <ManualOrder isOwner={isOwner} symbols={symbols} onDone={() => api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {})} />
+                    <ManualOrder isOwner={isOwner} symbols={symbols} snapshots={snapshots} onDone={() => api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {})} />
                     <ActiveStrategies isOwner={isOwner} strategies={strategies} onDone={reloadStrategies} />
                     <PendingOrders pending={pending} />
                 </TabsContent>
@@ -107,16 +107,20 @@ export default function Trade() {
     );
 }
 
-function ManualOrder({ isOwner, symbols, onDone }) {
+function ManualOrder({ isOwner, symbols, snapshots, onDone }) {
     const [sym, setSym] = useState("");
     const [side, setSide] = useState("BUY");
     const [otype, setOtype] = useState("MARKET");
-    const [notional, setNotional] = useState("100");
+    const [amount, setAmount] = useState("100");
     const [fraction, setFraction] = useState("100");
     const [limit, setLimit] = useState("");
     const [busy, setBusy] = useState(false);
     const symList = symbols || [];
     const activeSym = sym || symList[0] || "";
+    const priceMap = useMemo(() => Object.fromEntries((snapshots || []).map((s) => [s.symbol, s])), [snapshots]);
+    const px = priceMap[activeSym]?.price ?? priceMap[activeSym]?.ask ?? 0;
+    const amt = parseFloat(amount) || 0;
+    const estUnits = px > 0 && amt > 0 ? amt / px : 0;
 
     const submit = async () => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -124,9 +128,8 @@ function ManualOrder({ isOwner, symbols, onDone }) {
         if (!b) { toast.error("Select a symbol"); return; }
         const payload = { symbol: b, side, order_type: otype };
         if (side === "BUY") {
-            const n = parseFloat(notional);
-            if (!(n > 0)) { toast.error("Enter a valid USD amount"); return; }
-            payload.notional_usd = n;
+            if (!(amt > 0)) { toast.error("Enter a valid USD amount"); return; }
+            payload.notional_usd = amt;
         } else {
             const f = parseFloat(fraction);
             if (!(f > 0)) { toast.error("Enter a valid % to sell"); return; }
@@ -148,28 +151,37 @@ function ManualOrder({ isOwner, symbols, onDone }) {
 
     return (
         <div className="panel border-atlas-border rounded-2xl p-5" data-testid="manual-order-card">
-            <div className="label-tag mb-3">CREATE MANUAL ORDER</div>
-            <div className="flex gap-2 flex-wrap mb-4">
-                {symList.map((s) => {
-                    const b = s.split("/")[0];
-                    return (
-                        <button key={s} data-testid={`manual-order-sym-${b}`} onClick={() => setSym(s)}
-                            className={`text-[11px] font-mono font-bold px-3 py-1.5 rounded-full border transition-colors ${activeSym === s ? "border-atlas-cyan bg-atlas-cyan text-black" : "border-atlas-border text-atlas-textSecondary hover:text-white"}`}>{b}</button>
-                    );
-                })}
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-                <Seg options={[["BUY", "BUY"], ["SELL", "SELL"]]} value={side} onChange={setSide} testid="manual-order-side" />
-                <Seg options={[["MARKET", "MARKET"], ["LIMIT", "LIMIT"]]} value={otype} onChange={setOtype} testid="manual-order-type" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="label-tag mb-3">CREATE YOUR ORDER</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                {/* 1. Amount */}
                 {side === "BUY" ? (
-                    <NumField label="AMOUNT (USD)" value={notional} onChange={setNotional} testid="manual-order-notional" />
+                    <NumField label="AMOUNT (USD)" value={amount} onChange={setAmount} testid="manual-order-notional" />
                 ) : (
                     <NumField label="SELL % OF POSITION" value={fraction} onChange={setFraction} testid="manual-order-fraction" />
                 )}
-                {otype === "LIMIT" && <NumField label="LIMIT PRICE" value={limit} onChange={setLimit} testid="manual-order-limit" />}
+                {/* 2. Crypto dropdown */}
+                <div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mb-1">SELECT CRYPTO</div>
+                    <select data-testid="manual-order-symbol" value={activeSym} onChange={(e) => setSym(e.target.value)}
+                        className="w-full bg-atlas-bg border border-atlas-border rounded-lg px-3 py-2.5 font-mono text-sm text-white focus:border-atlas-cyan outline-none">
+                        {symList.map((s) => {
+                            const b = s.split("/")[0];
+                            const sp = priceMap[s];
+                            return <option key={s} value={s}>{b}{sp ? ` · $${(sp.price ?? sp.ask ?? 0).toLocaleString()}` : ""}</option>;
+                        })}
+                    </select>
+                </div>
             </div>
+            {side === "BUY" && estUnits > 0 && (
+                <div data-testid="manual-order-estimate" className="font-mono text-[11px] text-atlas-textSecondary mb-3">≈ {estUnits.toFixed(estUnits < 1 ? 6 : 4)} {activeSym.split("/")[0]}</div>
+            )}
+            {/* 3. Parameters */}
+            <div className="grid grid-cols-2 gap-3">
+                <Seg options={[["BUY", "BUY"], ["SELL", "SELL"]]} value={side} onChange={setSide} testid="manual-order-side" />
+                <Seg options={[["MARKET", "MARKET"], ["LIMIT", "LIMIT"]]} value={otype} onChange={setOtype} testid="manual-order-type" />
+            </div>
+            {otype === "LIMIT" && <div className="mt-3"><NumField label="LIMIT PRICE" value={limit} onChange={setLimit} testid="manual-order-limit" /></div>}
+            {/* 4. Action */}
             <button data-testid="manual-order-submit" disabled={busy} onClick={submit}
                 className={`mt-4 w-full rounded-lg py-3 font-mono text-xs font-bold tracking-widest transition-colors ${side === "SELL" ? "bg-atlas-negative text-white hover:opacity-90" : "bg-atlas-cyan text-black hover:opacity-90"} disabled:opacity-50`}>
                 {busy ? "PLACING…" : `${side} ${(activeSym || "").split("/")[0]}`}
@@ -200,17 +212,19 @@ function NumField({ label, value, onChange, testid }) {
 }
 
 function ActiveStrategies({ isOwner, strategies, onDone }) {
+    const [visible, setVisible] = useState(3);
     const toggle = async (key, isOn) => {
         if (!isOwner) { toast.error("Owner login required"); return; }
         try { isOn ? await api.strategySetState(key, { status: "DISABLED" }) : await api.strategySetState(key, { enabled: true }); onDone && onDone(); }
         catch (e) { toast.error("Toggle failed", { description: String(e?.message || e) }); }
     };
     if (!strategies || strategies.length === 0) return null;
+    const shown = strategies.slice(0, visible);
     return (
         <div className="panel border-atlas-border rounded-2xl p-5" data-testid="active-strategies-card">
             <div className="label-tag mb-3">ACTIVE STRATEGIES</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {strategies.map((s) => {
+                {shown.map((s) => {
                     const isOn = !!s.enabled && s.status !== "DISABLED" && s.status !== "ERROR";
                     return (
                         <div key={s.key} className="flex items-center justify-between rounded-lg border border-atlas-border px-4 py-3 bg-atlas-bg/40">
@@ -223,6 +237,12 @@ function ActiveStrategies({ isOwner, strategies, onDone }) {
                     );
                 })}
             </div>
+            {visible < strategies.length && (
+                <button data-testid="strategies-show-more" onClick={() => setVisible((v) => v + 3)}
+                    className="mt-3 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] tracking-widest text-atlas-cyan hover:bg-atlas-cyan/10 transition-colors">
+                    SHOW MORE ({strategies.length - visible})
+                </button>
+            )}
         </div>
     );
 }

@@ -30,6 +30,7 @@ export default function Dashboard() {
     const [candles, setCandles] = useState([]);
     const [loadingChart, setLoadingChart] = useState(false);
     const [wizardOpen, setWizardOpen] = useState(false);
+    const [weeklyOpen, setWeeklyOpen] = useState(false);
 
     useEffect(() => {
         const onWizard = () => setWizardOpen(true);
@@ -51,50 +52,63 @@ export default function Dashboard() {
     }, [selected]);
 
     return (
-        <div className="space-y-6" data-testid="cockpit-page">
-            <CoachBanner />
+        <div className="space-y-5" data-testid="cockpit-page">
+            {/* Action hub — dual control row directly beneath Account Value */}
+            <div className="grid grid-cols-2 gap-3">
+                <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
+                    <Rocket className="w-4 h-4" /> START TRADING
+                </button>
+                <button data-testid="cockpit-weekly-review" onClick={() => setWeeklyOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/40 text-atlas-cyan font-mono text-sm font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/10 active:scale-[0.99] transition-all">
+                    <Sparkles className="w-4 h-4" /> WEEKLY AI REVIEW
+                </button>
+            </div>
             <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} onChanged={refresh} />
-            <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
-                <Rocket className="w-4 h-4" /> START TRADING
-            </button>
             <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
             <TradeLifecyclePanel portfolio={portfolio} />
             <AnalyticsGroup summary={summary} trades={trades} />
             <ConsolidatedPositions portfolio={portfolio} onDone={refresh} />
             <TradingWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
+            <WeeklyReviewModal open={weeklyOpen} onClose={() => setWeeklyOpen(false)} />
+        </div>
+    );
+}
+
+function WeeklyReviewModal({ open, onClose }) {
+    const [loading, setLoading] = useState(false);
+    const [review, setReview] = useState(null);
+    useEffect(() => {
+        if (!open) return;
+        setLoading(true); setReview(null);
+        api.coachReview().then(setReview).catch(() => setReview({ error: true })).finally(() => setLoading(false));
+    }, [open]);
+    if (!open) return null;
+    const rec = review?.recommendation;
+    return (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" data-testid="weekly-review-modal" onClick={onClose}>
+            <div className="panel border-atlas-border rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 font-heading text-lg text-atlas-text"><Sparkles className="w-5 h-5 text-atlas-cyan" /> Weekly AI Review</div>
+                    <button data-testid="weekly-review-close" onClick={onClose} className="text-atlas-textSecondary hover:text-white"><X className="w-5 h-5" /></button>
+                </div>
+                {loading ? (
+                    <div className="py-10 grid place-items-center"><Loader2 className="w-6 h-6 text-atlas-cyan animate-spin" /></div>
+                ) : review?.error ? (
+                    <p className="font-mono text-[12px] text-atlas-textSecondary">Coach review is unavailable right now.</p>
+                ) : (
+                    <div className="space-y-3 max-h-[55vh] overflow-y-auto atlas-scroll">
+                        <p className="font-mono text-[13px] text-atlas-text leading-relaxed whitespace-pre-wrap">{review?.summary || review?.headline || "No review available yet — trade more to unlock weekly coaching."}</p>
+                        {rec?.text && <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed whitespace-pre-wrap border-t border-atlas-border pt-3">{rec.text}</p>}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
 
 /* ---------------- AI Coach headline banner (credit-free) ---------------- */
-function CoachBanner() {
-    const [h, setH] = useState(null);
-    useEffect(() => { api.coachHeadline().then(setH).catch(() => {}); }, []);
-    if (!h) return null;
-    const goResearch = () => {
-        localStorage.setItem("ananta_research_sub", "analyze");
-        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
-    };
-    return (
-        <button data-testid="coach-banner" onClick={goResearch}
-            className="w-full text-left panel border-atlas-cyan/30 bg-atlas-cyan/5 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-atlas-cyan/60 transition-colors group">
-            <span className="w-8 h-8 rounded-lg grid place-items-center bg-atlas-cyan/15 shrink-0">
-                <Sparkles className="w-4 h-4 text-atlas-cyan" />
-            </span>
-            <div className="min-w-0 flex-1">
-                <div className="label-tag text-[9px] text-atlas-cyan/80">AI TRADING COACH</div>
-                <div className="font-mono text-[12px] text-atlas-text truncate">
-                    {h.has_review ? h.headline : h.headline}
-                    {h.impact ? <span className="text-atlas-positive"> · {h.impact}</span> : null}
-                </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:translate-x-0.5 transition-transform shrink-0" />
-        </button>
-    );
-}
-
 /* ---------------- Bot-brain strip (account metrics live in the top header now) ---------------- */
 function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
     const total = brain?.total_evaluations ?? 0;
@@ -103,27 +117,32 @@ function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
     const regimeCls = regime === "BULLISH" ? "text-atlas-positive"
         : regime === "BEARISH" ? "text-atlas-negative" : "text-atlas-textSecondary";
     return (
-        <div className="panel px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs" data-testid="bot-brain-strip">
-            <BrainStat label="Scanned" value={scanned} />
-            <Sep />
-            <BrainStat label="Setups" value={total} />
-            <Sep />
-            <BrainStat label="Rejected" value={rejected} valueClass="text-atlas-negative" />
-            <Sep />
-            <BrainStat label="Qualified" value={qualified} valueClass="text-atlas-positive" />
-            <Sep />
-            <span className="text-atlas-textTertiary">Regime: <span className={`font-bold ${regimeCls}`} data-testid="regime-value">{regime}</span></span>
-            <button data-testid="cockpit-refresh" onClick={onRefresh} className="ml-auto text-atlas-textSecondary hover:text-atlas-text transition-colors">
+        <div className="panel p-4 relative" data-testid="bot-brain-strip">
+            <button data-testid="cockpit-refresh" onClick={onRefresh} className="absolute top-3 right-3 text-atlas-textSecondary hover:text-atlas-text transition-colors">
                 <RefreshCw className="w-4 h-4" />
             </button>
+            <div className="grid grid-cols-2 gap-2">
+                <MatrixCell label="Setups" value={total} />
+                <MatrixCell label="Scanned" value={scanned} />
+                <MatrixCell label="Rejected" value={rejected} valueClass="text-atlas-negative" />
+                <MatrixCell label="Qualified" value={qualified} valueClass="text-atlas-positive" />
+            </div>
+            <div className="mt-2 rounded-lg border border-atlas-border px-4 py-2.5 flex items-center justify-between" data-testid="regime-cell">
+                <span className="label-tag">Regime</span>
+                <span className={`font-mono text-sm font-bold ${regimeCls}`} data-testid="regime-value">{regime}</span>
+            </div>
         </div>
     );
 }
 
-function BrainStat({ label, value, valueClass = "text-atlas-text" }) {
-    return <span className="text-atlas-textTertiary">{label}: <span className={`font-bold tabular-nums ${valueClass}`}>{value}</span></span>;
+function MatrixCell({ label, value, valueClass = "text-atlas-text" }) {
+    return (
+        <div className="rounded-lg border border-atlas-border px-4 py-3">
+            <div className="label-tag">{label}</div>
+            <div className={`font-mono text-xl font-bold tabular-nums mt-0.5 ${valueClass}`}>{value}</div>
+        </div>
+    );
 }
-const Sep = () => <span className="text-atlas-border">|</span>;
 
 /* ---------------- Watchlist Ribbon — compact single-line selector ---------------- */
 function WatchlistRibbon({ snapshots, symbols, selected, onSelect, onChanged }) {

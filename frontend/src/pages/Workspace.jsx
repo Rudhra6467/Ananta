@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useAppData } from "@/context/AppDataContext";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SettingsPage from "@/pages/Settings";
 import { AcademyModal } from "@/components/Academy";
 
@@ -29,71 +30,85 @@ export default function Workspace() {
     }, []);
 
     return (
-        <div className="space-y-6 pb-24" data-testid="workspace-page">
-            {/* Engine & Risk config */}
-            <Section icon={SlidersHorizontal} title="Engine & Risk" subtitle="Exit engine, sizing, guardrails & exchange credentials">
-                <SettingsPage />
-            </Section>
+        <div className="space-y-5 pb-24" data-testid="workspace-page">
+            <Tabs defaultValue="ai" className="atlas-tabs">
+                <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
+                    <WSTab value="ai" label="ALL AI INFO" icon={Sparkles} />
+                    <WSTab value="engine" label="ENGINE & RISK" icon={SlidersHorizontal} />
+                    <WSTab value="learn" label="LEARNING HUB" icon={GraduationCap} />
+                </TabsList>
 
-            {/* Ask Ananta (AI Copilot) */}
-            <Section icon={Sparkles} title="Ask Ananta" subtitle="Embedded AI copilot — Q&A and action execution">
-                <AskAnantaToggle isOwner={isOwner} />
-            </Section>
+                <TabsContent value="ai" className="m-0 space-y-6">
+                    <Section icon={Sparkles} title="Ask Ananta" subtitle="Embedded AI copilot — Q&A and action execution">
+                        <AskAnantaToggle isOwner={isOwner} />
+                    </Section>
+                    <Section icon={Archive} title="Closed Trades History" subtitle="Your completed round-trips">
+                        <ClosedTradesHistory trades={trades} />
+                    </Section>
+                </TabsContent>
 
-            {/* Learn & Compete */}
-            <Section icon={GraduationCap} title="Learn & Compete" subtitle="Education and the judge-ready demo experience">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                    <CompetitionDemo isOwner={isOwner} />
-                    <GuidedTourCard />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                    <button data-testid="ws-academy" onClick={() => setAcademyOpen(true)}
-                        className="panel border-atlas-border rounded-xl p-5 text-left hover:border-atlas-cyan/40 transition-colors group">
-                        <div className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5 mb-3"><GraduationCap className="w-5 h-5 text-atlas-cyan" /></div>
-                        <div className="flex items-center gap-1.5 font-heading text-base text-atlas-text mb-1">Academy<ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:translate-x-0.5 transition-transform" /></div>
-                        <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Guided lessons — Trading Basics, Risk Management, How Hunter/Squeeze work, Walk-Forward, Monte Carlo, Paper vs Live.</p>
-                    </button>
-                </div>
-            </Section>
-            <AcademyModal open={academyOpen} onOpenChange={setAcademyOpen} />
-
-            {/* Closed Trades History */}
-            <Section icon={Archive} title="Closed Trades History" subtitle="Your completed round-trips">
-                <ClosedTradesHistory trades={trades} />
-            </Section>
-
-            {/* System Health */}
-            <Section icon={Activity} title="System Health" subtitle="Live platform status">
-                <div className="panel border-atlas-border rounded-xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="ws-system-health">
-                    <HealthRow label="Backend API" ok={health?.backend} okText="Online" badText="Unreachable" />
-                    <HealthRow label="Trading Mode" ok={health?.mode ? true : null} okText={health?.mode || "—"} neutral />
-                    <HealthRow label="Live Gate" ok={health?.gate} okText="Armed" badText="Closed" />
-                </div>
-            </Section>
-
-            {/* About + account */}
-            <Section icon={Info} title="About" subtitle="Ananta.AI">
-                <div className="panel border-atlas-border rounded-xl p-5 space-y-4">
-                    <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed">
-                        <b className="text-atlas-text">Ananta.AI</b> — an AI-native operating system for algorithmic trading.
-                        It guides you from strategy design → validation → deployment → monitoring → continuous improvement
-                        through a unified, AI-assisted workflow. Spot-only, capital-preservation first.
-                    </p>
-                    <div className="flex items-center justify-between flex-wrap gap-3 border-t border-atlas-border pt-4">
-                        <div className="font-mono text-[10px] text-atlas-textTertiary">
-                            {isOwner ? <>Signed in as <span className="text-atlas-text">{owner?.email}</span></> : "Public read-only view"}
+                <TabsContent value="engine" className="m-0 space-y-6">
+                    <Section icon={SlidersHorizontal} title="Engine & Risk" subtitle="Exit engine, sizing, guardrails, Stop Ananta & exchange credentials">
+                        <SettingsPage />
+                    </Section>
+                    <Section icon={Activity} title="System Health" subtitle="Live platform status">
+                        <div className="panel border-atlas-border rounded-xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="ws-system-health">
+                            <HealthRow label="Backend API" ok={health?.backend} okText="Online" badText="Unreachable" />
+                            <HealthRow label="Trading Mode" ok={health?.mode ? true : null} okText={health?.mode || "—"} neutral />
+                            <HealthRow label="Live Gate" ok={health?.gate} okText="Armed" badText="Closed" />
                         </div>
-                        {isOwner && (
-                            <button data-testid="ws-logout-btn"
-                                onClick={() => { logout(); toast.success("Signed out"); }}
-                                className="flex items-center gap-2 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
-                                <LogOut className="w-3.5 h-3.5" /> LOG OUT
+                    </Section>
+                </TabsContent>
+
+                <TabsContent value="learn" className="m-0 space-y-6">
+                    <Section icon={GraduationCap} title="Learn & Compete" subtitle="Education and the judge-ready demo experience">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                            <CompetitionDemo isOwner={isOwner} />
+                            <GuidedTourCard />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                            <button data-testid="ws-academy" onClick={() => setAcademyOpen(true)}
+                                className="panel border-atlas-border rounded-xl p-5 text-left hover:border-atlas-cyan/40 transition-colors group">
+                                <div className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5 mb-3"><GraduationCap className="w-5 h-5 text-atlas-cyan" /></div>
+                                <div className="flex items-center gap-1.5 font-heading text-base text-atlas-text mb-1">Academy<ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:translate-x-0.5 transition-transform" /></div>
+                                <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Guided lessons — Trading Basics, Risk Management, How Hunter/Squeeze work, Walk-Forward, Monte Carlo, Paper vs Live.</p>
                             </button>
-                        )}
-                    </div>
-                </div>
-            </Section>
+                        </div>
+                    </Section>
+                    <Section icon={Info} title="About" subtitle="Ananta.AI">
+                        <div className="panel border-atlas-border rounded-xl p-5 space-y-4">
+                            <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed">
+                                <b className="text-atlas-text">Ananta.AI</b> — an AI-native operating system for algorithmic trading.
+                                It guides you from strategy design → validation → deployment → monitoring → continuous improvement
+                                through a unified, AI-assisted workflow. Spot-only, capital-preservation first.
+                            </p>
+                            <div className="flex items-center justify-between flex-wrap gap-3 border-t border-atlas-border pt-4">
+                                <div className="font-mono text-[10px] text-atlas-textTertiary">
+                                    {isOwner ? <>Signed in as <span className="text-atlas-text">{owner?.email}</span></> : "Public read-only view"}
+                                </div>
+                                {isOwner && (
+                                    <button data-testid="ws-logout-btn"
+                                        onClick={() => { logout(); toast.success("Signed out"); }}
+                                        className="flex items-center gap-2 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                                        <LogOut className="w-3.5 h-3.5" /> LOG OUT
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </Section>
+                </TabsContent>
+            </Tabs>
+            <AcademyModal open={academyOpen} onOpenChange={setAcademyOpen} />
         </div>
+    );
+}
+
+function WSTab({ value, label, icon: Icon }) {
+    return (
+        <TabsTrigger value={value} data-testid={`ws-subtab-${value}`}
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors duration-150 hover:text-white flex items-center gap-2">
+            <Icon className="w-4 h-4" strokeWidth={2} /> {label}
+        </TabsTrigger>
     );
 }
 

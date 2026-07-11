@@ -1,0 +1,29 @@
+{
+  "summary": "V1 Freeze layout-refinement e2e (backend regression + web + mobile parity, iter 42). Backend regression 18/18 pytest passed (iter40 manual orders BUY/SELL paper/limit + iter41 Ask Ananta + strategy state toggle + ask_ananta_enabled persistence). WEB (owner Bearer via localStorage 'ananta_owner_token' + 'ananta_onboarded=1'): Cockpit dual-button row [cockpit-start-trading opens trading-wizard | cockpit-weekly-review opens+closes weekly-review-modal via weekly-review-close], bot-brain-strip 2x2 matrix (Setups 576 / Scanned 10 / Rejected 575 / Qualified 1) + regime-cell full-width with regime-value='NEUTRAL', cockpit-refresh present. Trade Orders: manual-order-card titled 'CREATE YOUR ORDER', manual-order-notional + manual-order-symbol (select dropdown with live rate labels e.g. 'BTC · $64,250') + manual-order-estimate + paired pills manual-order-side-buy/sell + manual-order-type-market/limit + single manual-order-submit; token pill-grid removed. active-strategies-card renders 3 rows initially, strategies-show-more click reveals 6 (+3). Research Lab: 11 wizard-strat-* cards, NO brain icon in cards (verified via SVG scan), wizard-strat-status-* shows 'ON · LIVE' / 'OFF' synced with strategy state, 11 wizard-strat-edit-* pencil icons. Workspace: 3 subtabs ws-subtab-ai/-engine/-learn all visible; AI tab default shows ask-ananta-toggle; Engine tab shows emergency-kill-btn with renamed label 'STOP ANANTA'; Learning Hub shows ws-academy + ws-demo + ws-tour + ws-logout-btn + About panel. MOBILE (Expo preview after login-email/password owner + onboarding-skip): Cockpit dual buttons (Start Trading / Weekly AI Review), cockpit-metric-setups=5, scanned=2000, rejected=1995, qualified=5, cockpit-metric-regime='NEUTRAL' (no dash), weekly-review-close closes modal. Trade manual-order-card 'CREATE YOUR ORDER' renders all sub-fields (notional/symbol dropdown opens 10 manual-order-pick-* options, estimate ≈ units, buy/sell + mkt/lmt pills, single BUY submit); active strategies 3 rows + strategies-show-more visible + strategy-toggle-hunter/squeeze/continuation. Research research-strat-status shows 'Bot Status: ON · live on engine' synced with Trade toggles. Workspace ws-subtab-ai/engine/learn switch; AI has ask-ananta-toggle + ws-open-coach; Engine has ws-stop-ananta labelled 'STOP ANANTA'; Learn has ws-academy + ws-tour-replay + ws-logout-btn. Parity verified across all 4 tabs — layout refinement is complete and functionally consistent on both surfaces. No console crashes; no data.market .map regressions.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_manual_order_and_ask_ananta.py",
+    "/app/backend/tests/test_iter41_ask_ananta.py",
+    "/app/test_reports/pytest/iter42_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Web Workspace engine subtab hosts full SettingsPage — the review spec asks that 'Stop Ananta' be right-aligned on the Engine & Risk title axis. Currently emergency-kill-btn lives inside Settings.jsx (L108-120), not on the Workspace section header, so visual alignment vs the outer 'Engine & Risk' title cannot be tuned from Workspace.jsx. Consider hoisting the kill button into the Section header of Workspace.jsx L50-53 to match the mock.",
+    "Mobile: RN Switch renders as an inline element in Expo web preview and Playwright's is_visible() can return False for adjacent Pressables inside the same Card even when the element is rendered (text_content works). Not a bug, but future testing agents should prefer text_content / query_selector over is_visible for RN Switch / Pressable-wrapping-View combos in the manual-order-card.",
+    "Cockpit BotBrainStrip (Dashboard.jsx L120-134) does not add per-cell data-testid on the web 2x2 matrix (MatrixCell has no testid). Mobile has cockpit-metric-setups/scanned/rejected/qualified. Consider parity: add cockpit-metric-{key} testids on web MatrixCell too so future tests can assert individual values without regex-parsing text."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (PREVIEW). Web token key: localStorage 'ananta_owner_token' (NOT 'ananta_token'). Onboarding flag: localStorage 'ananta_onboarded'='1'.",
+  "seed_data_creation": "None new. Regression paper BUY $5 BTC via web submit + paper BUY $3 (first alphabetical crypto) via mobile submit — both land in paper ledger as designed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Web auth: POST /api/auth/login → set localStorage['ananta_owner_token'] = res.token, and localStorage['ananta_onboarded']='1', then reload. Web bottom nav testIDs: bottom-nav-dashboard/-trade/-strategies/-research/-workspace. Mobile bottom tabs: tab-index (cockpit), tab-trade, tab-strategy, tab-research, tab-workspace. Mobile requires login via login-email-input/-password-input/-submit-btn then onboarding-skip or onboarding-enter. Web workspace uses ws-subtab-ai/-engine/-learn (not the earlier flat layout). STOP ANANTA on web is still the emergency-kill-btn testID (renamed label only). Mobile uses ws-stop-ananta testID with same 'STOP ANANTA' label. Ask Ananta chip on web is bottom-left; on mobile is a docked pill near bottom.",
+  "rca of the issue": "N/A — no bugs found."
+}

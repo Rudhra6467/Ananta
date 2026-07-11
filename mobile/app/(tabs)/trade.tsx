@@ -14,13 +14,13 @@ import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { usd, signedUsd, pct, price, base } from "../../src/format";
 
 async function loadTrade() {
-  const [portfolio, environment, tradesResp, pendingResp, settings, metrics] = await Promise.all([
-    api.portfolio(), api.getEnvironment(), api.trades(80), api.pendingOrders(), api.settings(), api.strategyMetrics(),
+  const [portfolio, environment, tradesResp, pendingResp, settings, metrics, market] = await Promise.all([
+    api.portfolio(), api.getEnvironment(), api.trades(80), api.pendingOrders(), api.settings(), api.strategyMetrics(), api.marketSnapshots().catch(() => []),
   ]);
   const trades = tradesResp?.items || tradesResp?.trades || (Array.isArray(tradesResp) ? tradesResp : []);
   const pending = pendingResp?.items || pendingResp?.orders || (Array.isArray(pendingResp) ? pendingResp : []);
   const strategies = Object.values(metrics?.metrics || {});
-  return { portfolio, environment, trades, pending, settings, strategies };
+  return { portfolio, environment, trades, pending, settings, strategies, market };
 }
 
 export default function Trade() {
@@ -56,6 +56,7 @@ export default function Trade() {
   const closed = (data?.trades || []).filter((t: any) => t.side === "SELL" && (t.status || "FILLED") === "FILLED" && t.pnl != null);
   const strategies = data?.strategies || [];
   const enabledSymbols: string[] = data?.settings?.enabled_symbols || [];
+  const priceMap: Record<string, any> = Object.fromEntries(((data?.market?.snapshots) || (Array.isArray(data?.market) ? data?.market : []) || []).map((s: any) => [s.symbol, s]));
   const mode = (data?.environment?.mode || "PAPER").toUpperCase();
   const modeKey = mode === "LIVE" ? "live" : "paper";
   const killed = !!data?.settings?.manual_kill_switch;
@@ -87,7 +88,7 @@ export default function Trade() {
 
         {sub === "orders" && (
           <>
-            <ManualOrder isOwner={isOwner} symbols={enabledSymbols} onDone={refresh} />
+            <ManualOrder isOwner={isOwner} symbols={enabledSymbols} prices={priceMap} onDone={refresh} />
             <ActiveStrategies isOwner={isOwner} strategies={strategies} onDone={refresh} />
             {pending.length > 0 && (
               <View style={{ marginTop: spacing.md }}>
@@ -148,22 +149,27 @@ export default function Trade() {
   );
 }
 
-function ManualOrder({ isOwner, symbols, onDone }: { isOwner: boolean; symbols: string[]; onDone: () => void }) {
+function ManualOrder({ isOwner, symbols, prices, onDone }: { isOwner: boolean; symbols: string[]; prices: Record<string, any>; onDone: () => void }) {
   const [sym, setSym] = useState(symbols[0] || "BTC/USD");
   const [side, setSide] = useState("buy");
   const [otype, setOtype] = useState("market");
-  const [notional, setNotional] = useState("100");
+  const [amount, setAmount] = useState("100");
   const [fraction, setFraction] = useState("100");
   const [limit, setLimit] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const snap = prices[sym] || {};
+  const px = snap.price || snap.ask || snap.bid || 0;
+  const amt = parseFloat(amount) || 0;
+  const estUnits = px > 0 && amt > 0 ? amt / px : 0;
 
   const submit = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
     const payload: any = { symbol: base(sym), side: side.toUpperCase(), order_type: otype.toUpperCase() };
     if (side === "buy") {
-      const n = parseFloat(notional);
-      if (!(n > 0)) return Alert.alert("Enter a valid USD amount");
-      payload.notional_usd = n;
+      if (!(amt > 0)) return Alert.alert("Enter a valid USD amount");
+      payload.notional_usd = amt;
     } else {
       const f = parseFloat(fraction);
       if (!(f > 0)) return Alert.alert("Enter a valid % to sell");
@@ -174,7 +180,7 @@ function ManualOrder({ isOwner, symbols, onDone }: { isOwner: boolean; symbols: 
       if (!(lp > 0)) return Alert.alert("Enter a valid limit price");
       payload.limit_price = lp;
     }
-    Alert.alert("Confirm order", `${side.toUpperCase()} ${base(sym)} · ${otype.toUpperCase()}${side === "buy" ? ` · $${payload.notional_usd}` : ` · ${fraction}%`}`, [
+    Alert.alert("Confirm order", `${side.toUpperCase()} ${base(sym)} · ${otype.toUpperCase()}${side === "buy" ? ` · $${amt}` : ` · ${fraction}%`}`, [
       { text: "Cancel", style: "cancel" },
       { text: "Place", onPress: async () => {
         setBusy(true);
@@ -190,14 +196,27 @@ function ManualOrder({ isOwner, symbols, onDone }: { isOwner: boolean; symbols: 
 
   return (
     <Card testID="manual-order-card" style={{ marginBottom: spacing.sm }}>
-      <Text style={type.label}>CREATE MANUAL ORDER</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, marginTop: spacing.sm }}>
-        {symbols.map((s) => (
-          <Pressable key={s} testID={`manual-order-sym-${base(s)}`} onPress={() => setSym(s)} style={[styles.symPill, sym === s && styles.symPillOn]}>
-            <Text style={[styles.symPillTxt, sym === s && { color: colors.bg }]}>{base(s)}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Text style={type.label}>CREATE YOUR ORDER</Text>
+
+      {/* 1. Amount */}
+      <View style={{ marginTop: spacing.sm }}>
+        <Field label={side === "buy" ? "AMOUNT (USD)" : "SELL % OF POSITION"} testID={side === "buy" ? "manual-order-notional" : "manual-order-fraction"}
+          value={side === "buy" ? amount : fraction} onChange={side === "buy" ? setAmount : setFraction} placeholder={side === "buy" ? "100" : "100"} />
+      </View>
+
+      {/* 2. Select crypto (dropdown) */}
+      <Pressable testID="manual-order-symbol" onPress={() => setPickerOpen(true)} style={styles.dropdown}>
+        <View>
+          <Text style={[type.small, { fontSize: 11 }]}>SELECT CRYPTO</Text>
+          <Text style={[type.body, { fontWeight: "700", marginTop: 2 }]}>{base(sym)}{px ? `  ·  ${price(px)}` : ""}</Text>
+        </View>
+        <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+      </Pressable>
+      {side === "buy" && estUnits > 0 && (
+        <Text testID="manual-order-estimate" style={[type.small, { marginTop: spacing.xs }]}>≈ {estUnits.toFixed(estUnits < 1 ? 6 : 4)} {base(sym)}</Text>
+      )}
+
+      {/* 3. Parameters */}
       <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
         <View style={{ flex: 1 }}>
           <Segmented testIDPrefix="manual-order-side" options={[{ key: "buy", label: "BUY" }, { key: "sell", label: "SELL" }]} value={side} onChange={setSide} />
@@ -206,17 +225,31 @@ function ManualOrder({ isOwner, symbols, onDone }: { isOwner: boolean; symbols: 
           <Segmented testIDPrefix="manual-order-type" options={[{ key: "market", label: "MKT" }, { key: "limit", label: "LMT" }]} value={otype} onChange={setOtype} />
         </View>
       </View>
-      <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
-        {side === "buy" ? (
-          <Field label="AMOUNT (USD)" testID="manual-order-notional" value={notional} onChange={setNotional} placeholder="100" />
-        ) : (
-          <Field label="SELL % OF POSITION" testID="manual-order-fraction" value={fraction} onChange={setFraction} placeholder="100" />
-        )}
-        {otype === "limit" && <Field label="LIMIT PRICE" testID="manual-order-limit" value={limit} onChange={setLimit} placeholder="0.00" />}
-      </View>
+      {otype === "limit" && <View style={{ marginTop: spacing.sm }}><Field label="LIMIT PRICE" testID="manual-order-limit" value={limit} onChange={setLimit} placeholder="0.00" /></View>}
+
+      {/* 4. Action */}
       <Pressable testID="manual-order-submit" disabled={busy} onPress={submit} style={[styles.submitBtn, side === "sell" && styles.submitSell, busy && { opacity: 0.5 }]}>
         <Text style={[styles.submitTxt, { color: colors.bg }]}>{busy ? "PLACING…" : `${side.toUpperCase()} ${base(sym)}`}</Text>
       </Pressable>
+
+      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+        <Pressable style={styles.pickerWrap} onPress={() => setPickerOpen(false)}>
+          <View style={styles.pickerCard}>
+            <Text style={[type.label, { marginBottom: spacing.sm }]}>SELECT CRYPTO</Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {symbols.map((s) => {
+                const sp = prices[s] || {};
+                return (
+                  <Pressable key={s} testID={`manual-order-pick-${base(s)}`} onPress={() => { setSym(s); setPickerOpen(false); }} style={[styles.pickerRow, s === sym && { backgroundColor: colors.tealGlow }]}>
+                    <Text style={[type.body, { fontWeight: "700" }]}>{base(s)}</Text>
+                    <Text style={type.small}>{sp.price || sp.ask ? price(sp.price || sp.ask) : "—"}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </Card>
   );
 }
@@ -232,16 +265,18 @@ function Field({ label, value, onChange, placeholder, testID }: any) {
 }
 
 function ActiveStrategies({ isOwner, strategies, onDone }: { isOwner: boolean; strategies: any[]; onDone: () => void }) {
+  const [visible, setVisible] = useState(3);
   const toggle = async (key: string, isOn: boolean) => {
     if (!isOwner) return Alert.alert("Owner login required");
     try { isOn ? await api.strategyDisable(key) : await api.strategyDeploy(key); onDone(); }
     catch (e: any) { Alert.alert("Failed", e?.message); }
   };
   if (strategies.length === 0) return null;
+  const shown = strategies.slice(0, visible);
   return (
     <View style={{ marginTop: spacing.md }}>
       <Text style={[type.label, { marginBottom: spacing.sm }]}>ACTIVE STRATEGIES</Text>
-      {strategies.map((s: any) => {
+      {shown.map((s: any) => {
         const isOn = !!s.enabled && s.status !== "DISABLED" && s.status !== "ERROR";
         return (
           <Card key={s.key} style={{ marginBottom: spacing.xs, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -254,6 +289,11 @@ function ActiveStrategies({ isOwner, strategies, onDone }: { isOwner: boolean; s
           </Card>
         );
       })}
+      {visible < strategies.length && (
+        <Pressable testID="strategies-show-more" onPress={() => setVisible((v) => v + 3)} style={styles.moreBtn}>
+          <Text style={styles.moreTxt}>SHOW MORE ({strategies.length - visible})</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -336,6 +376,10 @@ const styles = StyleSheet.create({
   symPill: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.md },
   symPillOn: { backgroundColor: colors.teal, borderColor: colors.teal },
   symPillTxt: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
+  dropdown: { marginTop: spacing.sm, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: spacing.md },
+  pickerWrap: { flex: 1, justifyContent: "center", padding: spacing.lg, backgroundColor: colors.overlay },
+  pickerCard: { backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, padding: spacing.lg },
+  pickerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   input: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, paddingVertical: 10, paddingHorizontal: spacing.sm, fontSize: 15 },
   submitBtn: { marginTop: spacing.md, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, alignItems: "center" },
   submitSell: { backgroundColor: colors.red },

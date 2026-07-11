@@ -55,6 +55,7 @@ export default function Cockpit() {
   const { isOwner } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
   const { data, loading, error, refreshing, refresh } = useFetch(loadCockpit, [], 15000);
 
   const onRetry = useCallback(() => refresh(), [refresh]);
@@ -79,6 +80,7 @@ export default function Cockpit() {
   const mQualified = fn.qualified ?? "—";
   const mSetups = fn.executed ?? "—";
   const mRejected = (typeof fn.detected === "number" && typeof fn.qualified === "number") ? fn.detected - fn.qualified : "—";
+  const regimeVal = data!.reasoning?.items?.[0]?.bias ?? (Array.isArray(data!.reasoning) ? data!.reasoning[0]?.bias : null) ?? "NEUTRAL";
 
   return (
     <View style={styles.fill}>
@@ -119,18 +121,30 @@ export default function Cockpit() {
         </View>
       </View>
 
-      {/* Generation → filter → qualified metrics (2-col) */}
+      {/* Action hub — dual control row directly beneath Account Value */}
       <View style={styles.sectionPad}>
-        <View style={styles.metricGrid}>
+        <View style={styles.dualRow}>
+          <Pressable testID="cockpit-start-trading" onPress={() => (isOwner ? setWizardOpen(true) : Alert.alert("Owner login required"))} style={[styles.halfBtn, styles.halfPrimary]}>
+            <Ionicons name="rocket" size={16} color={colors.bg} />
+            <Text style={styles.halfPrimaryTxt}>Start Trading</Text>
+          </Pressable>
+          <Pressable testID="cockpit-weekly-review" onPress={() => setWeeklyOpen(true)} style={[styles.halfBtn, styles.halfGhost]}>
+            <Ionicons name="sparkles" size={16} color={colors.teal} />
+            <Text style={styles.halfGhostTxt}>Weekly AI Review</Text>
+          </Pressable>
+        </View>
+
+        {/* Scanning-engine matrix: Setups|Scanned / Rejected|Qualified / Regime base */}
+        <View style={[styles.metricGrid, { marginTop: spacing.md }]}>
           <MetricCell testID="cockpit-metric-setups" label="Setups" value={mSetups} />
           <MetricCell testID="cockpit-metric-scanned" label="Scanned" value={mScanned} />
           <MetricCell testID="cockpit-metric-rejected" label="Rejected" value={mRejected} tone={colors.red} />
           <MetricCell testID="cockpit-metric-qualified" label="Qualified" value={mQualified} tone={colors.teal} />
         </View>
-        <Pressable testID="cockpit-start-trading" onPress={() => (isOwner ? setWizardOpen(true) : Alert.alert("Owner login required"))} style={styles.startBtn}>
-          <Ionicons name="rocket" size={18} color={colors.bg} />
-          <Text style={styles.startTxt}>Start Trading</Text>
-        </Pressable>
+        <View style={styles.regimeCell} testID="cockpit-metric-regime">
+          <Text style={type.label}>Regime</Text>
+          <Text style={styles.metricValue}>{String(regimeVal)}</Text>
+        </View>
       </View>
 
       {/* Active Watchlist rail */}
@@ -216,8 +230,42 @@ export default function Cockpit() {
       <AddAssetModal visible={addOpen} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); refresh(); }} />
     </ScrollView>
     <TradingWizard visible={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
+    <WeeklyReviewModal visible={weeklyOpen} onClose={() => setWeeklyOpen(false)} />
     <AskAnanta tab="cockpit" />
     </View>
+  );
+}
+
+function WeeklyReviewModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [review, setReview] = useState<any>(null);
+  useEffect(() => {
+    if (!visible) return;
+    setLoading(true); setReview(null);
+    api.coachReview().then(setReview).catch(() => setReview({ error: true })).finally(() => setLoading(false));
+  }, [visible]);
+  const rec = review?.recommendation;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalWrap}>
+        <View style={styles.modalCard}>
+          <View style={styles.statusRow}>
+            <Text style={type.h2}>Weekly AI Review</Text>
+            <Pressable testID="weekly-review-close" onPress={onClose} hitSlop={10}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
+          </View>
+          {loading ? <ActivityIndicator color={colors.teal} style={{ marginVertical: spacing.lg }} /> : (
+            <ScrollView style={{ maxHeight: 380, marginTop: spacing.sm }}>
+              {review?.error ? <Text style={type.bodyMuted}>Coach review is unavailable right now.</Text> : (
+                <>
+                  <Text style={[type.body, { lineHeight: 22 }]}>{review?.summary || review?.headline || "No review available yet — trade more to unlock coaching."}</Text>
+                  {rec?.text ? <Text style={[type.bodyMuted, { marginTop: spacing.sm, lineHeight: 21 }]}>{rec.text}</Text> : null}
+                </>
+              )}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -361,6 +409,13 @@ const styles = StyleSheet.create({
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metricCell: { width: "48%", flexGrow: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md },
   metricValue: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 2 },
-  startBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 14, marginTop: spacing.md },
-  startTxt: { color: colors.bg, fontWeight: "800", fontSize: 15, letterSpacing: 0.5 },
+  regimeCell: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md, marginTop: spacing.sm },
+  dualRow: { flexDirection: "row", gap: spacing.sm },
+  halfBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: radius.md, paddingVertical: 13 },
+  halfPrimary: { backgroundColor: colors.teal },
+  halfPrimaryTxt: { color: colors.bg, fontWeight: "800", fontSize: 14 },
+  halfGhost: { borderWidth: 1, borderColor: colors.tealDim },
+  halfGhostTxt: { color: colors.teal, fontWeight: "700", fontSize: 13 },
+  modalWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay },
+  modalCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, padding: spacing.lg },
 });

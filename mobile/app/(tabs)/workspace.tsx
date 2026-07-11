@@ -9,6 +9,7 @@ import { setItem } from "../../src/storage";
 import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
+import { Segmented } from "../../src/components/Segmented";
 import { AskAnanta } from "../../src/components/AskAnanta";
 import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
@@ -23,6 +24,7 @@ export default function Workspace() {
   const [env, setEnv] = useState<any>(null);
   const [busy, setBusy] = useState("");
   const [lesson, setLesson] = useState<any>(null);
+  const [sub, setSub] = useState("ai");
 
   const load = () => {
     api.settings().then(setSettings).catch(() => {});
@@ -46,6 +48,11 @@ export default function Workspace() {
     } catch (e: any) { Alert.alert("Failed", e?.response?.data?.detail || e?.message); } finally { setBusy(""); }
   };
   const replayTour = async () => { await setItem("ananta_onboarded", "0"); router.push("/onboarding"); };
+  const toggleKill = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    const killed = !!settings?.manual_kill_switch;
+    try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); }
+  };
 
   return (
     <View style={styles.fill}>
@@ -53,80 +60,114 @@ export default function Workspace() {
       <PageHeader title="Ananta Setup" question="How is my system configured?" />
       <FirstVisitTip tipKey="workspace" text="Configure your exit engine and risk before going live. Use Replay Guided Tour anytime." />
 
-      {/* Engine & Risk */}
-      <Card style={{ marginBottom: spacing.md }} testID="ws-settings">
-        <SectionLabel>ENGINE & RISK</SectionLabel>
-        {settings ? (
-          <>
-            <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={saveSetting} />
-            <NumRow label="Daily Loss Cap %" k="max_daily_loss_pct" value={settings.max_daily_loss_pct} isOwner={isOwner} onSave={saveSetting} />
-            <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={saveSetting} />
-          </>
-        ) : <ActivityIndicator color={colors.teal} />}
-      </Card>
+      <View style={{ marginBottom: spacing.md }}>
+        <Segmented testIDPrefix="ws-subtab"
+          options={[{ key: "ai", label: "AI INFO" }, { key: "engine", label: "ENGINE & RISK" }, { key: "learn", label: "LEARNING" }]}
+          value={sub} onChange={setSub} />
+      </View>
 
-      {/* AI Copilot toggle (Ask Ananta) */}
-      <Card style={{ marginBottom: spacing.md }} testID="ws-copilot">
-        <View style={styles.rowBetween}>
-          <View style={{ flex: 1, marginRight: spacing.sm }}>
-            <SectionLabel>ASK ANANTA (AI COPILOT)</SectionLabel>
-            <Text style={type.small}>Embedded AI assistant that answers questions and can execute actions with confirmation. Off until launch.</Text>
-          </View>
-          <Switch testID="ask-ananta-toggle" value={!!settings?.ask_ananta_enabled} disabled={!isOwner}
-            onValueChange={async (v) => { if (!isOwner) return Alert.alert("Owner login required"); try { const s = await api.updateSettings({ ask_ananta_enabled: v }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); } }}
-            trackColor={{ true: colors.tealDim, false: colors.cardBorder }} thumbColor={settings?.ask_ananta_enabled ? colors.teal : colors.textFaint} />
-        </View>
-      </Card>
+      {sub === "ai" && (
+        <>
+          {/* AI Copilot toggle (Ask Ananta) */}
+          <Card style={{ marginBottom: spacing.md }} testID="ws-copilot">
+            <View style={styles.rowBetween}>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
+                <SectionLabel>ASK ANANTA (AI COPILOT)</SectionLabel>
+                <Text style={type.small}>Embedded AI assistant that answers questions and can execute actions with confirmation. Off until launch.</Text>
+              </View>
+              <Switch testID="ask-ananta-toggle" value={!!settings?.ask_ananta_enabled} disabled={!isOwner}
+                onValueChange={async (v) => { if (!isOwner) return Alert.alert("Owner login required"); try { const s = await api.updateSettings({ ask_ananta_enabled: v }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); } }}
+                trackColor={{ true: colors.tealDim, false: colors.cardBorder }} thumbColor={settings?.ask_ananta_enabled ? colors.teal : colors.textFaint} />
+            </View>
+          </Card>
+          <Card testID="ws-ai-coach-link">
+            <SectionLabel>AI TRADE COACH</SectionLabel>
+            <Text style={[type.small, { marginBottom: spacing.sm }]}>Structured logic setups, coaching logs and weekly reviews live in the Research and Trade tabs.</Text>
+            <Pressable testID="ws-open-coach" onPress={() => router.push("/(tabs)/research")} style={[styles.btn, styles.btnGhost]}>
+              <Ionicons name="sparkles" size={14} color={colors.teal} /><Text style={styles.btnGhostTxt}>  OPEN AI ANALYSIS</Text>
+            </Pressable>
+          </Card>
+        </>
+      )}
 
-      {/* Competition Demo */}
-      <Card style={{ marginBottom: spacing.md, borderColor: colors.tealDim }} testID="ws-demo">
-        <View style={styles.rowBetween}>
-          <SectionLabel>COMPETITION DEMO</SectionLabel>
-          <Pill label={demo?.loaded ? `Loaded · ${demo.demo_trades}` : "Not loaded"} tone={demo?.loaded ? "teal" : "muted"} />
-        </View>
-        <Text style={[type.small, { marginVertical: spacing.sm }]}>One tap preloads a curated workspace across the 3 real strategies. Overwrites preview data.</Text>
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <Pressable testID="ws-demo-load" onPress={() => runDemo("load")} disabled={!!busy || !isOwner} style={[styles.btn, styles.btnPrimary, (!isOwner) && { opacity: 0.4 }]}>
-            {busy === "load" ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.btnPrimaryTxt}>LOAD DEMO</Text>}
-          </Pressable>
-          <Pressable testID="ws-demo-reset" onPress={() => runDemo("reset")} disabled={!!busy || !isOwner} style={[styles.btn, styles.btnGhost, (!isOwner) && { opacity: 0.4 }]}>
-            <Text style={styles.btnGhostTxt}>RESET</Text>
-          </Pressable>
-        </View>
-      </Card>
+      {sub === "engine" && (
+        <>
+          {/* Engine & Risk + Stop Ananta */}
+          <Card style={{ marginBottom: spacing.md }} testID="ws-settings">
+            <View style={styles.rowBetween}>
+              <SectionLabel>ENGINE & RISK</SectionLabel>
+              <Pressable testID="ws-stop-ananta" onPress={toggleKill} style={[styles.stopBtn, settings?.manual_kill_switch && styles.stopBtnOn]}>
+                <Ionicons name="power" size={13} color={colors.red} />
+                <Text style={styles.stopTxt}>{settings?.manual_kill_switch ? "RELEASE" : "STOP ANANTA"}</Text>
+              </Pressable>
+            </View>
+            {settings ? (
+              <View style={{ marginTop: spacing.sm }}>
+                <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={saveSetting} />
+                <NumRow label="Daily Loss Cap %" k="max_daily_loss_pct" value={settings.max_daily_loss_pct} isOwner={isOwner} onSave={saveSetting} />
+                <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={saveSetting} />
+              </View>
+            ) : <ActivityIndicator color={colors.teal} />}
+          </Card>
 
-      {/* Academy */}
-      <Card style={{ marginBottom: spacing.md }} testID="ws-academy">
-        <SectionLabel>ACADEMY</SectionLabel>
-        {LESSONS.map((l, i) => (
-          <Pressable key={l.key} testID={`academy-lesson-${i}`} onPress={() => setLesson(l)} style={styles.lessonRow}>
-            <Ionicons name="book" size={16} color={colors.teal} />
-            <Text style={[type.body, { flex: 1 }]}>{l.title}</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-          </Pressable>
-        ))}
-      </Card>
+          <Card style={{ marginBottom: spacing.md }}>
+            <SectionLabel>SYSTEM</SectionLabel>
+            <Row label="Trading Mode" value={(env?.mode || "—").toUpperCase()} />
+            <Row label="Live Gate" value={env?.ready_to_trade ? "Armed" : "Closed"} />
+          </Card>
 
-      {/* Guided tour + System health */}
-      <Card style={{ marginBottom: spacing.md }}>
-        <SectionLabel>SYSTEM</SectionLabel>
-        <Row label="Trading Mode" value={(env?.mode || "—").toUpperCase()} />
-        <Row label="Live Gate" value={env?.ready_to_trade ? "Armed" : "Closed"} />
-        <Pressable testID="ws-tour-replay" onPress={replayTour} style={[styles.btn, styles.btnGhost, { marginTop: spacing.sm }]}>
-          <Ionicons name="play" size={14} color={colors.teal} /><Text style={styles.btnGhostTxt}>  REPLAY GUIDED TOUR</Text>
-        </Pressable>
-      </Card>
+          {/* Competition Demo */}
+          <Card style={{ borderColor: colors.tealDim }} testID="ws-demo">
+            <View style={styles.rowBetween}>
+              <SectionLabel>COMPETITION DEMO</SectionLabel>
+              <Pill label={demo?.loaded ? `Loaded · ${demo.demo_trades}` : "Not loaded"} tone={demo?.loaded ? "teal" : "muted"} />
+            </View>
+            <Text style={[type.small, { marginVertical: spacing.sm }]}>One tap preloads a curated workspace across the 3 real strategies. Overwrites preview data.</Text>
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              <Pressable testID="ws-demo-load" onPress={() => runDemo("load")} disabled={!!busy || !isOwner} style={[styles.btn, styles.btnPrimary, (!isOwner) && { opacity: 0.4 }]}>
+                {busy === "load" ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.btnPrimaryTxt}>LOAD DEMO</Text>}
+              </Pressable>
+              <Pressable testID="ws-demo-reset" onPress={() => runDemo("reset")} disabled={!!busy || !isOwner} style={[styles.btn, styles.btnGhost, (!isOwner) && { opacity: 0.4 }]}>
+                <Text style={styles.btnGhostTxt}>RESET</Text>
+              </Pressable>
+            </View>
+          </Card>
+        </>
+      )}
 
-      {/* About + logout */}
-      <Card testID="ws-about">
-        <SectionLabel>ABOUT</SectionLabel>
-        <Text style={type.small}>Ananta.AI — an AI-native operating system for algorithmic trading. Spot-only, capital-preservation first.</Text>
-        {isOwner && (
-          <Pressable testID="ws-logout-btn" onPress={() => { logout(); Alert.alert("Signed out"); }} style={[styles.btn, styles.btnGhost, { marginTop: spacing.md }]}>
-            <Ionicons name="log-out-outline" size={16} color={colors.textMuted} /><Text style={styles.btnGhostTxt}>  LOG OUT</Text>
-          </Pressable>
-        )}
-      </Card>
+      {sub === "learn" && (
+        <>
+          {/* Academy */}
+          <Card style={{ marginBottom: spacing.md }} testID="ws-academy">
+            <SectionLabel>ACADEMY</SectionLabel>
+            {LESSONS.map((l, i) => (
+              <Pressable key={l.key} testID={`academy-lesson-${i}`} onPress={() => setLesson(l)} style={styles.lessonRow}>
+                <Ionicons name="book" size={16} color={colors.teal} />
+                <Text style={[type.body, { flex: 1 }]}>{l.title}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+              </Pressable>
+            ))}
+          </Card>
+
+          <Card style={{ marginBottom: spacing.md }}>
+            <SectionLabel>GUIDES & DEMOS</SectionLabel>
+            <Pressable testID="ws-tour-replay" onPress={replayTour} style={[styles.btn, styles.btnGhost, { marginTop: spacing.sm }]}>
+              <Ionicons name="play" size={14} color={colors.teal} /><Text style={styles.btnGhostTxt}>  REPLAY GUIDED TOUR</Text>
+            </Pressable>
+          </Card>
+
+          {/* About + logout */}
+          <Card testID="ws-about">
+            <SectionLabel>ABOUT</SectionLabel>
+            <Text style={type.small}>Ananta.AI — an AI-native operating system for algorithmic trading. Spot-only, capital-preservation first.</Text>
+            {isOwner && (
+              <Pressable testID="ws-logout-btn" onPress={() => { logout(); Alert.alert("Signed out"); }} style={[styles.btn, styles.btnGhost, { marginTop: spacing.md }]}>
+                <Ionicons name="log-out-outline" size={16} color={colors.textMuted} /><Text style={styles.btnGhostTxt}>  LOG OUT</Text>
+              </Pressable>
+            )}
+          </Card>
+        </>
+      )}
 
       <Modal visible={!!lesson} transparent animationType="slide" onRequestClose={() => setLesson(null)}>
         <View style={styles.modalWrap}>
@@ -171,6 +212,9 @@ const styles = StyleSheet.create({
   btnGhost: { borderWidth: 1, borderColor: colors.cardBorder },
   btnGhostTxt: { color: colors.textMuted, fontWeight: "700", letterSpacing: 0.6, fontSize: 12 },
   lessonRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+  stopBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: colors.redDim, borderRadius: radius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
+  stopBtnOn: { backgroundColor: colors.redGlow, borderColor: colors.red },
+  stopTxt: { color: colors.red, fontWeight: "800", letterSpacing: 0.6, fontSize: 11 },
   modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   modalCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: 40, borderWidth: 1, borderColor: colors.cardBorder },
 });

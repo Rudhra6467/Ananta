@@ -86,12 +86,18 @@ export default function Research() {
 
 function Validate({ isOwner }: { isOwner: boolean }) {
   const [strategies, setStrategies] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<Record<string, any>>({});
   const [strat, setStrat] = useState("hunter");
   const [period, setPeriod] = useState("1m");
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<any>(null);
 
-  useEffect(() => { api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {}); }, []);
+  useEffect(() => {
+    api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
+    api.strategyMetrics().then((d: any) => setMetrics(d?.metrics || {})).catch(() => {});
+  }, []);
+  const selMetric = metrics[strat];
+  const selOn = !!selMetric?.enabled && selMetric?.status !== "DISABLED" && selMetric?.status !== "ERROR";
 
   const run = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
@@ -118,6 +124,10 @@ function Validate({ isOwner }: { isOwner: boolean }) {
       <Card style={{ marginBottom: spacing.md }} testID="research-wizard">
         <SectionLabel>1 · STRATEGY</SectionLabel>
         <Segmented testIDPrefix="wiz-strat" options={strategies.map((s) => ({ key: s.key, label: s.name.split(" ")[0] }))} value={strat} onChange={setStrat} />
+        <View style={styles.statusLine} testID="research-strat-status">
+          <View style={[styles.statusDot, { backgroundColor: selOn ? colors.teal : colors.textFaint }]} />
+          <Text style={type.small}>Bot Status: <Text style={{ color: selOn ? colors.teal : colors.textMuted, fontWeight: "700" }}>{selOn ? "ON · live on engine" : "OFF"}</Text></Text>
+        </View>
         <SectionLabel style={{ marginTop: spacing.md }}>2 · PERIOD (dataset: BTC)</SectionLabel>
         <Segmented testIDPrefix="wiz-period" options={PERIODS} value={period} onChange={setPeriod} />
         <Pressable testID="wizard-run" onPress={run} disabled={phase === "running"} style={styles.runBtn}>
@@ -306,6 +316,9 @@ const styles = StyleSheet.create({
   indicator: { backgroundColor: colors.teal, height: 2.5, borderRadius: 2 },
   tabLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.2, textTransform: "none" },
   runBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.md },
+  statusLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+
   runTxt: { color: colors.bg, fontWeight: "800", letterSpacing: 0.6, fontSize: 12 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, marginTop: spacing.sm },
   recBox: { backgroundColor: colors.tealGlow, borderRadius: radius.md, borderWidth: 1, borderColor: colors.tealDim, padding: spacing.md, marginTop: spacing.sm },

@@ -109,7 +109,7 @@ export default function SettingsPage() {
                     <button
                         data-testid="emergency-kill-btn"
                         onClick={() => isOwner ? toggleKill(!killed) : toast.error("Owner login required")}
-                        title={isOwner ? "Emergency stop — blocks all new trades" : "Owner login required"}
+                        title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
                         className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
                             killed
                                 ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
@@ -117,7 +117,7 @@ export default function SettingsPage() {
                         } disabled:opacity-50`}
                     >
                         <Power className="w-4 h-4" strokeWidth={2.5} />
-                        {killed ? "KILL ENGAGED · RELEASE" : "EMERGENCY STOP"}
+                        {killed ? "ANANTA STOPPED · RELEASE" : "STOP ANANTA"}
                     </button>
                 </div>
 
