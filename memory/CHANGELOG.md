@@ -871,3 +871,8 @@ Turned the Strategy Center into an "App Store for trading strategies" (catalog-f
 - **Mobile** parity (`app/(tabs)/strategy.tsx`, `app/library/[id].tsx`, `app/(tabs)/index.tsx`): chips + filter modal + leaderboard sort chips + catalog detail + Active Watchlist add modal.
 - Testing agent iter 34: backend 34/34 pytest pass; web 100% (agent fixed a CatalogDetail `useEffect(load,[id])` → `useEffect(()=>{load();},[id])` Promise-cleanup crash); mobile 100% functional. Addressed nits: mobile `catalog-detail`/`add-asset-modal` testIDs, add-asset-option naming aligned to web, and `chip=top_internal` now filters to internal-only.
 - NOT in this iteration: Phase 2 (mobile interactive YouTube-style paging, Parts 7-10) + Pine/Freqtrade converters (backlog).
+
+## 2026-07-12 — Research persistence + Strategy chip cleanup (web)
+- **Research Wizard persistence** (`components/lab/ResearchWizard.jsx` + new `lib/researchStore.js`): moved wizard state + polling loop into a Zustand store so an in-flight validation run (step/progress/result/mc) survives tab navigation / unmount. Added "New Run" (`wizard-new-run`) button in the running view. Setters handle both raw values and function-updater callbacks.
+- **Strategy Center** (`pages/StrategyCenter.jsx`): removed the filter chips row (Top Rated / Top Internal / Healthiest / Trending) and the main "Filter" button per user request. Search-screen filter drawer retained. Cleaned up `chip` state + `CHIPS` const + unused `Flame` import.
+- Testing agent iter 50 caught a setter regression (function-updater not handled) → fixed; iter 51 all green (web-only). NOTE: persistence is in-memory only; a hard page reload still resets the run (sessionStorage persistence is optional backlog).
