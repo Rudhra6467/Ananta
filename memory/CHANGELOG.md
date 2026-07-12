@@ -1,3 +1,20 @@
+## 2026-07-12b — Header-action consolidation + PDF download fix (web, iter49 GREEN)
+
+- **Per-tab actions moved into the shared scroll-through TOP header** (frees a full row):
+  Research "Start Research", Workspace "Stop Ananta", Strategy "Search" + "+ Add" now render in
+  `#header-action-slot` (AppShell context row) via a new `components/HeaderActionPortal.jsx`.
+  Removed the separate secondary header rows (research-header / workspace-header / strategy title card).
+- **FIX — "Owner authentication required" on PDF download:** lab-run PDFs require a Bearer token that
+  `window.open` can't send. Added `downloadPdf()` (in `lib/pdfRegistry.js`) — authenticated `fetch`
+  → streamed blob → triggers a download; Workspace "Ananta PDFs" now uses it.
+- **Download progress %:** each Ananta PDF row shows a live progress bar ("Preparing…" → % → Done)
+  driven by the streamed Content-Length.
+- **Removed the duplicate Stop Ananta** (Settings/Engine&Risk `emergency-kill-btn` deleted; the header
+  control is now the single global one).
+- **QuadrantCard CTA moved to the title row** ("Open Engine" / "Open Risk Monitor" now sit next to the
+  card title instead of a full-width bottom bar).
+
+
 ## 2026-07-12 — 5-Tab UI Sprint + Production P0 (validation/PDF) — web
 
 ### P0 (production blockers) — fixed & verified (backend 5/5 pytest, iter48)
