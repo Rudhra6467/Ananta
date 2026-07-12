@@ -38,25 +38,6 @@ export default function Dashboard() {
         return () => window.removeEventListener("ananta:wizard", onWizard);
     }, []);
 
-    // One-time-per-session Ananta status toast (4s) with a link to Active Strategies.
-    // Stamp the "seen" flag only once the toast actually fires (inside the timeout),
-    // so React.StrictMode's double-mount can't consume the flag before it shows.
-    useEffect(() => {
-        if (sessionStorage.getItem("ananta_status_toast_seen")) return;
-        const t = setTimeout(() => {
-            if (sessionStorage.getItem("ananta_status_toast_seen")) return;
-            sessionStorage.setItem("ananta_status_toast_seen", "1");
-            toast("Ananta Status: 4 paper trading strategies are currently live and monitoring the markets.", {
-                duration: 4000,
-                action: {
-                    label: "View Active Strategies",
-                    onClick: () => window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "strategies" } })),
-                },
-            });
-        }, 600);
-        return () => clearTimeout(t);
-    }, []);
-
     useEffect(() => {
         if (!selected && enabledSymbols.length) setSelected(enabledSymbols[0]);
     }, [selected, enabledSymbols]);
