@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the two frontend changes on web only. Strategy Center filter chip removal is fully verified (no chip-top_rated/top_internal/healthiest/trending/filter-button in main library view; search/add/leaderboard/grid still work; Search screen's own Filter button still opens filter drawer). Zustand-backed state persistence across tab switches WORKS at step 0 (selected strategies survive Research -> Strategy -> Research navigation). HOWEVER a CRITICAL regression was introduced by the store refactor: the store setters setStep / setShowAllStrat / setRunMC do NOT support functional updaters, but ResearchWizard.jsx calls them as if they do (e.g. setStep((s) => s + 1), setStep((s) => Math.max(0, s - 1)), setShowAllStrat((v) => !v), setRunMC((v) => !v)). Clicking NEXT stores a function reference in state.step, so every step === N branch is false and the wizard body renders EMPTY while step < 4 becomes falsey and the RUN VALIDATION button appears prematurely. Users cannot advance past step 0, cannot go BACK, cannot toggle Monte Carlo, cannot Load more strategies, and cannot start a real run — which means the wizard-new-run reset button (only mounted during phase === 'running') and the results/running state-persistence claim cannot be end-to-end validated in the UI.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "ResearchWizard NEXT / BACK / Load-more / Monte-Carlo toggle", "issue": "Zustand store setters setStep/setShowAllStrat/setRunMC are non-functional ((v)=>set({v})). JSX calls them with updater functions. After clicking wizard-next the step becomes a function object -> step===0..4 all false -> wizard body renders empty and RUN VALIDATION button appears (step<4 is NaN/false). Wizard is unusable past step 0.", "selector": "[data-testid='wizard-next'] / [data-testid='wizard-back'] / [data-testid='wizard-strat-load-more'] / [data-testid='wizard-toggle-mc']", "priority": "CRITICAL"}
+      ],
+      "integration_issues": [
+        {"flow": "Research validation run -> tab switch persistence", "issue": "Because the wizard cannot advance past step 0 due to the functional-setter bug, we could not start a real run to E2E-verify that phase='running' + progress + results survive tab switches, nor that wizard-new-run resets. The store code path itself looks correct (phase/progress/result live in the store) but the UI cannot reach that state.", "affected_selectors": ["[data-testid='wizard-run']", "[data-testid='wizard-running']", "[data-testid='wizard-new-run']", "[data-testid='wizard-results']"]}
+      ],
+      "design_issues": []
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "Fix /app/frontend/src/lib/researchStore.js to make setters support functional updaters, e.g. setStep: (v) => set((st) => ({ step: typeof v === 'function' ? v(st.step) : v })). Do the same for setShowAllStrat and setRunMC. Alternatively, change ResearchWizard.jsx callsites to compute the new value inline (setStep(Math.max(0, step - 1)), setStep(step + 1), setShowAllStrat(!showAllStrat), setRunMC(!runMC)) — but the store-side fix is safer for future callers.",
+    "After the fix, re-run: (a) click NEXT/BACK across all 6 steps; (b) start a run, switch to Strategy tab, come back and confirm the running progress bar / wizard-running / wizard-results and eventually wizard-new-run are preserved; (c) confirm the wizard-new-run button resets phase to idle and step to 0.",
+    "Consider persisting the Zustand store to sessionStorage so that a full page reload also preserves in-flight run state (currently it's in-memory only, so hard refresh loses it)."
+  ],
+  "critical_code_review_comments": [
+    "researchStore.js setters treat updater functions as raw values — mismatch with useState-style callsites in ResearchWizard.jsx. This is the root cause of the wizard being unusable past step 0.",
+    "The run() polling loop in researchStore.js correctly aborts when phase !== 'running' (checked twice), so reset() during a run is race-safe — good.",
+    "ResearchWizard useEffect(() => { init(); }, [init]) is fine because init is a stable zustand action reference. The init() guard (if (get().loaded) return) correctly prevents refetching after tab switch — good.",
+    "StrategyCenter filter chip removal is clean; the FilterDrawer is still exclusively opened from the Search screen (strategy-search-filters), and library GET params are still driven by the filters state — good."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "50% (Strategy Center change fully passes; Research wizard change has a critical regression)"},
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two changes under test in iteration 50 (frontend web only). Strategy Center chip removal verified good. Zustand persistence at step 0 verified good. BLOCKED on a functional-setter bug in researchStore.js (setStep/setShowAllStrat/setRunMC) that makes the wizard unusable after clicking NEXT. Once the main agent fixes the setters (or the callsites), retest: (1) full wizard forward+back navigation, (2) start a run, tab-switch, verify wizard-running/progress persists, (3) verify wizard-new-run resets to step 0, (4) verify wizard-results persists across tab switch if a run completes. Also worth testing a page-reload persistence scenario (currently store is in-memory only).",
+  "rca of the issue": "Root cause: in /app/frontend/src/lib/researchStore.js the setters are defined as plain value setters: setStep: (step) => set({ step }), setShowAllStrat: (v) => set({ showAllStrat: v }), setRunMC: (v) => set({ runMC: v }). But /app/frontend/src/components/lab/ResearchWizard.jsx invokes them with updater callbacks (line 174 setStep((s) => Math.max(0, s - 1)), line 179 setStep((s) => s + 1), line 82 setShowAllStrat((v) => !v), line 134 setRunMC((v) => !v)). Zustand's set with a partial object stores whatever value is passed — including a function — so state.step (and showAllStrat/runMC) become function references, breaking every downstream comparison (step === N, step < 4, !!showAllStrat, !!runMC). Reproduction: navigate to Research tab, click wizard-next once; the wizard body becomes empty and the RUN VALIDATION button appears. Mitigation: either (a) make the setters detect functions and call them — setStep: (v) => set((st) => ({ step: typeof v === 'function' ? v(st.step) : v })) — or (b) change the JSX to pass raw values based on the current destructured state (e.g. onClick={() => setStep(step + 1)})."
+}

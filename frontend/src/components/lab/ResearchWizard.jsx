@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
     TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Clock,
 } from "lucide-react";
-import { toast } from "sonner";
-import api, { API } from "@/lib/api";
-import { registerPdf } from "@/lib/pdfRegistry";
+import { useResearchStore } from "@/lib/researchStore";
 
 const PERIODS = [{ k: "1m", l: "1 Month" }, { k: "3m", l: "3 Months" }, { k: "6m", l: "6 Months" }, { k: "1y", l: "1 Year" }];
 const TIMEFRAMES = [{ k: "1h", l: "1 Hour" }, { k: "30m", l: "30 Min" }, { k: "15m", l: "15 Min" }];
@@ -17,63 +15,16 @@ const STEPS = [
 
 /** Guided, visual backtest+validation flow — Strategy → Dataset → Period → Validation → Run → Results. */
 export default function ResearchWizard() {
-    const [step, setStep] = useState(0);
-    const [strategies, setStrategies] = useState([]);
-    const [assets, setAssets] = useState([]);
-    const [strat, setStrat] = useState([]);
-    const [showAllStrat, setShowAllStrat] = useState(false);
-    const [picked, setPicked] = useState([]);
-    const [period, setPeriod] = useState("1m");
-    const [timeframe, setTimeframe] = useState("1h");
-    const [runMC, setRunMC] = useState(true);
-    const [phase, setPhase] = useState("idle"); // idle | running | done | error
-    const [progress, setProgress] = useState(0);
-    const [result, setResult] = useState(null);
-    const [mc, setMc] = useState(null);
-    const [metrics, setMetrics] = useState({});
+    const {
+        step, strategies, assets, strat, showAllStrat, picked, period, timeframe, runMC,
+        phase, progress, result, mc, metrics,
+        init, setStep, setShowAllStrat, setPeriod, setTimeframe, setRunMC,
+        toggleAsset, toggleStrat, run, reset,
+    } = useResearchStore();
 
-    useEffect(() => {
-        api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat([l[0].key]); }).catch(() => {});
-        api.strategyMetrics().then((d) => setMetrics(d?.metrics || {})).catch(() => {});
-        api.labCoverage().then((c) => {
-            const avail = (c.symbols || []).filter((s) => s.bars_1h > 0).map((s) => s.symbol);
-            setAssets(avail);
-            // Fast demo default: just BTC (single asset finishes in seconds), judges can add more.
-            const btc = avail.find((a) => a.startsWith("BTC"));
-            setPicked(btc ? [btc] : avail.slice(0, 1));
-        }).catch(() => {});
-    }, []);
+    useEffect(() => { init(); }, [init]);
 
-    const toggleAsset = (s) => setPicked((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
-    const toggleStrat = (k) => setStrat((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
     const canNext = (step === 0 && strat.length) || (step === 1 && picked.length) || step === 2 || step === 3 || step === 4;
-
-    const run = async () => {
-        setPhase("running"); setProgress(5); setResult(null); setMc(null); setStep(5);
-        try {
-            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe, strategies: strat, exit_method: "fixed" });
-            let done = false;
-            for (let i = 0; i < 60 && !done; i++) {
-                await new Promise((r) => setTimeout(r, 1500));
-                const d = await api.labRun(id);
-                setProgress(Math.max(10, Math.min(95, d.progress_pct || 0)));
-                if (d.status === "DONE") { setResult(d.result); done = true; }
-                else if (d.status === "ERROR") { throw new Error(d.error || "run failed"); }
-            }
-            if (!done) throw new Error("timed out");
-            if (runMC) {
-                try { const m = await api.labMonteCarlo({ source: "run", run_id: id, iterations: 1500, ruin_threshold_pct: 25 }); if (m?.ok) setMc(m); } catch { /* noop */ }
-            }
-            setProgress(100); setPhase("done");
-            registerPdf({ title: `Research · ${strat.join(" + ")} · ${timeframe}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
-            toast.success("Research PDF ready", { description: "Check Workspace › AI Analytics · Ananta PDFs" });
-        } catch (e) {
-            setPhase("error");
-            toast.error("Backtest failed", { description: String(e?.response?.data?.detail || e?.message) });
-        }
-    };
-
-    const reset = () => { setPhase("idle"); setStep(0); setResult(null); setMc(null); setProgress(0); };
 
     return (
         <div className="panel border-atlas-border rounded-2xl p-5" data-testid="research-wizard">
@@ -201,6 +152,10 @@ export default function ResearchWizard() {
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
                     <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframe}</div>
+                    <button data-testid="wizard-new-run" onClick={reset}
+                        className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                        <RotateCcw className="w-3.5 h-3.5" /> NEW RUN
+                    </button>
                 </div>
             )}
 

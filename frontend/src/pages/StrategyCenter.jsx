@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil, Flame, SlidersHorizontal, Heart, X, Upload,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -76,12 +76,6 @@ export default function StrategyCenter() {
     );
 }
 
-const CHIPS = [
-    { id: "top_rated", label: "Top Rated", Icon: Star },
-    { id: "top_internal", label: "Top Internal", Icon: Brain },
-    { id: "healthiest", label: "Healthiest", Icon: HeartPulse },
-    { id: "trending", label: "Trending", Icon: Flame },
-];
 const FILTER_FIELDS = [
     { key: "market_regime", label: "Market Regime" },
     { key: "market_type", label: "Market Type" },
@@ -97,7 +91,6 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [lib, setLib] = useState(null);
     const [facets, setFacets] = useState({});
     const [query, setQuery] = useState("");
-    const [chip, setChip] = useState(null);
     const [filters, setFilters] = useState({});   // {field: [values]}
     const [favOnly, setFavOnly] = useState(false);
     const [showFilter, setShowFilter] = useState(false);
@@ -108,14 +101,13 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
 
     const load = () => {
         const params = {};
-        if (chip) params.chip = chip;
         if (query.trim()) params.q = query.trim();
         if (favOnly) params.favorite = true;
         Object.entries(filters).forEach(([k, v]) => { if (v.length) params[k] = v.join(","); });
         api.libraryList(params).then((d) => setLib(d.strategies)).catch(() => setLib([]));
     };
     useEffect(() => { api.libraryFacets().then(setFacets).catch(() => {}); }, []);
-    useEffect(load, [chip, filters, favOnly, query]);
+    useEffect(load, [filters, favOnly, query]);
 
     const toggleFilter = (field, val) => setFilters((f) => {
         const cur = f[field] || [];
@@ -151,22 +143,6 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     )}
                 </div>
             </HeaderActionPortal>
-
-            <div className="flex items-center gap-2 flex-wrap">
-                {CHIPS.map(({ id, label, Icon }) => (
-                    <button key={id} data-testid={`chip-${id}`} onClick={() => setChip(chip === id ? null : id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
-                            chip === id ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"}`}>
-                        <Icon className="w-3 h-3" /> {label}
-                    </button>
-                ))}
-                <span className="w-px h-5 bg-atlas-border mx-1" />
-                <button data-testid="filter-button" onClick={() => setShowFilter(true)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
-                        activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
-                    <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
-                </button>
-            </div>
 
             <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
 
