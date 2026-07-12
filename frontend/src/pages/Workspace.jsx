@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
     SlidersHorizontal, GraduationCap, Trophy, Activity, Info, LogOut, CheckCircle2, XCircle, ChevronRight,
-    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles, ArrowUp, Power, FileText, Trash2, ExternalLink,
+    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles, ArrowUp, Power, FileText, Trash2, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import api, { API } from "@/lib/api";
@@ -10,7 +10,8 @@ import { useAppData } from "@/context/AppDataContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SettingsPage from "@/pages/Settings";
 import { AcademyModal } from "@/components/Academy";
-import { listPdfs, removePdf, PDFS_EVENT } from "@/lib/pdfRegistry";
+import HeaderActionPortal from "@/components/HeaderActionPortal";
+import { listPdfs, removePdf, downloadPdf, PDFS_EVENT } from "@/lib/pdfRegistry";
 
 export default function Workspace() {
     const { isOwner, owner, logout } = useAuth();
@@ -44,20 +45,16 @@ export default function Workspace() {
 
     return (
         <div className="space-y-5 pb-24" data-testid="workspace-page">
-            {/* persistent header — Stop Ananta pinned top-right across all sub-tabs */}
-            <div className="flex items-center justify-between gap-3" data-testid="workspace-header">
-                <div>
-                    <div className="font-heading font-medium text-lg text-atlas-text leading-tight">Workspace</div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Analytics · engine · learning</div>
-                </div>
+            {/* Stop Ananta lives in the scroll-through top header (single, global control) */}
+            <HeaderActionPortal>
                 <button data-testid="workspace-stop-ananta" onClick={toggleKill}
                     title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
-                    className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
+                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 font-mono text-[10px] font-bold tracking-widest transition-all ${
                         killed ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
                             : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"}`}>
-                    <Power className="w-4 h-4" strokeWidth={2.5} />{killed ? "STOPPED · RESUME" : "STOP ANANTA"}
+                    <Power className="w-3.5 h-3.5" strokeWidth={2.5} />{killed ? "Resume" : "Stop Ananta"}
                 </button>
-            </div>
+            </HeaderActionPortal>
 
             <Tabs defaultValue="ai" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
@@ -219,6 +216,7 @@ function ClosedTradesHistory({ trades }) {
 
 function AnantaPdfs({ isOwner }) {
     const [pdfs, setPdfs] = useState(listPdfs());
+    const [prog, setProg] = useState({}); // id -> pct | 'prep' | 'err' | 100
     useEffect(() => {
         const h = () => setPdfs(listPdfs());
         window.addEventListener(PDFS_EVENT, h);
@@ -229,6 +227,19 @@ function AnantaPdfs({ isOwner }) {
         window.dispatchEvent(new CustomEvent("ananta:ask", { detail: { text: `Analyse my "${p.title}" report and give me the key takeaways, risks and one improvement.` } }));
         toast.success("Ask Ananta is reviewing your report");
     };
+    const download = async (p) => {
+        setProg((s) => ({ ...s, [p.id]: "prep" }));
+        try {
+            await downloadPdf(p.url, `${p.title.replace(/[^\w.-]+/g, "_")}.pdf`, (pct) => setProg((s) => ({ ...s, [p.id]: pct == null ? "prep" : pct })));
+            setProg((s) => ({ ...s, [p.id]: 100 }));
+            toast.success("Download complete");
+            setTimeout(() => setProg((s) => { const n = { ...s }; delete n[p.id]; return n; }), 2500);
+        } catch (e) {
+            setProg((s) => ({ ...s, [p.id]: "err" }));
+            toast.error(String(e?.message || e));
+        }
+    };
+    const label = (v) => (v === "prep" ? "Preparing…" : v === "err" ? "Retry" : v === 100 ? "Done" : `${v}%`);
     return (
         <div className="panel border-atlas-border rounded-xl p-5" data-testid="ws-ananta-pdfs">
             {pdfs.length === 0 ? (
@@ -237,21 +248,37 @@ function AnantaPdfs({ isOwner }) {
                 </div>
             ) : (
                 <div className="rounded-lg border border-atlas-border divide-y divide-atlas-border max-h-72 overflow-y-auto atlas-scroll">
-                    {pdfs.map((p) => (
-                        <div key={p.id} className="px-3 py-2.5 flex items-center gap-3" data-testid="ws-pdf-row">
-                            <FileText className="w-4 h-4 text-atlas-cyan shrink-0" />
-                            <div className="min-w-0 flex-1">
-                                <div className="font-mono text-[12px] text-atlas-text truncate">{p.title}</div>
-                                <div className="font-mono text-[9px] text-atlas-textTertiary">{new Date(p.ts).toLocaleString()}</div>
+                    {pdfs.map((p) => {
+                        const st = prog[p.id];
+                        const busy = st !== undefined && st !== "err";
+                        const pct = typeof st === "number" ? st : null;
+                        return (
+                            <div key={p.id} className="px-3 py-2.5 flex items-center gap-3" data-testid="ws-pdf-row">
+                                <FileText className="w-4 h-4 text-atlas-cyan shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-mono text-[12px] text-atlas-text truncate">{p.title}</div>
+                                    {st !== undefined ? (
+                                        <div className="mt-1 flex items-center gap-2" data-testid="ws-pdf-progress">
+                                            <div className="h-1 flex-1 rounded-full bg-atlas-border overflow-hidden">
+                                                <div className={`h-full ${st === "err" ? "bg-atlas-negative" : "bg-atlas-cyan"} transition-all`} style={{ width: pct != null ? `${pct}%` : "35%" }} />
+                                            </div>
+                                            <span className={`font-mono text-[9px] ${st === "err" ? "text-atlas-negative" : "text-atlas-cyan"}`}>{label(st)}</span>
+                                        </div>
+                                    ) : (
+                                        <div className="font-mono text-[9px] text-atlas-textTertiary">{new Date(p.ts).toLocaleString()}</div>
+                                    )}
+                                </div>
+                                <button data-testid="ws-pdf-open" onClick={() => download(p)} disabled={busy} title="Download"
+                                    className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors disabled:opacity-40">
+                                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                </button>
+                                <button data-testid="ws-pdf-analyse" onClick={() => analyse(p)} title="Ask Ananta to analyse"
+                                    className="p-1.5 rounded-lg border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10 transition-colors"><Sparkles className="w-3.5 h-3.5" /></button>
+                                <button data-testid="ws-pdf-delete" onClick={() => { removePdf(p.id); toast.success("Removed from Ananta PDFs"); }} title="Delete"
+                                    className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-negative hover:border-atlas-negative/40 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
-                            <button data-testid="ws-pdf-open" onClick={() => window.open(p.url, "_blank")} title="Open / download"
-                                className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors"><ExternalLink className="w-3.5 h-3.5" /></button>
-                            <button data-testid="ws-pdf-analyse" onClick={() => analyse(p)} title="Ask Ananta to analyse"
-                                className="p-1.5 rounded-lg border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10 transition-colors"><Sparkles className="w-3.5 h-3.5" /></button>
-                            <button data-testid="ws-pdf-delete" onClick={() => { removePdf(p.id); toast.success("Removed from Ananta PDFs"); }} title="Delete"
-                                className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-negative hover:border-atlas-negative/40 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>

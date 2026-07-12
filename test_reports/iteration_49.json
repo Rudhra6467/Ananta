@@ -1,0 +1,34 @@
+{
+  "summary": "iter49 — All 5 follow-up refinements from iter48 are VERIFIED GREEN on web preview. (1) Header-slot portal: on Research the primary action 'research-start' renders inside #header-action-slot (top context row); on Strategy Center both 'strategy-search-btn' and 'strategy-add-btn' render in that same slot; on Workspace 'workspace-stop-ananta' renders in the slot — and the OLD secondary rows (data-testid=research-header / workspace-header / strategy-center-header) are all gone. (2) The header actions still open their flows: Start Research opens the wizard, Strategy Search opens strategy-search-screen, Strategy '+ Add' opens the add-menu (Import/Manual/AI options). (3) CRITICAL FIX verified — pre-seeded localStorage['ananta_pdfs'] with an OWNER-PROTECTED lab-run entry (/api/lab/runs/demo-bt-run/pdf) + ananta_owner_token + sessionStorage tour_seen; clicking ws-pdf-open triggers an authenticated fetch (Authorization: Bearer …) — network shows 200 status and the 'Download complete' toast fires. NO 'Owner authentication required' text appears. Direct curl confirms /api/lab/runs/demo-bt-run/pdf is 403 without token and 200 (4200 byte %PDF-1…) with token. Note: on the small (~4 KB) lab PDF the download finishes so fast the ws-pdf-progress bar disappears before Playwright can snapshot it — for larger PDFs the progress element IS present in the DOM (Workspace.jsx L260-266 renders it whenever prog[id]!==undefined). Also verified: Trade tab trade-download-pdf registers a 'Trade Report' entry, which appears as a ws-pdf-row and downloads cleanly with the same auth-progress path. (4) No duplicate Stop Ananta: page-wide query returns exactly ONE [data-testid=workspace-stop-ananta] and ZERO [data-testid=emergency-kill-btn] across the whole app (including inside Workspace › Engine & Risk which used to host the emergency kill). Toggling Stop Ananta from the header still hits /api/settings with manual_kill_switch. (5) QuadrantCard CTA moved to title row: DOM inspection confirms the 'Open Engine' and 'Open Risk Monitor' chips are direct children of the card's header flex-row (inHeaderRow=true) — same flex row as the title 'Entry & Exit Engine' / 'Risk Monitor'. Clicking the card still opens the respective modal (role=dialog). No new bugs. The design smell from iter48 (floating 'Ask Ananta' pill overlaps bottom-nav edge at 1440w) remains unchanged and is not in scope for this iteration.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Bottom nav (desktop 1440w) — carried over from iter48, not in scope", "issues": ["Floating 'Ask Ananta' pill still overlaps the left/right edges of bottom-nav at desktop widths. Real user taps unaffected; smell only."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": ["/tmp/workspace_pdfs.png", "/tmp/trade_pdf.png"],
+  "action_items": [
+    "NO fixes required. All 5 refinements land as specified.",
+    "OPTIONAL polish (unchanged from iter48): reposition/lower z-index of the floating 'Ask Ananta' pill so it doesn't visually overlap the bottom-nav row at desktop widths."
+  ],
+  "critical_code_review_comments": [
+    "pdfRegistry.downloadPdf (L36) sends Authorization header only when TOKEN_KEY is set — good. It correctly distinguishes 401/403 ('Owner login required to download this PDF') from other failures. Small nit: for very small PDFs the progress UI vanishes almost instantly (setTimeout 2500ms clears it after 100%). Consider keeping the 'Done' state visible slightly longer or animating a brief success pulse so users see completion feedback for tiny files. Not a bug.",
+    "HeaderActionPortal (L11) polls with rAF until #header-action-slot exists — safe because AppShell always renders the slot; still, when the slot briefly unmounts on route change the portal children flicker for one frame. Acceptable.",
+    "QuadrantCard.jsx (L36) puts the CTA chip inside a <button> that itself has onOpen — the chip is not a nested button, just a styled <span>, so clicks still bubble to the parent button. This is what makes 'the card is still clickable' behaviour work while also putting the CTA next to the title. Correct."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only iteration; auxiliary curl confirmed 403→200 auth gate)", "frontend": "100% — all 5 refinement acceptance criteria met"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — used bearer JWT in localStorage['ananta_owner_token']; sessionStorage['ananta_tour_seen']='1' to skip tour overlay.",
+  "seed_data_creation": "In-browser localStorage['ananta_pdfs'] seeded with the owner-protected lab-run PDF entry {id:t1,url:/api/lab/runs/demo-bt-run/pdf,type:lab}. No backend seed data written.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The lab run 'demo-bt-run' exists in the preview DB and its PDF endpoint returns %PDF-1 (4200 bytes) with owner Bearer token. If Workspace ws-pdf-progress bar seems 'missing' during Playwright checks, it's just because the tiny 4 KB payload completes before the next tick — verify via network (status 200 + Authorization header) and the 'Download complete' toast instead. Test scripts used: seed localStorage → click bottom-nav → snapshot #header-action-slot innerHTML for portal contents, and DOM-walk QuadrantCard to check inHeaderRow for the CTA <span>.",
+  "rca of the issue": "N/A — this iteration is a refinement pass on top of a green iter48. No regression detected."
+}

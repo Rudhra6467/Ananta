@@ -253,9 +253,13 @@ function ContextInfo({ active, portfolio }) {
 
     const title = id === "strategies" ? "Strategy Center" : id === "research" ? "Research Lab" : "Workspace";
     return (
-        <div data-testid={`context-${id}`}>
-            <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1" data-testid="page-question">{QUESTION[id]}</div>
-            <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
+        <div data-testid={`context-${id}`} className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+                <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1" data-testid="page-question">{QUESTION[id]}</div>
+                <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
+            </div>
+            {/* per-tab primary action(s) portal here — scrolls away with the header */}
+            <div id="header-action-slot" data-testid="header-action-slot" className="shrink-0 flex items-center gap-2 pb-0.5" />
         </div>
     );
 }

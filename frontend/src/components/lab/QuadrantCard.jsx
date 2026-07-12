@@ -24,15 +24,18 @@ export default function QuadrantCard({
             className={`group relative flex flex-col gap-4 text-left rounded-2xl border ${a.border} bg-atlas-panel/70 p-5 md:p-6 transition-all duration-200
                 hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)] ${a.glow} focus:outline-none focus-visible:ring-1 focus-visible:ring-atlas-cyan`}
         >
-            {/* header */}
+            {/* header — title on the left, action chip aligned with the title on the right */}
             <div className="flex items-start gap-3">
                 <div className={`w-11 h-11 shrink-0 rounded-xl grid place-items-center border ${a.border} ${a.bg}`}>
                     <Icon className={`w-5 h-5 ${a.text}`} strokeWidth={2} />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                     <div className="font-heading font-medium text-lg md:text-xl text-atlas-text leading-tight truncate">{title}</div>
                     <div className="font-mono text-[10px] uppercase tracking-widest text-atlas-textTertiary mt-0.5">{subtitle}</div>
                 </div>
+                <span className={`shrink-0 flex items-center gap-1.5 rounded-full border ${a.border} ${a.bg} px-3 py-1.5 font-mono text-[10px] font-bold tracking-wide ${a.text}`}>
+                    {cta} <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                </span>
             </div>
 
             {/* headline stats (max 2) */}
@@ -69,12 +72,6 @@ export default function QuadrantCard({
             )}
 
             {children}
-
-            {/* CTA */}
-            <div className={`mt-auto flex items-center justify-between rounded-lg border ${a.border} bg-transparent px-4 py-2.5 font-mono text-xs font-bold tracking-wide ${a.text} transition-colors group-hover:${a.bg.replace("/10", "/15")}`}>
-                <span>{cta}</span>
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </div>
         </button>
     );
 }

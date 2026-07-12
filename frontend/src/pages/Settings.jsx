@@ -104,23 +104,6 @@ export default function SettingsPage() {
     return (
         <TooltipProvider delayDuration={120}>
             <div className="space-y-5 pb-24" data-testid="settings-page">
-                {/* Emergency override — top-right under the header */}
-                <div className="flex items-center justify-end">
-                    <button
-                        data-testid="emergency-kill-btn"
-                        onClick={() => isOwner ? toggleKill(!killed) : toast.error("Owner login required")}
-                        title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
-                        className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
-                            killed
-                                ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
-                                : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"
-                        } disabled:opacity-50`}
-                    >
-                        <Power className="w-4 h-4" strokeWidth={2.5} />
-                        {killed ? "ANANTA STOPPED · RELEASE" : "STOP ANANTA"}
-                    </button>
-                </div>
-
                 {/* engine + risk config grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5" data-testid="lab-grid">
                     {/* Q1 — Entry & Exit Engine */}

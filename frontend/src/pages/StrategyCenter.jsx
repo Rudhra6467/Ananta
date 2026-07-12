@@ -17,6 +17,7 @@ import StrategyArchitect from "@/pages/StrategyArchitect";
 import ImportStrategyModal from "@/components/ImportStrategyModal";
 import { useAuth } from "@/context/AuthContext";
 import MetricExplainer from "@/components/MetricExplainer";
+import HeaderActionPortal from "@/components/HeaderActionPortal";
 
 const ICONS = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
 const STATUS = {
@@ -124,38 +125,32 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
 
     return (
         <div className="space-y-5" data-testid="strategy-center">
-            {/* Title card with compact Search + Add pinned right (persist across the tab) */}
-            <div className="panel border-atlas-border rounded-2xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="strategy-center-header">
-                <div className="min-w-0">
-                    <div className="font-heading font-medium text-lg text-atlas-text leading-tight">Strategy Center</div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Discover · import · build · analyse</div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button data-testid="strategy-search-btn" onClick={() => setSearchOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
-                        <Search className="w-3 h-3" /> Search
+            {/* Search + Add live in the scroll-through top header, next to the title */}
+            <HeaderActionPortal>
+                <button data-testid="strategy-search-btn" onClick={() => setSearchOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] tracking-wide border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
+                    <Search className="w-3.5 h-3.5" /> Search
+                </button>
+                <div className="relative">
+                    <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddMenu((v) => !v)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
+                        <Plus className={`w-3.5 h-3.5 transition-transform ${addMenu ? "rotate-45" : ""}`} /> Add
                     </button>
-                    <div className="relative">
-                        <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddMenu((v) => !v)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
-                            <Plus className={`w-3.5 h-3.5 transition-transform ${addMenu ? "rotate-45" : ""}`} /> Add
-                        </button>
-                        {addMenu && (
-                            <div className="absolute right-0 mt-2 w-56 panel border-atlas-border rounded-xl p-1 z-20" data-testid="add-menu">
-                                <button data-testid="add-menu-import" onClick={() => { setAddMenu(false); onImport(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                    <Upload className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Import Strategy</span>
-                                </button>
-                                <button data-testid="add-menu-manual" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                    <Boxes className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Write Strategy</span>
-                                </button>
-                                <button data-testid="add-menu-ai" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                    <Sparkles className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Describe &amp; Build (AI)</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    {addMenu && (
+                        <div className="absolute right-0 mt-2 w-56 panel border-atlas-border rounded-xl p-1 z-50" data-testid="add-menu">
+                            <button data-testid="add-menu-import" onClick={() => { setAddMenu(false); onImport(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                <Upload className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Import Strategy</span>
+                            </button>
+                            <button data-testid="add-menu-manual" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                <Boxes className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Write Strategy</span>
+                            </button>
+                            <button data-testid="add-menu-ai" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
+                                <Sparkles className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Describe &amp; Build (AI)</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
-            </div>
+            </HeaderActionPortal>
 
             <div className="flex items-center gap-2 flex-wrap">
                 {CHIPS.map(({ id, label, Icon }) => (
