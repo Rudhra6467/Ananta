@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import time
 import uuid
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -73,17 +74,42 @@ def git_hash() -> str:
 
 def resolve_window(symbols: list[str], period: str,
                    start_ms: int | None, end_ms: int | None) -> tuple[int | None, int | None]:
-    """Map a period dropdown to a [start_ms, end_ms] window off the latest seeded candle."""
+    """Map a period dropdown to a [start_ms, end_ms] window off the latest seeded candle.
+    Falls back to a now-anchored window when no local history exists yet (fresh deploys)."""
     if period == "custom" and start_ms and end_ms:
         return int(start_ms), int(end_ms)
     maxes = [data_store.coverage(s, "1h")["max_ts"] for s in symbols]
     maxes = [m for m in maxes if m]
-    if not maxes:
-        return None, None
-    end = min(maxes)
     months = _PERIOD_MONTHS.get(period, 3)
+    end = min(maxes) if maxes else int(time.time() * 1000)
     start = end - months * 30 * 86_400_000
     return start, end
+
+
+def _bars_per_day(tf: str) -> int:
+    return {"15m": 96, "30m": 48, "1h": 24, "4h": 6, "1d": 1}.get(tf, 24)
+
+
+def ensure_history(symbols: list[str], timeframes: list[str], period: str) -> dict:
+    """Backfill any (symbol, timeframe) that lacks enough local candles for the requested
+    window. Fresh containers / newly-added assets start with an empty candle store, so we
+    fetch on demand from CCXT (Kraken -> Coinbase). Blocking network I/O — call from a
+    worker thread/process. The daily series is always ensured (used for HTF context)."""
+    months = _PERIOD_MONTHS.get(period, 3)
+    days = months * 31 + 10
+    needed_tfs = list(dict.fromkeys(list(timeframes) + ["1d"]))
+    report: dict = {}
+    for sym in symbols:
+        for tf in needed_tfs:
+            cov = data_store.coverage(sym, tf)
+            need = max(30, int(months * 30 * _bars_per_day(tf) * 0.5))
+            if cov["count"] < need:
+                fetch_days = max(days, months * 31 + 40) if tf == "1d" else days
+                try:
+                    report[f"{sym}|{tf}"] = data_store.backfill(sym, tf, fetch_days)
+                except Exception as e:  # noqa: BLE001
+                    report[f"{sym}|{tf}"] = {"error": str(e)}
+    return report
 
 
 async def create_run(db, spec: dict) -> dict:
@@ -112,6 +138,7 @@ async def create_run(db, spec: dict) -> dict:
         "target": spec.get("target"), "values": spec.get("values"),
         "label": spec.get("label"),
         "strategies": spec.get("strategies") or None,
+        "timeframe": spec.get("timeframe") or "1h",
         "compare_timeframes": bool(spec.get("compare_timeframes", False)),
         "exit_method": spec.get("exit_method") or "fixed",
         "target_profit": float(spec.get("target_profit", 5.0)),
@@ -277,7 +304,22 @@ class LabWorker:
                          target_loss=run.get("target_loss", 4.0),
                          atr_params=run.get("atr_params"))
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
+        base_tf = run.get("timeframe") or "1h"
+        # Primary execution timeframe the user picked (1h default; 30m/15m optional).
+        if base_tf != "1h":
+            timeframes = [base_tf] + [t for t in timeframes if t != base_tf]
         loop = asyncio.get_event_loop()
+
+        # Fresh deploys / newly-added assets have an empty local candle store — backfill
+        # the needed history on demand from CCXT before replaying (keeps validation working
+        # in any environment, incl. production, without a manual seed step).
+        await self._set_progress(rid, 2)
+        try:
+            await loop.run_in_executor(self._pool, ensure_history, symbols, timeframes, run.get("period", "3m"))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ensure_history failed for run %s: %s", rid, e)
+        # Re-anchor the window now that data is present (create_run may have seen no data).
+        start, end = resolve_window(symbols, run.get("period", "3m"), run.get("start_ms"), run.get("end_ms"))
 
         out, multi_tf, exit_cmp = {}, {}, {}
         tf_results: dict[str, dict] = {}
@@ -300,7 +342,7 @@ class LabWorker:
                         self._reset_pool()
                         loop = asyncio.get_event_loop()
                 tf_results[f"{sym}|{tf}"] = r
-                if tf == "1h":
+                if tf == base_tf:
                     out[sym] = r
                 step += 1
                 await self._set_progress(rid, step / total * 100)

@@ -20,7 +20,7 @@ logger = logging.getLogger("ananta.lab.data")
 
 DB_PATH = os.environ.get("HISTORICAL_DB_PATH", "/app/backend/data/historical_candles.db")
 
-TF_MS = {"1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
+TF_MS = {"15m": 900_000, "30m": 1_800_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
 
 
 @contextmanager

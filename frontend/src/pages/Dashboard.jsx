@@ -17,7 +17,6 @@ import WatchlistControl from "@/components/WatchlistControl";
 import TradingWizard from "@/components/TradingWizard";
 import { Rocket } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
-import SystemHealthChip from "@/components/SystemHealthChip";
 
 const SILVER = "#C0C5CE";
 const GREEN = "#10B981";
@@ -73,9 +72,6 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-5" data-testid="cockpit-page">
-            <div className="flex justify-end -mb-1">
-                <SystemHealthChip />
-            </div>
             {/* Action hub — dual control row directly beneath Account Value */}
             <div className="grid grid-cols-2 gap-3">
                 <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}
@@ -88,9 +84,16 @@ export default function Dashboard() {
                 </button>
             </div>
             <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
-            <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} onChanged={refresh} />
-            <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
-            <TradeLifecyclePanel portfolio={portfolio} />
+            {/* Watchlist (80%) + Charts (20%) on one row */}
+            <div className="flex gap-3 items-stretch">
+                <div className="flex-[4] min-w-0">
+                    <WatchlistRibbon snapshots={snapshots} symbols={enabledSymbols} selected={selected} onSelect={setSelected} onChanged={refresh} />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <ChartDrawer selected={selected} candles={candles} loading={loadingChart} />
+                </div>
+            </div>
+            <TradeLifecyclePanel portfolio={portfolio} regime={regime} />
             <AnalyticsGroup summary={summary} trades={trades} />
             <ConsolidatedPositions portfolio={portfolio} onDone={refresh} />
             <TradingWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onLaunched={refresh} />
@@ -137,8 +140,6 @@ function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
     const total = brain?.total_evaluations ?? 0;
     const qualified = brain?.greenlit ?? 0;
     const rejected = Math.max(total - qualified, 0);
-    const regimeCls = regime === "BULLISH" ? "text-atlas-positive"
-        : regime === "BEARISH" ? "text-atlas-negative" : "text-atlas-textSecondary";
     return (
         <div className="panel p-4 relative" data-testid="bot-brain-strip">
             <button data-testid="cockpit-refresh" onClick={onRefresh} className="absolute top-3 right-3 text-atlas-textSecondary hover:text-atlas-text transition-colors">
@@ -150,11 +151,18 @@ function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
                 <MatrixCell testid="cockpit-metric-rejected" label="Rejected" value={rejected} valueClass="text-atlas-negative" />
                 <MatrixCell testid="cockpit-metric-qualified" label="Qualified" value={qualified} valueClass="text-atlas-positive" />
             </div>
-            <div className="mt-2 rounded-lg border border-atlas-border px-4 py-2.5 flex items-center justify-between" data-testid="regime-cell">
-                <span className="label-tag">Regime</span>
-                <span className={`font-mono text-sm font-bold ${regimeCls}`} data-testid="regime-value">{regime}</span>
-            </div>
         </div>
+    );
+}
+
+/* Compact market-regime pill shown next to a section title (replaces the full Regime row). */
+function RegimeTag({ regime }) {
+    const label = regime === "BULLISH" ? "Bull" : regime === "BEARISH" ? "Bear" : "Neutral";
+    const cls = regime === "BULLISH" ? "text-atlas-positive" : regime === "BEARISH" ? "text-atlas-negative" : "text-atlas-textSecondary";
+    return (
+        <span data-testid="regime-tag" className="font-mono text-[10px] text-atlas-textTertiary">
+            (Market · <span className={`font-bold ${cls}`} data-testid="regime-value">{label}</span>)
+        </span>
     );
 }
 
@@ -177,7 +185,7 @@ function WatchlistRibbon({ snapshots, symbols, selected, onSelect, onChanged }) 
     return (
         <div className="panel px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="watchlist-ribbon">
             <div className="flex items-center gap-3 min-w-0">
-                <span className="label-tag shrink-0">ACTIVE WATCHLIST</span>
+                <span className="label-tag shrink-0">WATCHLIST</span>
                 <select
                     data-testid="watchlist-select"
                     value={selected || ""}
@@ -257,10 +265,10 @@ function ChartDrawer({ selected, candles, loading }) {
         <Drawer>
             <DrawerTrigger asChild>
                 <button data-testid="open-chart-button"
-                    className="w-full panel flex items-center justify-center gap-3 py-4 hover:bg-atlas-panelHover transition-colors group">
+                    className="w-full h-full panel flex flex-col items-center justify-center gap-1.5 py-4 hover:bg-atlas-panelHover transition-colors group">
                     <BarChart3 className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
-                    <span className="font-mono text-sm font-bold tracking-widest text-atlas-text">CLICK HERE FOR CHARTS</span>
-                    <span className="font-mono text-[10px] text-atlas-textTertiary border border-atlas-border px-2 py-0.5 rounded">{selected ? selected.split("/")[0] : "—"} · 4H</span>
+                    <span className="font-mono text-[11px] font-bold tracking-widest text-atlas-text">CHARTS</span>
+                    <span className="font-mono text-[9px] text-atlas-textTertiary border border-atlas-border px-1.5 py-0.5 rounded">{selected ? selected.split("/")[0] : "—"} · 4H</span>
                 </button>
             </DrawerTrigger>
             <DrawerContent className="bg-atlas-panel border-atlas-border max-h-[88vh]" data-testid="chart-drawer">
@@ -344,14 +352,17 @@ function LifecycleRow({ p }) {
     );
 }
 
-function TradeLifecyclePanel({ portfolio }) {
+function TradeLifecyclePanel({ portfolio, regime }) {
     const open = (portfolio?.positions || []).filter((p) => p.quantity > 0);
     const [showAll, setShowAll] = useState(false);
     const visible = showAll ? open : open.slice(0, 1);
     return (
         <div className="panel p-6" data-testid="trade-lifecycle">
             <div className="flex items-center justify-between mb-4">
-                <div className="label-tag">TRADE LIFE CYCLE</div>
+                <div className="flex items-center gap-2">
+                    <div className="label-tag">TRADE LIFE CYCLE</div>
+                    <RegimeTag regime={regime} />
+                </div>
                 <span className="font-mono text-[10px] text-atlas-textTertiary">{open.length} live</span>
             </div>
             {open.length === 0 ? (
@@ -454,6 +465,7 @@ const LB_PROPERTIES = [
 
 function LeaderboardAnalytics({ trades }) {
     const [property, setProperty] = useState("strategy");
+    const [showAllLeaders, setShowAllLeaders] = useState(false);
 
     const { pieData, leaders, total } = useMemo(() => {
         const sells = (trades || []).filter((t) => t.side === "SELL");
@@ -510,7 +522,7 @@ function LeaderboardAnalytics({ trades }) {
                     <div data-testid="leaderboard-table">
                         <div className="label-tag mb-3">RANKED BY NET P&amp;L</div>
                         <div className="space-y-1.5">
-                            {leaders.map((g, i) => (
+                            {(showAllLeaders ? leaders : leaders.slice(0, 2)).map((g, i) => (
                                 <div key={g.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border" data-testid={`leaderboard-row-${i}`}>
                                     <div className="flex items-center gap-3 min-w-0">
                                         <span className="font-mono text-[11px] text-atlas-textTertiary w-4">{i + 1}</span>
@@ -527,6 +539,12 @@ function LeaderboardAnalytics({ trades }) {
                                 </div>
                             ))}
                         </div>
+                        {leaders.length > 2 && (
+                            <button data-testid="leaderboard-show-more" onClick={() => setShowAllLeaders((v) => !v)}
+                                className="mt-2 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                                {showAllLeaders ? "Show less" : `Show more (${leaders.length - 2})`}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

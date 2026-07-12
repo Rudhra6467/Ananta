@@ -13,6 +13,7 @@ import AccountOverlay from "@/components/AccountOverlay";
 import AnantaLogo from "@/components/AnantaLogo";
 import OnboardingPipeline from "@/components/OnboardingPipeline";
 import AskAnanta from "@/components/AskAnanta";
+import SystemHealthChip from "@/components/SystemHealthChip";
 import { useAuth } from "@/context/AuthContext";
 import { useAccessGate } from "@/context/AccessGateContext";
 import { AppDataProvider, useAppData } from "@/context/AppDataContext";
@@ -225,6 +226,7 @@ function ContextInfo({ active, portfolio }) {
                     <Metric label="DAILY P&L"
                         value={`${dailyPct > 0 ? "+" : ""}${dailyPct.toFixed(2)}%`}
                         cls={dailyPct > 0.005 ? "text-atlas-positive" : dailyPct < -0.005 ? "text-atlas-negative" : "text-atlas-text"} />
+                    <div className="ml-auto shrink-0 self-center"><SystemHealthChip /></div>
                 </div>
             </div>
         );

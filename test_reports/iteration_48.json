@@ -1,0 +1,41 @@
+{
+  "summary": "iter48 — P0 BACKEND + Phase 1-5 web UI sprint fully verified. BACKEND: 5/5 pytest PASS (test_iter48_lab_backfill.py). Lab on-demand CCXT backfill works: POST /api/lab/runs with timeframe 15m/30m/1h all reach DONE with non-empty trade_log (13/19/13 trades respectively) on BTC/USD, period=1m, hunter, fixed exit — confirming the P0 fix works without any pre-seeded 15m/30m candles. Per-run lab PDF GET /api/lab/runs/{id}/pdf returns valid application/pdf (%PDF header). Public report PDFs GET /api/report/full.pdf (110737 bytes) and /api/report/trades.pdf (12923 bytes) both return valid application/pdf. FRONTEND (web): all 5 phases match spec. Phase1 Cockpit: system-health-chip lives INSIDE context-cockpit next to daily P&L; regime-tag chip present in TRADE LIFE CYCLE; WATCHLIST row + open-chart-button; leaderboard-show-more toggle. Phase2 Trade: persistent trade-toolbar with trade-fresh-start/trade-download-pdf/trade-refresh + trade-stop-ananta pinned right; EXECUTION MODE text absent; Orders subtab shows orders-start-order first (manual-order-card hidden), clicking reveals manual-order-card + manual-order-close. Phase3 Strategy: strategy-center-header + strategy-search-btn/strategy-add-btn top-right + strategy-leaderboard-show-more; search opens strategy-search-screen with 16 search-row-* entries; detail shows detail-rating, detail-edit-strategy, detail-analyse-strategy-top/-bottom, detail-tabs (4 subtabs Overview/Parameters/AI/History); analyse-modal opens with analyse-current-params + analyse-edit-params. Phase4 Research: research-start persistent; wizard advances Strategy→…→Timeframe step showing wizard-timeframe-1h (Default) + 30m + 15m; wizard-strat-load-more visible on strategy step; AI Analysis subtab (research-subtab-analyze) tagline is exactly 'Get a 7 day performance review'; ai-suggestion-load-more shows LOAD MORE (3); OLD fresh/pdf/refresh Reports block IS REMOVED. Phase5 Workspace: workspace-header + workspace-stop-ananta present; subtabs ws-subtab-ai/ws-subtab-engine/ws-subtab-learn; AI Analytics ws-ananta-pdfs section renders with ws-pdfs-empty; Learning Hub shows ws-demo card with LOAD DEMO, RESET, ws-demo-howto (HOW TO USE ANANTA) buttons; clicking LOAD DEMO renders ws-demo-output (42 trades / 5 configs / 3 strategies). One minor testing note: Playwright's page.click(force=True) on bottom-nav-workspace occasionally failed to activate the tab because the floating 'Ask Ananta' pill overlaps the right edge of the bottom nav at 1440x900 — a real fingertap and a JS .click() both worked; not a UX bug for users, but consider bumping z-index / repositioning Ask Ananta on desktop.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Bottom nav (desktop 1440w)", "issues": ["Floating 'Ask Ananta' pill overlaps the right edge of bottom-nav-workspace hit area — Playwright automated clicks intermittently intercepted by the pill. Real user taps still work but the overlap is a smell; consider z-index/position adjust so the workspace tab has a clean click target."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter48_lab_backfill.py",
+    "/app/test_reports/pytest/iter48_lab_backfill.xml"
+  ],
+  "action_items": [
+    "OPTIONAL polish: fix Ask-Ananta floating pill overlap of bottom-nav-workspace right edge (occurred at 1440px width). Move the pill up ~64px or lower z-index below bottom nav so the workspace tab click target is clean.",
+    "NONE required for P0 backend or any Phase 1-5 spec — all specified testids and behaviours are present and functional."
+  ],
+  "critical_code_review_comments": [
+    "test_iter48_lab_backfill.py L82 originally asserted on `per_symbol['BTC/USD']['trades']` as a list but the API returns `trades` as an INT count and the actual list under `trade_log`. Fixed in the test file; noting for future testers so they don't hit the same trap.",
+    "Lab per-run PDF GET requires Owner Authorization header; the public report PDFs (/api/report/full.pdf, /api/report/trades.pdf) do not. Access model behaves as documented.",
+    "The frontend caches active tab across reloads; the wizard modal is opened as a full-screen overlay that intercepts pointer events — consider adding an explicit close button test-id (wizard-close) and covering the header logo/route change path so E2E tests can escape the wizard without JS-dispatch tricks."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter48_lab_backfill.py",
+    "/app/test_reports/pytest/iter48_lab_backfill.xml",
+    "/app/test_reports/iteration_48.json"
+  ],
+  "success_rate": {"backend": "100% (5/5 iter48 tests PASS)", "frontend": "100% — all Phase 1-5 testids and behaviours match spec"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md). Used bearer token set into localStorage['ananta_owner_token']; sessionStorage['ananta_tour_seen']='1' skips overlay.",
+  "seed_data_creation": "3 backtest lab runs created on BTC/USD (timeframes 15m/30m/1h, period=1m, hunter) as part of pytest. These are backtest results only, do not pollute live/paper trading state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "P0 lab backfill for 15m/30m/1h now confirmed working on preview backend. Regression path: /app/backend/tests/test_iter48_lab_backfill.py (5 tests, ~2 min). For UI, use JS `document.querySelector('[data-testid=\"bottom-nav-workspace\"]').click()` instead of Playwright `page.click(force=True)` if the Ask-Ananta pill blocks the workspace tab. Wizard modal has NO wizard-close test-id — escape via header link or route change is needed. Owner token still valid until 2026-11-06 (JWT exp above).",
+  "rca of the issue": "Not applicable — no new bug found. Prior iter47 Dashboard-toast fix is out of scope for this iteration and not re-verified."
+}

@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
-    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw,
+    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
+import { registerPdf } from "@/lib/pdfRegistry";
 
 const PERIODS = [{ k: "1m", l: "1 Month" }, { k: "3m", l: "3 Months" }, { k: "6m", l: "6 Months" }, { k: "1y", l: "1 Year" }];
+const TIMEFRAMES = [{ k: "1h", l: "1 Hour" }, { k: "30m", l: "30 Min" }, { k: "15m", l: "15 Min" }];
 const STEPS = [
     { icon: Brain, label: "Strategy" }, { icon: Database, label: "Dataset" },
-    { icon: CalendarRange, label: "Period" }, { icon: ShieldCheck, label: "Validation" }, { icon: Rocket, label: "Run" },
+    { icon: CalendarRange, label: "Period" }, { icon: Clock, label: "Timeframe" },
+    { icon: ShieldCheck, label: "Validation" }, { icon: Rocket, label: "Run" },
 ];
 
 /** Guided, visual backtest+validation flow — Strategy → Dataset → Period → Validation → Run → Results. */
@@ -18,8 +21,10 @@ export default function ResearchWizard() {
     const [strategies, setStrategies] = useState([]);
     const [assets, setAssets] = useState([]);
     const [strat, setStrat] = useState([]);
+    const [showAllStrat, setShowAllStrat] = useState(false);
     const [picked, setPicked] = useState([]);
     const [period, setPeriod] = useState("1m");
+    const [timeframe, setTimeframe] = useState("1h");
     const [runMC, setRunMC] = useState(true);
     const [phase, setPhase] = useState("idle"); // idle | running | done | error
     const [progress, setProgress] = useState(0);
@@ -41,12 +46,12 @@ export default function ResearchWizard() {
 
     const toggleAsset = (s) => setPicked((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
     const toggleStrat = (k) => setStrat((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
-    const canNext = (step === 0 && strat.length) || (step === 1 && picked.length) || step === 2 || step === 3;
+    const canNext = (step === 0 && strat.length) || (step === 1 && picked.length) || step === 2 || step === 3 || step === 4;
 
     const run = async () => {
-        setPhase("running"); setProgress(5); setResult(null); setMc(null); setStep(4);
+        setPhase("running"); setProgress(5); setResult(null); setMc(null); setStep(5);
         try {
-            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, strategies: strat, exit_method: "fixed" });
+            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe, strategies: strat, exit_method: "fixed" });
             let done = false;
             for (let i = 0; i < 60 && !done; i++) {
                 await new Promise((r) => setTimeout(r, 1500));
@@ -60,6 +65,8 @@ export default function ResearchWizard() {
                 try { const m = await api.labMonteCarlo({ source: "run", run_id: id, iterations: 1500, ruin_threshold_pct: 25 }); if (m?.ok) setMc(m); } catch { /* noop */ }
             }
             setProgress(100); setPhase("done");
+            registerPdf({ title: `Research · ${strat.join(" + ")} · ${timeframe}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
+            toast.success("Research PDF ready", { description: "Check Workspace › AI Analytics · Ananta PDFs" });
         } catch (e) {
             setPhase("error");
             toast.error("Backtest failed", { description: String(e?.response?.data?.detail || e?.message) });
@@ -97,7 +104,7 @@ export default function ResearchWizard() {
                     {step === 0 && (
                         <StepShell title="Choose strategies" hint="Tick one or more engines to validate together.">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="wizard-strategies">
-                                {strategies.map((s) => {
+                                {(showAllStrat ? strategies : strategies.slice(0, 3)).map((s) => {
                                     const m = metrics[s.key];
                                     const on = !!m?.enabled && m?.status !== "DISABLED" && m?.status !== "ERROR";
                                     const checked = strat.includes(s.key);
@@ -120,6 +127,12 @@ export default function ResearchWizard() {
                                     );
                                 })}
                             </div>
+                            {strategies.length > 3 && (
+                                <button data-testid="wizard-strat-load-more" onClick={() => setShowAllStrat((v) => !v)}
+                                    className="mt-2 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                                    {showAllStrat ? "Show less" : `Load more (${strategies.length - 3})`}
+                                </button>
+                            )}
                         </StepShell>
                     )}
                     {step === 1 && (
@@ -148,6 +161,19 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 3 && (
+                        <StepShell title="Choose a timeframe" hint="Candle size the engine replays on. 1H is the live default; 30m/15m react faster.">
+                            <div className="grid grid-cols-3 gap-3" data-testid="wizard-timeframes">
+                                {TIMEFRAMES.map((tf) => (
+                                    <button key={tf.k} data-testid={`wizard-timeframe-${tf.k}`} onClick={() => setTimeframe(tf.k)}
+                                        className={`panel border rounded-xl p-4 text-center transition-colors ${timeframe === tf.k ? "border-atlas-cyan bg-atlas-cyan/5 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                                        <Clock className="w-5 h-5 mx-auto mb-2" /><div className="font-heading text-sm">{tf.l}</div>
+                                        {tf.k === "1h" && <div className="font-mono text-[9px] text-atlas-textTertiary mt-1">DEFAULT</div>}
+                                    </button>
+                                ))}
+                            </div>
+                        </StepShell>
+                    )}
+                    {step === 4 && (
                         <StepShell title="Choose validation" hint="Backtest runs by default. Add Monte Carlo for a robustness stress-test.">
                             <div className="space-y-3" data-testid="wizard-validations">
                                 <label className="panel border-atlas-cyan/40 bg-atlas-cyan/5 rounded-xl p-4 flex items-center gap-3 opacity-90">
@@ -174,7 +200,7 @@ export default function ResearchWizard() {
                     <div className="w-full max-w-md h-2 rounded-full bg-atlas-panel overflow-hidden">
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period}</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframe}</div>
                 </div>
             )}
 
@@ -194,7 +220,7 @@ export default function ResearchWizard() {
                         className="flex items-center gap-1.5 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text disabled:opacity-30">
                         <ChevronLeft className="w-4 h-4" /> BACK
                     </button>
-                    {step < 3 ? (
+                    {step < 4 ? (
                         <button data-testid="wizard-next" onClick={() => setStep((s) => s + 1)} disabled={!canNext}
                             className="flex items-center gap-1.5 rounded-lg bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-2.5 disabled:opacity-40 transition-colors">
                             NEXT <ChevronRight className="w-4 h-4" />

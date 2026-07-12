@@ -1867,6 +1867,7 @@ class LabRunCreate(BaseModel):
     values: list | None = None
     label: str | None = None
     strategies: list[str] | None = None  # subset of hunter|squeeze|continuation (None = all)
+    timeframe: str = "1h"  # primary execution timeframe: 1h (default) | 30m | 15m
     compare_timeframes: bool = False  # off = 1h-only (fast); on = add 30m/15m comparison
     exit_method: str = "fixed"  # "native" (Universal Engine) | "atr" (pure ATR) | "fixed" ($ target)
     target_profit: float = 5.0  # fixed-exit take-profit ($, net)

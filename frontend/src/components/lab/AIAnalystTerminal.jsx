@@ -17,6 +17,7 @@ export default function AIAnalystTerminal({ isOwner, strategy }) {
     const [messages, setMessages] = useState([]); // {role, content}
     const [q, setQ] = useState("");
     const [busy, setBusy] = useState(false);
+    const [showAllSug, setShowAllSug] = useState(false);
     const sessionRef = useRef(null);
     const scrollRef = useRef(null);
 
@@ -57,13 +58,19 @@ export default function AIAnalystTerminal({ isOwner, strategy }) {
                             <Sparkles className="w-3.5 h-3.5 text-atlas-positive" /> Ask about your trades, exits, blocks or regimes:
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {SUGGESTIONS.map((sug) => (
+                            {(showAllSug ? SUGGESTIONS : SUGGESTIONS.slice(0, 1)).map((sug) => (
                                 <button key={sug} data-testid="ai-suggestion" onClick={() => ask(sug)} disabled={busy || !isOwner}
                                     className="text-left px-3 py-2 rounded-lg border border-atlas-border font-mono text-[11px] text-atlas-textSecondary hover:border-atlas-positive/50 hover:text-atlas-text transition-colors disabled:opacity-40">
                                     {sug}
                                 </button>
                             ))}
                         </div>
+                        {SUGGESTIONS.length > 1 && (
+                            <button data-testid="ai-suggestion-load-more" onClick={() => setShowAllSug((v) => !v)}
+                                className="mt-2 font-mono text-[10px] tracking-widest text-atlas-textTertiary hover:text-atlas-text transition-colors">
+                                {showAllSug ? "SHOW LESS" : `LOAD MORE (${SUGGESTIONS.length - 1})`}
+                            </button>
+                        )}
                     </div>
                 )}
                 {messages.map((m, i) => (

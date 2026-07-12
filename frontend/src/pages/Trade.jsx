@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layers, Archive, ListOrdered, BarChart3, Power } from "lucide-react";
+import { Layers, Archive, ListOrdered, BarChart3, Power, Download, RefreshCw, RotateCcw, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
+import { registerPdf } from "@/lib/pdfRegistry";
 import { useAppData } from "@/context/AppDataContext";
 import { useAuth } from "@/context/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import EnvironmentToggle from "@/components/EnvironmentToggle";
 import ManualExitButton from "@/components/ManualExitButton";
 import PendingOrders from "@/components/PendingOrders";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
@@ -39,14 +39,16 @@ export default function Trade() {
 
     const reloadStrategies = () => api.strategyMetrics().then((d) => setStrategies(Object.values(d?.metrics || {}))).catch(() => {});
 
+    const loadAll = () => {
+        api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {});
+        api.settings().then((s) => { setKilled(!!s.manual_kill_switch); setSymbols(s.enabled_symbols || []); }).catch(() => {});
+        reloadStrategies();
+        api.analyticsPerformance(excludeSynthetic).then(setAnalytics).catch(() => {});
+    };
+
     useEffect(() => {
-        const load = () => {
-            api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {});
-            api.settings().then((s) => { setKilled(!!s.manual_kill_switch); setSymbols(s.enabled_symbols || []); }).catch(() => {});
-            reloadStrategies();
-        };
-        load();
-        const t = setInterval(load, 12000);
+        loadAll();
+        const t = setInterval(loadAll, 12000);
         return () => clearInterval(t);
     }, []);
 
@@ -61,26 +63,52 @@ export default function Trade() {
         try {
             await api.updateSettings({ manual_kill_switch: !killed });
             setKilled(!killed);
-            toast[!killed ? "error" : "success"](!killed ? "MANUAL KILL ENGAGED" : "MANUAL KILL RELEASED", {
-                description: !killed ? "All new trades blocked until released." : "Trading resumes on next cycle.",
+            toast[!killed ? "error" : "success"](!killed ? "ANANTA STOPPED" : "ANANTA RESUMED", {
+                description: !killed ? "All new trades blocked until you resume." : "Trading resumes on next cycle.",
             });
         } catch (e) { toast.error("UPDATE FAILED", { description: String(e?.message || e) }); }
     };
 
+    const freshStart = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        if (!window.confirm("FRESH START: wipe ALL trade & strategy history and reset the paper book to $1200 ($75/trade). This cannot be undone. Continue?")) return;
+        try {
+            const r = await api.freshStart();
+            toast.success(`Fresh start done — $${r.starting_balance} book, $${r.lot_usd}/trade`);
+            setTimeout(loadAll, 600);
+        } catch { toast.error("Fresh start failed (owner login required)"); }
+    };
+
+    const downloadPdf = () => {
+        window.open(`${API}/report/trades.pdf`, "_blank");
+        registerPdf({ title: "Trade Report", type: "trades", url: `${API}/report/trades.pdf` });
+        toast.success("PDF DOWNLOAD STARTED", { description: "Saved to Workspace › AI Analytics · Ananta PDFs" });
+    };
+
     return (
         <div className="space-y-5" data-testid="trade-page">
-            {/* Mode + emergency stop workspace bar */}
-            <div className="panel border-atlas-border rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap" data-testid="trade-mode-bar">
-                <div>
-                    <div className="label-tag mb-2">EXECUTION MODE</div>
-                    <EnvironmentToggle />
+            {/* Persistent trade toolbar — actions on the left, Stop Ananta pinned top-right */}
+            <div className="flex items-center justify-between gap-2 flex-wrap" data-testid="trade-toolbar">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button data-testid="trade-fresh-start" onClick={freshStart}
+                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
+                        <RotateCcw className="w-3 h-3" /> FRESH START
+                    </button>
+                    <button data-testid="trade-download-pdf" onClick={downloadPdf}
+                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
+                        <Download className="w-3 h-3" /> PDF
+                    </button>
+                    <button data-testid="trade-refresh" onClick={loadAll}
+                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
+                        <RefreshCw className="w-3 h-3" /> REFRESH
+                    </button>
                 </div>
-                <button data-testid="trade-kill-btn" onClick={toggleKill}
-                    title={isOwner ? "Emergency stop — blocks all new trades" : "Owner login required"}
+                <button data-testid="trade-stop-ananta" onClick={toggleKill}
+                    title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
                     className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
                         killed ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
                             : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"}`}>
-                    <Power className="w-4 h-4" strokeWidth={2.5} />{killed ? "KILL ENGAGED · RELEASE" : "EMERGENCY STOP"}
+                    <Power className="w-4 h-4" strokeWidth={2.5} />{killed ? "STOPPED · RESUME" : "STOP ANANTA"}
                 </button>
             </div>
 
@@ -93,7 +121,8 @@ export default function Trade() {
                 </TabsList>
 
                 <TabsContent value="orders" className="m-0 space-y-5">
-                    <ManualOrder isOwner={isOwner} symbols={symbols} snapshots={snapshots} onDone={() => api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {})} />
+                    <OrdersSection isOwner={isOwner} symbols={symbols} snapshots={snapshots}
+                        onDone={() => api.pendingOrders().then((d) => setPending(d.orders || d.pending || [])).catch(() => {})} />
                     <ActiveStrategies isOwner={isOwner} strategies={strategies} onDone={reloadStrategies} />
                     <PendingOrders pending={pending} />
                 </TabsContent>
@@ -107,7 +136,25 @@ export default function Trade() {
     );
 }
 
-function ManualOrder({ isOwner, symbols, snapshots, onDone }) {
+/* Orders first section — a single Start Order button (matches cockpit's Start Trading),
+   revealing the order-details form on click. */
+function OrdersSection({ isOwner, symbols, snapshots, onDone }) {
+    const [open, setOpen] = useState(false);
+    if (!open) {
+        return (
+            <button data-testid="orders-start-order" onClick={() => setOpen(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
+                <PlusCircle className="w-4 h-4" /> START ORDER
+            </button>
+        );
+    }
+    return (
+        <ManualOrder isOwner={isOwner} symbols={symbols} snapshots={snapshots} onClose={() => setOpen(false)}
+            onDone={() => { onDone && onDone(); }} />
+    );
+}
+
+function ManualOrder({ isOwner, symbols, snapshots, onDone, onClose }) {
     const [sym, setSym] = useState("");
     const [side, setSide] = useState("BUY");
     const [otype, setOtype] = useState("MARKET");
@@ -151,7 +198,15 @@ function ManualOrder({ isOwner, symbols, snapshots, onDone }) {
 
     return (
         <div className="panel border-atlas-border rounded-2xl p-5" data-testid="manual-order-card">
-            <div className="label-tag mb-3">CREATE YOUR ORDER</div>
+            <div className="flex items-center justify-between mb-3">
+                <div className="label-tag">ORDER DETAILS</div>
+                {onClose && (
+                    <button data-testid="manual-order-close" onClick={onClose}
+                        className="font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text transition-colors">
+                        ← BACK
+                    </button>
+                )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 {/* 1. Amount */}
                 {side === "BUY" ? (

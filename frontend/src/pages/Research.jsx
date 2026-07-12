@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Brain, ChevronDown } from "lucide-react";
+import { ShieldCheck, Brain, ChevronDown, Rocket } from "lucide-react";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -10,13 +10,13 @@ import ResearchWizard from "@/components/lab/ResearchWizard";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import TradingCoach from "@/components/lab/TradingCoach";
 import ClosedTradesAnalysis from "@/components/lab/ClosedTradesAnalysis";
-import Reports from "@/pages/Reports";
 
 export default function Research() {
     const { isOwner } = useAuth();
     const [strategies, setStrategies] = useState([]);
     const [sel, setSel] = useState("");
     const [advanced, setAdvanced] = useState(false);
+    const [researchKey, setResearchKey] = useState(0);
     const [sub, setSub] = useState(() => {
         const pending = localStorage.getItem("ananta_research_sub");
         if (pending) { localStorage.removeItem("ananta_research_sub"); return pending; }
@@ -38,8 +38,26 @@ export default function Research() {
         return () => window.removeEventListener("ananta:research-closed", onClosed);
     }, []);
 
+    const startResearch = () => {
+        setSub("validate");
+        setResearchKey((k) => k + 1); // fresh wizard from step 0
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
     return (
         <div className="space-y-5" data-testid="research-page">
+            {/* persistent header — Start Research stays put across sub-tabs */}
+            <div className="flex items-center justify-between gap-3" data-testid="research-header">
+                <div>
+                    <div className="font-heading font-medium text-lg text-atlas-text leading-tight">Research Lab</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Validate · analyse · review</div>
+                </div>
+                <button data-testid="research-start" onClick={startResearch}
+                    className="flex items-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-[12px] font-bold tracking-wide px-5 py-3 hover:brightness-110 active:scale-[0.99] transition-all">
+                    <Rocket className="w-4 h-4" /> START RESEARCH
+                </button>
+            </div>
+
             <Tabs value={sub} onValueChange={setSub} className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
                     <SubTab value="validate" label="VALIDATE" icon={ShieldCheck} />
@@ -48,7 +66,7 @@ export default function Research() {
                 </TabsList>
 
                 <TabsContent value="validate" className="m-0 space-y-4">
-                    <ResearchWizard />
+                    <ResearchWizard key={researchKey} />
 
                     <button data-testid="research-advanced-toggle" onClick={() => setAdvanced((v) => !v)}
                         className="flex items-center gap-2 font-mono text-[10px] tracking-widest text-atlas-textTertiary hover:text-atlas-text transition-colors">
@@ -78,7 +96,6 @@ export default function Research() {
                 <TabsContent value="analyze" className="m-0 space-y-4">
                     <TradingCoach isOwner={isOwner} />
                     <AIAnalystTerminal isOwner={isOwner} strategy={sel} />
-                    <Reports />
                 </TabsContent>
 
                 <TabsContent value="closed" className="m-0 space-y-4">

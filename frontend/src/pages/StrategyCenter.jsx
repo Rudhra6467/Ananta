@@ -7,11 +7,9 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LabModal from "@/components/lab/LabModal";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
-import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import HelpHint from "@/components/lab/HelpHint";
@@ -103,6 +101,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [favOnly, setFavOnly] = useState(false);
     const [showFilter, setShowFilter] = useState(false);
     const [addMenu, setAddMenu] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
 
     const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
 
@@ -125,27 +124,18 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
 
     return (
         <div className="space-y-5" data-testid="strategy-center">
-            <div className="space-y-3">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-atlas-textTertiary" />
-                    <Input data-testid="strategy-search" value={query} onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search the strategy library…" className="atlas-input rounded-lg pl-9 font-mono text-sm" />
+            {/* Title card with compact Search + Add pinned right (persist across the tab) */}
+            <div className="panel border-atlas-border rounded-2xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="strategy-center-header">
+                <div className="min-w-0">
+                    <div className="font-heading font-medium text-lg text-atlas-text leading-tight">Strategy Center</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Discover · import · build · analyse</div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    {CHIPS.map(({ id, label, Icon }) => (
-                        <button key={id} data-testid={`chip-${id}`} onClick={() => setChip(chip === id ? null : id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
-                                chip === id ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"}`}>
-                            <Icon className="w-3 h-3" /> {label}
-                        </button>
-                    ))}
-                    <span className="w-px h-5 bg-atlas-border mx-1" />
-                    <button data-testid="filter-button" onClick={() => setShowFilter(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
-                            activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
-                        <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
+                <div className="flex items-center gap-2">
+                    <button data-testid="strategy-search-btn" onClick={() => setSearchOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
+                        <Search className="w-3 h-3" /> Search
                     </button>
-                    <div className="ml-auto relative">
+                    <div className="relative">
                         <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddMenu((v) => !v)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
                             <Plus className={`w-3.5 h-3.5 transition-transform ${addMenu ? "rotate-45" : ""}`} /> Add
@@ -165,6 +155,22 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                         )}
                     </div>
                 </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+                {CHIPS.map(({ id, label, Icon }) => (
+                    <button key={id} data-testid={`chip-${id}`} onClick={() => setChip(chip === id ? null : id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
+                            chip === id ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"}`}>
+                        <Icon className="w-3 h-3" /> {label}
+                    </button>
+                ))}
+                <span className="w-px h-5 bg-atlas-border mx-1" />
+                <button data-testid="filter-button" onClick={() => setShowFilter(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] tracking-wide border transition-all ${
+                        activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                    <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
+                </button>
             </div>
 
             <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
@@ -207,6 +213,44 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     onToggle={toggleFilter} onFav={() => setFavOnly((v) => !v)} onClear={clearFilters}
                     onClose={() => setShowFilter(false)} />
             )}
+            {searchOpen && (
+                <SearchScreen lib={lib} query={query} setQuery={setQuery} activeCount={activeCount}
+                    onOpenFilters={() => { setSearchOpen(false); setShowFilter(true); }}
+                    onOpen={(s) => { setSearchOpen(false); (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id)); }}
+                    onClose={() => setSearchOpen(false)} />
+            )}
+        </div>
+    );
+}
+
+/* Full-screen search — text query + current filters, strategies listed by name (leaderboard-style). */
+function SearchScreen({ lib, query, setQuery, activeCount, onOpenFilters, onOpen, onClose }) {
+    const rows = lib || [];
+    return (
+        <div className="fixed inset-0 z-50 bg-atlas-bg flex flex-col" data-testid="strategy-search-screen">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-atlas-border">
+                <Search className="w-4 h-4 text-atlas-textTertiary shrink-0" />
+                <input autoFocus data-testid="strategy-search-input" value={query} onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search the strategy library…"
+                    className="flex-1 bg-transparent outline-none font-mono text-sm text-white placeholder:text-atlas-textTertiary" />
+                <button data-testid="strategy-search-filters" onClick={onOpenFilters}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all ${activeCount ? "border-atlas-cyan bg-atlas-cyan/10 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary"}`}>
+                    <SlidersHorizontal className="w-3 h-3" /> Filter{activeCount ? ` · ${activeCount}` : ""}
+                </button>
+                <button data-testid="strategy-search-close" onClick={onClose} className="text-atlas-textTertiary hover:text-atlas-text ml-1"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto atlas-scroll p-3 space-y-1">
+                {rows.length === 0 ? (
+                    <div className="p-8 text-center font-mono text-[12px] text-atlas-textSecondary">No strategies match your search.</div>
+                ) : rows.map((s) => (
+                    <button key={s.id} data-testid={`search-row-${s.id}`} onClick={() => onOpen(s)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-atlas-panelHover/40 border border-atlas-border hover:border-atlas-cyan/40 transition-colors text-left">
+                        <span className="font-heading text-sm text-atlas-text flex-1 truncate">{s.name}</span>
+                        <span className="font-mono text-[9px] text-atlas-textTertiary truncate hidden sm:inline">{s.style}</span>
+                        <span className={`font-mono text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>{s.ai_grade}</span>
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }
@@ -220,9 +264,11 @@ const LB_LABELS = {
 export function StrategyLeaderboard({ onOpen }) {
     const [sort, setSort] = useState("ai_health_score");
     const [data, setData] = useState(null);
+    const [showAll, setShowAll] = useState(false);
     useEffect(() => { api.analyticsLeaderboard(sort).then(setData).catch(() => {}); }, [sort]);
     const opts = data?.sort_options || Object.keys(LB_LABELS);
-    const rows = (data?.leaderboard || []).slice(0, 8);
+    const all = (data?.leaderboard || []).slice(0, 8);
+    const rows = showAll ? all : all.slice(0, 2);
     const fmt = (k, v) => (k === "net_pnl" ? `$${(v || 0).toLocaleString()}` : ["roi", "win_rate", "max_drawdown"].includes(k) ? `${v}%` : v);
     return (
         <div className="panel p-4" data-testid="strategy-leaderboard">
@@ -249,6 +295,12 @@ export function StrategyLeaderboard({ onOpen }) {
                     </button>
                 ))}
             </div>
+            {all.length > 2 && (
+                <button data-testid="strategy-leaderboard-show-more" onClick={() => setShowAll((v) => !v)}
+                    className="mt-2 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                    {showAll ? "Show less" : `Show more (${all.length - 2})`}
+                </button>
+            )}
         </div>
     );
 }
@@ -351,12 +403,16 @@ function Kv({ label, value, cls = "text-atlas-text" }) {
 }
 
 /* ---------------- Detail view ---------------- */
-const TABS = ["Overview", "Parameters", "Validation", "AI", "Research", "Timeline", "History"];
+const TABS = ["Overview", "Parameters", "AI", "History"];
 
 function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
     const [tab, setTab] = useState("Overview");
     const [status, setStatus] = useState(metric?.status || "PAPER");
+    const [analyseOpen, setAnalyseOpen] = useState(false);
+    const [analyseMode, setAnalyseMode] = useState("choice"); // choice | run
     const Icon = ICONS[sKey] || Boxes;
+    const grade = schema?.ai_grade || metric?.grade;
+    const stars = metric?.stars ?? Math.round((metric?.health ?? 0) / 20);
 
     const setState = async (patch) => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -368,6 +424,9 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
         } catch (e) { toast.error("Update failed", { description: String(e?.response?.data?.detail || e?.message) }); }
     };
 
+    const openEdit = () => { setTab("Parameters"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    const openAnalyse = () => { setAnalyseMode("choice"); setAnalyseOpen(true); };
+
     return (
         <div className="space-y-5" data-testid={`strategy-detail-${sKey}`}>
             {/* header */}
@@ -376,26 +435,22 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                     <ArrowLeft className="w-3.5 h-3.5" /> ALL STRATEGIES
                 </button>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5 shrink-0">
                             <Icon className="w-6 h-6 text-atlas-cyan" strokeWidth={2} />
                         </div>
-                        <div>
-                            <div className="font-heading font-medium text-xl md:text-2xl text-atlas-text leading-tight">{schema?.name || sKey}</div>
+                        <div className="min-w-0">
+                            <div className="font-heading font-medium text-xl md:text-2xl text-atlas-text leading-tight truncate">{schema?.name || sKey}</div>
                             <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">v{schema?.version || "1.0.0"} · {metric?.trades ?? 0} trades · {metric?.config_count ?? 0} configs</div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    {/* Grade + love/rating pinned top-right next to the name */}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {grade && <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${GRADE_CLS[grade] || GRADE_CLS.C}`} data-testid="detail-grade">Grade {grade}</span>}
+                        <span className="flex items-center gap-0.5" data-testid="detail-rating">
+                            {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3.5 h-3.5 ${n <= stars ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                        </span>
                         <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${STATUS[status]}`} data-testid="detail-status">{status}</span>
-                        <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
-                            <SelectTrigger data-testid="detail-status-select"
-                                className="w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-1.5 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
-                                {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
                     </div>
                 </div>
                 {/* headline metrics */}
@@ -404,6 +459,26 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                     <Stat label="Win Rate" value={`${metric?.win_rate ?? 0}%`} />
                     <Stat label="Health" value={metric?.health ?? "—"} />
                     <Stat label="Confidence" value={`${metric?.confidence ?? 0}%`} />
+                </div>
+                {/* top action row: Edit + Analyse */}
+                <div className="flex items-center gap-2 mt-4">
+                    <button data-testid="detail-edit-strategy" onClick={openEdit}
+                        className="flex items-center gap-2 rounded-lg border border-atlas-border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-cyan/50 transition-colors">
+                        <Pencil className="w-3.5 h-3.5" /> EDIT STRATEGY
+                    </button>
+                    <button data-testid="detail-analyse-strategy-top" onClick={openAnalyse}
+                        className="flex items-center gap-2 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest text-atlas-cyan hover:bg-atlas-cyan/20 transition-colors">
+                        <BarChart3 className="w-3.5 h-3.5" /> ANALYSE STRATEGY
+                    </button>
+                    <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
+                        <SelectTrigger data-testid="detail-status-select"
+                            className="ml-auto w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-2.5 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
+                            {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
@@ -421,27 +496,36 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
             <div data-testid={`tab-body-${tab.toLowerCase()}`}>
                 {tab === "Overview" && <Overview schema={schema} metric={metric} />}
                 {tab === "Parameters" && <SavedConfigsPanel isOwner={isOwner} only={sKey} />}
-                {tab === "Validation" && <div className="space-y-4"><MonteCarloPanel /><StrategyValidationPanel /></div>}
                 {tab === "AI" && <AIAnalystTerminal isOwner={isOwner} strategy={sKey} />}
-                {tab === "Timeline" && <TimelinePanel metric={metric} />}
-                {tab === "Research" && (
-                    <div className="panel border-atlas-border rounded-xl p-5 space-y-3">
-                        <div className="flex items-center gap-2"><FlaskIcon /> <span className="font-heading font-medium text-atlas-text">Research & Backtesting</span></div>
-                        <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Run backtests, walk-forward and optimization sweeps for <b className="text-atlas-text">{schema?.name || sKey}</b>. Every completed run is attached to the strategy in History.</p>
-                        <StrategyValidationPanel />
-                    </div>
-                )}
                 {tab === "History" && <History metric={metric} />}
             </div>
 
-            {/* floating Edit Strategy action (owner-only) */}
-            {isOwner && tab !== "Parameters" && (
-                <button data-testid="edit-strategy-fab" onClick={() => { setTab("Parameters"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="fixed bottom-24 right-5 md:bottom-8 md:right-8 z-40 flex items-center gap-2 rounded-full bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-3 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.9)] transition-colors"
-                    title="Edit this strategy's parameters">
-                    <Pencil className="w-4 h-4" strokeWidth={2.4} /> EDIT STRATEGY
-                </button>
-            )}
+            {/* full-width Analyse this Strategy */}
+            <button data-testid="detail-analyse-strategy-bottom" onClick={openAnalyse}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
+                <BarChart3 className="w-4 h-4" /> ANALYSE THIS STRATEGY
+            </button>
+
+            {/* analyse flow */}
+            <LabModal open={analyseOpen} onOpenChange={setAnalyseOpen} icon={BarChart3} title={`Analyse · ${schema?.name || sKey}`}
+                subtitle="Backtest & validate — asset · timeframe · exit" testid="analyse-modal">
+                {analyseMode === "choice" ? (
+                    <div className="space-y-3 p-1">
+                        <button data-testid="analyse-current-params" onClick={() => setAnalyseMode("run")}
+                            className="w-full text-left rounded-xl border border-atlas-cyan/40 bg-atlas-cyan/5 px-4 py-4 hover:bg-atlas-cyan/10 transition-colors">
+                            <div className="font-heading text-sm text-atlas-text">Analyse with current parameters</div>
+                            <div className="font-mono text-[11px] text-atlas-textTertiary mt-1">Use the strategy&apos;s saved defaults — pick asset, timeframe &amp; exit next.</div>
+                        </button>
+                        <button data-testid="analyse-edit-params" onClick={() => { setAnalyseOpen(false); openEdit(); }}
+                            className="w-full text-left rounded-xl border border-atlas-border px-4 py-4 hover:bg-atlas-panelHover transition-colors">
+                            <div className="font-heading text-sm text-atlas-text">Edit parameters &amp; analyse</div>
+                            <div className="font-mono text-[11px] text-atlas-textTertiary mt-1">Tune entry/exit settings in the engine first, then analyse.</div>
+                        </button>
+                    </div>
+                ) : (
+                    <StrategyValidationPanel />
+                )}
+            </LabModal>
         </div>
     );
 }

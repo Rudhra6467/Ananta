@@ -57,8 +57,7 @@ export default function TradingCoach({ isOwner }) {
             {!review && (
                 <div className="flex flex-col items-center text-center gap-3 py-6">
                     <p className="font-mono text-[11px] text-atlas-textSecondary max-w-md">
-                        Get a proactive 7-day performance review — what worked, your most common mistake, and one concrete,
-                        one-click tweak to improve your edge.
+                        Get a 7 day performance review
                     </p>
                     <button data-testid="coach-generate-btn" onClick={generate} disabled={!aiOn || loading || !isOwner}
                         className="flex items-center gap-2 rounded-xl bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-2.5 transition-colors disabled:opacity-40">

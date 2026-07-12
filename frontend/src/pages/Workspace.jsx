@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
 import {
     SlidersHorizontal, GraduationCap, Trophy, Activity, Info, LogOut, CheckCircle2, XCircle, ChevronRight,
-    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles, ArrowUp,
+    Play, RotateCcw, Loader2, Rocket, Archive, Sparkles, ArrowUp, Power, FileText, Trash2, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useAppData } from "@/context/AppDataContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SettingsPage from "@/pages/Settings";
 import { AcademyModal } from "@/components/Academy";
+import { listPdfs, removePdf, PDFS_EVENT } from "@/lib/pdfRegistry";
 
 export default function Workspace() {
     const { isOwner, owner, logout } = useAuth();
     const { trades } = useAppData();
     const [health, setHealth] = useState(null);
     const [academyOpen, setAcademyOpen] = useState(false);
+    const [killed, setKilled] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -25,12 +27,38 @@ export default function Workspace() {
             setHealth(h);
         };
         load();
+        api.settings().then((s) => setKilled(!!s.manual_kill_switch)).catch(() => {});
         const t = setInterval(load, 15000);
         return () => clearInterval(t);
     }, []);
 
+    const toggleKill = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        try {
+            await api.updateSettings({ manual_kill_switch: !killed });
+            setKilled(!killed);
+            toast[!killed ? "error" : "success"](!killed ? "ANANTA STOPPED" : "ANANTA RESUMED",
+                { description: !killed ? "All new trades blocked until you resume." : "Trading resumes on next cycle." });
+        } catch (e) { toast.error("UPDATE FAILED", { description: String(e?.message || e) }); }
+    };
+
     return (
         <div className="space-y-5 pb-24" data-testid="workspace-page">
+            {/* persistent header — Stop Ananta pinned top-right across all sub-tabs */}
+            <div className="flex items-center justify-between gap-3" data-testid="workspace-header">
+                <div>
+                    <div className="font-heading font-medium text-lg text-atlas-text leading-tight">Workspace</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary uppercase tracking-wider mt-0.5">Analytics · engine · learning</div>
+                </div>
+                <button data-testid="workspace-stop-ananta" onClick={toggleKill}
+                    title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
+                        killed ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
+                            : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"}`}>
+                    <Power className="w-4 h-4" strokeWidth={2.5} />{killed ? "STOPPED · RESUME" : "STOP ANANTA"}
+                </button>
+            </div>
+
             <Tabs defaultValue="ai" className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
                     <WSTab value="ai" label="AI ANALYTICS" icon={Sparkles} />
@@ -44,6 +72,9 @@ export default function Workspace() {
                     </Section>
                     <Section icon={Archive} title="Closed Trades History" subtitle="Your completed round-trips">
                         <ClosedTradesHistory trades={trades} />
+                    </Section>
+                    <Section icon={FileText} title="Ananta PDFs" subtitle="Reports you've generated — open, analyse or delete">
+                        <AnantaPdfs isOwner={isOwner} />
                     </Section>
                 </TabsContent>
 
@@ -186,6 +217,47 @@ function ClosedTradesHistory({ trades }) {
     );
 }
 
+function AnantaPdfs({ isOwner }) {
+    const [pdfs, setPdfs] = useState(listPdfs());
+    useEffect(() => {
+        const h = () => setPdfs(listPdfs());
+        window.addEventListener(PDFS_EVENT, h);
+        return () => window.removeEventListener(PDFS_EVENT, h);
+    }, []);
+    const analyse = (p) => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        window.dispatchEvent(new CustomEvent("ananta:ask", { detail: { text: `Analyse my "${p.title}" report and give me the key takeaways, risks and one improvement.` } }));
+        toast.success("Ask Ananta is reviewing your report");
+    };
+    return (
+        <div className="panel border-atlas-border rounded-xl p-5" data-testid="ws-ananta-pdfs">
+            {pdfs.length === 0 ? (
+                <div className="py-6 text-center font-mono text-[11px] text-atlas-textTertiary" data-testid="ws-pdfs-empty">
+                    No PDFs yet. Generate one from Trade or complete a Research run — it&apos;ll appear here.
+                </div>
+            ) : (
+                <div className="rounded-lg border border-atlas-border divide-y divide-atlas-border max-h-72 overflow-y-auto atlas-scroll">
+                    {pdfs.map((p) => (
+                        <div key={p.id} className="px-3 py-2.5 flex items-center gap-3" data-testid="ws-pdf-row">
+                            <FileText className="w-4 h-4 text-atlas-cyan shrink-0" />
+                            <div className="min-w-0 flex-1">
+                                <div className="font-mono text-[12px] text-atlas-text truncate">{p.title}</div>
+                                <div className="font-mono text-[9px] text-atlas-textTertiary">{new Date(p.ts).toLocaleString()}</div>
+                            </div>
+                            <button data-testid="ws-pdf-open" onClick={() => window.open(p.url, "_blank")} title="Open / download"
+                                className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors"><ExternalLink className="w-3.5 h-3.5" /></button>
+                            <button data-testid="ws-pdf-analyse" onClick={() => analyse(p)} title="Ask Ananta to analyse"
+                                className="p-1.5 rounded-lg border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10 transition-colors"><Sparkles className="w-3.5 h-3.5" /></button>
+                            <button data-testid="ws-pdf-delete" onClick={() => { removePdf(p.id); toast.success("Removed from Ananta PDFs"); }} title="Delete"
+                                className="p-1.5 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-negative hover:border-atlas-negative/40 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function Section({ icon: Icon, title, subtitle, children }) {
     return (
         <div className="space-y-3">
@@ -260,6 +332,18 @@ function CompetitionDemo({ isOwner }) {
                     {busy === "reset" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} RESET
                 </button>
             </div>
+            {/* inline load output */}
+            {loaded && (
+                <div className="mt-3 rounded-lg border border-atlas-positive/30 bg-atlas-positive/5 p-3 grid grid-cols-3 gap-2 text-center" data-testid="ws-demo-output">
+                    <div><div className="font-heading text-lg text-atlas-text tabular-nums">{status.demo_trades ?? "—"}</div><div className="label-tag text-[8px]">Trades</div></div>
+                    <div><div className="font-heading text-lg text-atlas-text tabular-nums">{status.configs ?? status.demo_configs ?? "—"}</div><div className="label-tag text-[8px]">Configs</div></div>
+                    <div><div className="font-heading text-lg text-atlas-text tabular-nums">{(status.strategies?.length) ?? status.demo_strategies ?? 3}</div><div className="label-tag text-[8px]">Strategies</div></div>
+                </div>
+            )}
+            <button data-testid="ws-demo-howto" onClick={() => window.dispatchEvent(new Event("ananta:tour"))}
+                className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-cyan/40 font-mono text-[10px] tracking-widest py-2.5 transition-colors">
+                <FileText className="w-3.5 h-3.5" /> HOW TO USE ANANTA
+            </button>
         </div>
     );
 }
