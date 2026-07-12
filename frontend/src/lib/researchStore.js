@@ -44,11 +44,11 @@ export const useResearchStore = create((set, get) => ({
         }).catch(() => {});
     },
 
-    setStep: (step) => set({ step }),
-    setShowAllStrat: (v) => set({ showAllStrat: v }),
+    setStep: (v) => set((st) => ({ step: typeof v === "function" ? v(st.step) : v })),
+    setShowAllStrat: (v) => set((st) => ({ showAllStrat: typeof v === "function" ? v(st.showAllStrat) : v })),
     setPeriod: (period) => set({ period }),
     setTimeframe: (timeframe) => set({ timeframe }),
-    setRunMC: (v) => set({ runMC: v }),
+    setRunMC: (v) => set((st) => ({ runMC: typeof v === "function" ? v(st.runMC) : v })),
     toggleAsset: (s) => set((st) => ({ picked: st.picked.includes(s) ? st.picked.filter((x) => x !== s) : [...st.picked, s] })),
     toggleStrat: (k) => set((st) => ({ strat: st.strat.includes(k) ? st.strat.filter((x) => x !== k) : [...st.strat, k] })),
 

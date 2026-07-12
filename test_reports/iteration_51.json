@@ -1,0 +1,32 @@
+{
+  "summary": "Retest of iteration_50 regression on the Ananta web app (Research Wizard Zustand persistence). The setter fix in /app/frontend/src/lib/researchStore.js (setStep/setShowAllStrat/setRunMC now handle both raw values and function-updater callbacks) FIXES the previously-blocking regression. All requested flows are verified end-to-end on web at desktop viewport 1920x1080. NEXT/BACK navigation works across Strategy→Dataset→Period→Timeframe→Validation. Load-more strategies expands from 3→11 and back. Monte Carlo toggle flips state (className diff). Clicking RUN VALIDATION on step 4 transitions the wizard to phase='running' with visible progress bar and NEW RUN button. State PERSISTS across bottom-nav tab switch (Research→Strategy→Research): running phase, elapsed progress bar, and per-run summary line all survive unmount+remount thanks to the Zustand store. Clicking wizard-new-run during running resets wizard back to step 0. Strategy Center regression check passes — no chip-top_rated/top_internal/healthiest/trending/filter-button testIDs anywhere in the main library view; leaderboard and grid render correctly.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL (from prior iteration, still open): consider persisting the Zustand store to sessionStorage so that a full page reload also preserves in-flight run/results state. Current fix only handles in-memory component-unmount scenarios (tab switch), not hard refresh."
+  ],
+  "critical_code_review_comments": [
+    "researchStore.js setters now correctly branch on `typeof v === 'function'` — matches useState-style callsites in ResearchWizard.jsx. Root-cause fix from iteration_50 is verified working.",
+    "The run() polling loop still correctly aborts when phase !== 'running' (checked twice around the 1.5s poll), so reset() during a run remains race-safe.",
+    "init() guard (if (get().loaded) return) prevents refetching strategies/coverage after tab remount — persistence works because both store state AND the reference-data fetch are stable across remounts.",
+    "Minor: reset() sets phase='idle' but does NOT reset `strat`/`picked`/`period`/`timeframe`/`runMC` — probably intentional (user keeps their selections for a follow-up run). Worth confirming with product intent; if the intent of NEW RUN is a fully clean slate, add those fields to the reset payload."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "100% (all requested wizard + regression flows pass)"},
+  "test_credentials": "Owner login owner@ananta.ai (from /app/memory/test_credentials.md) — verified working on preview.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 51 confirms the setter fix (setStep/setShowAllStrat/setRunMC handling function updaters). All previously blocked flows now pass on web: full NEXT/BACK, MC toggle, load-more, run start, tab-switch persistence, NEW RUN reset, Strategy Center chip removal regression. Note: coverage/strategy assets are behind owner auth — to reproduce, POST /api/auth/login and stash the token in localStorage under key 'ananta_owner_token', then also set sessionStorage 'ananta_tour_seen'='1' to bypass the onboarding overlay. Only remaining nice-to-have is sessionStorage persistence for full-page-reload survival (mentioned in action items).",
+  "rca of the issue": "N/A — regression from iteration_50 (setStep/setShowAllStrat/setRunMC ignoring function-updater callbacks) is confirmed fixed. The store now does `set((st) => ({ step: typeof v === 'function' ? v(st.step) : v }))` (and equivalent for showAllStrat and runMC), matching useState-style callsites in ResearchWizard.jsx (setStep((s)=>s+1), etc)."
+}
