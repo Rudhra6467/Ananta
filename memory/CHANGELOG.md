@@ -1,3 +1,52 @@
+## 2026-07-12 — 5-Tab UI Sprint + Production P0 (validation/PDF) — web
+
+### P0 (production blockers) — fixed & verified (backend 5/5 pytest, iter48)
+- **Research validation failing on production**: fresh deploy containers have an EMPTY local
+  SQLite candle store (`/app/backend/data/historical_candles.db`), so every backtest cell returned
+  `insufficient_history`. Added `ensure_history()` on-demand CCXT backfill in the lab worker
+  (`lab/runner.py`) + a now-anchored `resolve_window` fallback. Validation now works in ANY env.
+- Added **30m/15m timeframe** support (`data_store.TF_MS`) + a `timeframe` field on lab runs
+  (default 1h). Verified: 15m/30m/1h runs all reach DONE with trades; lab PDF builds.
+- Report PDFs (`/report/full.pdf`, `/report/trades.pdf`) confirmed valid & public.
+  (The "red toast" was the validation PDF, blocked by the validation failure above.)
+
+### Phase 1 — Cockpit
+- SystemHealthChip moved into the header row next to Daily P&L (freed a row).
+- Regime full-width row removed → compact "(Market · Neutral/Bull/Bear)" tag next to Trade Life Cycle title.
+- "Active Watchlist" → "Watchlist"; row split 80/20 with a compact Charts button.
+- Leaderboard "Ranked by Net P&L" shows 2 rows + Show more.
+
+### Phase 2 — Trade
+- Removed Execution-Mode section. Added a persistent toolbar: Fresh Start / PDF / Refresh (left) +
+  Stop Ananta pinned top-right (renamed from Emergency Stop; same manual_kill_switch).
+- Orders subtab now opens with a single Start Order button → reveals the order form (with Back).
+
+### Phase 3 — Strategy
+- Compact "Strategy Center" title card with Search + "+ Add" pinned top-right (freed 2 rows).
+- Search opens a full-screen list of strategies by name (leaderboard-style).
+- Strategy leaderboard shows 2 + Show more.
+- Detail: rating/grade moved top-right by the name; Edit + Analyse buttons top; full-width
+  "Analyse this Strategy" bottom → params-choice modal (current vs edit) → StrategyValidationPanel.
+- Detail subtabs reduced to Overview / Parameters / AI / History (removed Validation/Research/Timeline).
+
+### Phase 4 — Research Lab
+- Persistent "Start Research" button top-right (remounts a fresh wizard).
+- Wizard: added a Timeframe step (1h default / 30m / 15m) after Period; strategy step shows 3 + load more.
+- On run completion the run's PDF is registered to Workspace › Ananta PDFs + a toast tells the user.
+- AI Analysis: TradingCoach tagline now just "Get a 7 day performance review"; AI Quant Analyst shows
+  1 suggestion + Load more; removed the Fresh/PDF/Refresh (Reports) block (now lives in Trade).
+
+### Phase 5 — Workspace
+- Persistent header with Stop Ananta top-right (freed a row).
+- New "Ananta PDFs" section (localStorage registry, `lib/pdfRegistry.js`) after Closed Trades:
+  open / Ask-Ananta-to-analyse / delete. Trade + Research PDFs auto-register with a "check Workspace" toast.
+- Competition Demo shows inline load output (trades/configs/strategies) + a "How to use Ananta" button.
+
+### Deferred within Phase 5 (backlog)
+- "Open Engine" button reposition next to the "Entry & Exit Engine" title lives inside Settings.jsx — needs its own pass.
+- "How to use Ananta" is currently the guided tour; a true downloadable how-to PDF needs a backend doc endpoint.
+
+
 ## 2026-07-11f — Launch Page refit + Sign Up funnel + Dashboard status toast (web)
 
 - **Launch Page** (`pages/LaunchPage.jsx`): refit to a single screen (`h-screen overflow-hidden`,
