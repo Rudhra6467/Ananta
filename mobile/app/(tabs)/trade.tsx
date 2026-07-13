@@ -227,10 +227,17 @@ function ManualOrder({ isOwner, symbols, prices, onDone }: { isOwner: boolean; s
       </View>
       {otype === "limit" && <View style={{ marginTop: spacing.sm }}><Field label="LIMIT PRICE" testID="manual-order-limit" value={limit} onChange={setLimit} placeholder="0.00" /></View>}
 
-      {/* 4. Action */}
-      <Pressable testID="manual-order-submit" disabled={busy} onPress={submit} style={[styles.submitBtn, side === "sell" && styles.submitSell, busy && { opacity: 0.5 }]}>
-        <Text style={[styles.submitTxt, { color: colors.bg }]}>{busy ? "PLACING…" : `${side.toUpperCase()} ${base(sym)}`}</Text>
-      </Pressable>
+      {/* 4. Action — Cancel + submit share one row */}
+      <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
+        <Pressable testID="manual-order-cancel" disabled={busy}
+          onPress={() => { setAmount("100"); setFraction("100"); setLimit(""); setSide("buy"); setOtype("market"); }}
+          style={[styles.cancelBtn, busy && { opacity: 0.5 }]}>
+          <Text style={styles.cancelTxt}>CANCEL ORDER</Text>
+        </Pressable>
+        <Pressable testID="manual-order-submit" disabled={busy} onPress={submit} style={[styles.submitBtnRow, side === "sell" && styles.submitSell, busy && { opacity: 0.5 }]}>
+          <Text style={[styles.submitTxt, { color: colors.bg }]}>{busy ? "PLACING…" : `${side.toUpperCase()} ${base(sym)}`}</Text>
+        </Pressable>
+      </View>
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <Pressable style={styles.pickerWrap} onPress={() => setPickerOpen(false)}>
@@ -382,6 +389,9 @@ const styles = StyleSheet.create({
   pickerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   input: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, paddingVertical: 10, paddingHorizontal: spacing.sm, fontSize: 15 },
   submitBtn: { marginTop: spacing.md, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, alignItems: "center" },
+  submitBtnRow: { flex: 1, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, alignItems: "center" },
+  cancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: 13, alignItems: "center" },
+  cancelTxt: { color: colors.textMuted, fontWeight: "800", letterSpacing: 1, fontSize: 13 },
   submitSell: { backgroundColor: colors.red },
   submitTxt: { fontWeight: "800", letterSpacing: 1, fontSize: 14 },
   moreBtn: { alignItems: "center", paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, marginTop: spacing.xs },

@@ -53,6 +53,13 @@ export default function StrategyCenter() {
     };
     useEffect(load, []);
 
+    // Tapping the "Strategy Center" header title returns to the library home.
+    useEffect(() => {
+        const onHome = (e) => { if (e.detail?.id === "strategies") { setSelected(null); setCatalogId(null); } };
+        window.addEventListener("ananta:tab-home", onHome);
+        return () => window.removeEventListener("ananta:tab-home", onHome);
+    }, []);
+
     if (selected) {
         return <StrategyDetail sKey={selected} schema={registry[selected]} metric={metrics?.[selected]}
             isOwner={isOwner} onBack={() => { setSelected(null); load(); }} onChanged={load} />;

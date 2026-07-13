@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable, Switch, ActivityIndicator, Linking, Alert, useWindowDimensions } from "react-native";
+import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
 import { TabView, TabBar } from "react-native-tab-view";
@@ -87,6 +88,7 @@ function Validate({ isOwner }: { isOwner: boolean }) {
   const [metrics, setMetrics] = useState<Record<string, any>>({});
   const [strat, setStrat] = useState("hunter");
   const [period, setPeriod] = useState("1m");
+  const [exitMethod, setExitMethod] = useState("atr");
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<any>(null);
 
@@ -99,18 +101,25 @@ function Validate({ isOwner }: { isOwner: boolean }) {
 
   const run = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
+    if (!strat) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      return Alert.alert("Select a strategy", "Pick an engine to research.");
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setPhase("running"); setResult(null);
     try {
-      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: [strat], exit_method: "fixed" });
+      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: [strat], exit_method: exitMethod });
       let done = false;
-      for (let i = 0; i < 40 && !done; i++) {
-        await new Promise((r) => setTimeout(r, 1500));
+      for (let i = 0; i < 200 && !done; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
         const d = await api.labRun(id);
         if (d.status === "DONE") { setResult(d.result); done = true; }
-        else if (d.status === "ERROR") throw new Error(d.error || "failed");
+        else if (d.status === "ERROR" || d.status === "FAILED") throw new Error(d.error || "failed");
       }
       if (!done) throw new Error("timed out");
       setPhase("done");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert("Research complete", "Your validation results are ready below.");
     } catch (e: any) { setPhase("error"); Alert.alert("Backtest failed", e?.message); }
   };
 
@@ -128,6 +137,8 @@ function Validate({ isOwner }: { isOwner: boolean }) {
         </View>
         <SectionLabel style={{ marginTop: spacing.md }}>2 · PERIOD (dataset: BTC)</SectionLabel>
         <Segmented testIDPrefix="wiz-period" options={PERIODS} value={period} onChange={setPeriod} />
+        <SectionLabel style={{ marginTop: spacing.md }}>3 · EXIT STRATEGY</SectionLabel>
+        <Segmented testIDPrefix="wiz-exit" options={[{ key: "atr", label: "ATR Trailing" }, { key: "fixed", label: "Fixed Target" }]} value={exitMethod} onChange={setExitMethod} />
         <Pressable testID="wizard-run" onPress={run} disabled={phase === "running"} style={styles.runBtn}>
           {phase === "running" ? <ActivityIndicator color={colors.bg} /> : <><Ionicons name="rocket" size={16} color={colors.bg} /><Text style={styles.runTxt}>RUN VALIDATION</Text></>}
         </Pressable>

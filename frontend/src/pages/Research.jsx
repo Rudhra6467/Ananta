@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, Brain, ChevronDown, Rocket } from "lucide-react";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useResearchStore } from "@/lib/researchStore";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
 import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
@@ -17,7 +19,6 @@ export default function Research() {
     const [strategies, setStrategies] = useState([]);
     const [sel, setSel] = useState("");
     const [advanced, setAdvanced] = useState(false);
-    const [researchKey, setResearchKey] = useState(0);
     const [sub, setSub] = useState(() => {
         const pending = localStorage.getItem("ananta_research_sub");
         if (pending) { localStorage.removeItem("ananta_research_sub"); return pending; }
@@ -33,15 +34,34 @@ export default function Research() {
         // deep-link from Workspace "Analyse" → jump to the Closed Trades sub-tab
         const onClosed = () => setSub("closed");
         window.addEventListener("ananta:research-closed", onClosed);
+        // Tapping the "Research Lab" header title returns to the Validate home (Choose Strategies).
+        const onHome = (e) => { if (e.detail?.id === "research") { setSub("validate"); useResearchStore.getState().reset(); } };
+        window.addEventListener("ananta:tab-home", onHome);
         // consume a pending deep-link target set just before this component mounted
         const pending = localStorage.getItem("ananta_research_sub");
         if (pending) { localStorage.removeItem("ananta_research_sub"); setSub(pending); }
-        return () => window.removeEventListener("ananta:research-closed", onClosed);
+        return () => {
+            window.removeEventListener("ananta:research-closed", onClosed);
+            window.removeEventListener("ananta:tab-home", onHome);
+        };
     }, []);
 
     const startResearch = () => {
-        setSub("validate");
-        setResearchKey((k) => k + 1); // fresh wizard from step 0
+        const store = useResearchStore.getState();
+        const onValidate = sub === "validate";
+        if (onValidate) {
+            // Already on the Validation tab — the wizard is mounted. If the user hasn't
+            // ticked any strategies yet, nudge them (with a device buzz) instead of no-op.
+            if (store.strat.length === 0) {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+                toast.info("Select at least one strategy", { description: "Tick one or more engines below to research." });
+            }
+            store.reset(); // back to Choose Strategies (step 0)
+        } else {
+            // From any other sub-tab → jump to Validation home (Choose Strategies).
+            setSub("validate");
+            store.reset();
+        }
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
@@ -63,7 +83,7 @@ export default function Research() {
                 </TabsList>
 
                 <TabsContent value="validate" className="m-0 space-y-4">
-                    <ResearchWizard key={researchKey} />
+                    <ResearchWizard />
 
                     <button data-testid="research-advanced-toggle" onClick={() => setAdvanced((v) => !v)}
                         className="flex items-center gap-2 font-mono text-[10px] tracking-widest text-atlas-textTertiary hover:text-atlas-text transition-colors">

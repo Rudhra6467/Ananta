@@ -3,6 +3,12 @@ import { toast } from "sonner";
 import api, { API } from "@/lib/api";
 import { registerPdf } from "@/lib/pdfRegistry";
 
+// Poll long enough for multi-strategy runs (backend budget is minutes, not the old ~90s).
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_ITERS = 240; // ~8 min per exit-method run
+
+const EXIT_LABELS = { atr: "ATR Trailing", fixed: "Fixed Target" };
+
 /**
  * Research Wizard store — lives outside React so an in-flight validation run
  * (and its results/step) survives tab navigation / component unmount.
@@ -17,10 +23,10 @@ export const useResearchStore = create((set, get) => ({
     period: "1m",
     timeframe: "1h",
     runMC: true,
+    exitMethods: ["atr"], // default ATR; user can add "fixed" (run both)
     phase: "idle", // idle | running | done | error
     progress: 0,
-    result: null,
-    mc: null,
+    runs: [], // [{ method, label, result, mc, id }]
     metrics: {},
     loaded: false,
 
@@ -51,28 +57,49 @@ export const useResearchStore = create((set, get) => ({
     setRunMC: (v) => set((st) => ({ runMC: typeof v === "function" ? v(st.runMC) : v })),
     toggleAsset: (s) => set((st) => ({ picked: st.picked.includes(s) ? st.picked.filter((x) => x !== s) : [...st.picked, s] })),
     toggleStrat: (k) => set((st) => ({ strat: st.strat.includes(k) ? st.strat.filter((x) => x !== k) : [...st.strat, k] })),
+    // At least one exit method must stay selected; default falls back to ATR.
+    toggleExitMethod: (m) => set((st) => {
+        const has = st.exitMethods.includes(m);
+        let next = has ? st.exitMethods.filter((x) => x !== m) : [...st.exitMethods, m];
+        if (next.length === 0) next = ["atr"];
+        return { exitMethods: next };
+    }),
+
+    _pollRun: async (id) => {
+        for (let i = 0; i < POLL_MAX_ITERS; i++) {
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+            if (get().phase !== "running") return null; // aborted
+            const d = await api.labRun(id);
+            const base = get()._progressBase || 0;
+            const span = get()._progressSpan || 90;
+            set({ progress: Math.max(base + 3, Math.min(base + span, base + (d.progress_pct || 0) / 100 * span)) });
+            if (d.status === "DONE") return d.result;
+            if (d.status === "ERROR" || d.status === "FAILED") throw new Error(d.error || "run failed");
+        }
+        throw new Error("timed out");
+    },
 
     run: async () => {
-        const { picked, period, timeframe, strat, runMC } = get();
-        set({ phase: "running", progress: 5, result: null, mc: null, step: 5 });
+        const { picked, period, timeframe, strat, runMC, exitMethods } = get();
+        const methods = exitMethods.length ? exitMethods : ["atr"];
+        set({ phase: "running", progress: 3, runs: [], step: 5 });
+        const collected = [];
         try {
-            const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe, strategies: strat, exit_method: "fixed" });
-            let done = false;
-            for (let i = 0; i < 60 && !done; i++) {
-                await new Promise((r) => setTimeout(r, 1500));
-                if (get().phase !== "running") return; // aborted via New Run / reset
-                const d = await api.labRun(id);
-                set({ progress: Math.max(10, Math.min(95, d.progress_pct || 0)) });
-                if (d.status === "DONE") { set({ result: d.result }); done = true; }
-                else if (d.status === "ERROR") { throw new Error(d.error || "run failed"); }
-            }
-            if (!done) throw new Error("timed out");
-            if (get().phase !== "running") return;
-            if (runMC) {
-                try { const m = await api.labMonteCarlo({ source: "run", run_id: id, iterations: 1500, ruin_threshold_pct: 25 }); if (m?.ok) set({ mc: m }); } catch { /* noop */ }
+            for (let mi = 0; mi < methods.length; mi++) {
+                const method = methods[mi];
+                set({ _progressBase: (mi / methods.length) * 100, _progressSpan: (1 / methods.length) * 90 });
+                const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe, strategies: strat, exit_method: method });
+                const result = await get()._pollRun(id);
+                if (get().phase !== "running") return;
+                let mc = null;
+                if (runMC) {
+                    try { const m = await api.labMonteCarlo({ source: "run", run_id: id, iterations: 1500, ruin_threshold_pct: 25 }); if (m?.ok) mc = m; } catch { /* noop */ }
+                }
+                collected.push({ method, label: EXIT_LABELS[method] || method, result, mc, id, url: `${API}/lab/runs/${id}/pdf` });
+                set({ runs: [...collected] });
+                registerPdf({ title: `Research · ${strat.join(" + ")} · ${timeframe} · ${EXIT_LABELS[method] || method}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
             }
             set({ progress: 100, phase: "done" });
-            registerPdf({ title: `Research · ${strat.join(" + ")} · ${timeframe}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
             toast.success("Research PDF ready", { description: "Check Workspace › AI Analytics · Ananta PDFs" });
         } catch (e) {
             if (get().phase !== "running") return;
@@ -81,5 +108,5 @@ export const useResearchStore = create((set, get) => ({
         }
     },
 
-    reset: () => set({ phase: "idle", step: 0, result: null, mc: null, progress: 0 }),
+    reset: () => set({ phase: "idle", step: 0, runs: [], progress: 0 }),
 }));

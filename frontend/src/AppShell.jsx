@@ -164,18 +164,28 @@ function TopHeader({ active, ready, isOwner, hidden }) {
             <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-3">
                 {/* Row 1 — brand + master controls (compact so the wordmark never clips) */}
                 <div className="flex items-center justify-between gap-2">
-                    <button
-                        type="button"
-                        data-testid="ananta-logo-btn"
-                        onClick={() => setAccountOpen(true)}
-                        title="Account & privacy"
-                        className="flex items-center gap-2 shrink-0 -ml-1.5 pl-1.5 pr-2.5 py-1 rounded-lg border border-transparent hover:border-atlas-border hover:bg-atlas-panelHover active:scale-95 transition-all group"
-                    >
-                        <span className="text-atlas-text" data-testid="ananta-emblem">
-                            <AnantaLogo className="h-7 w-7 md:h-9 md:w-9 select-none transition-transform group-hover:scale-105" />
-                        </span>
-                        <span className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</span>
-                    </button>
+                    <div className="flex items-center shrink-0 -ml-1.5">
+                        <button
+                            type="button"
+                            data-testid="ananta-logo-btn"
+                            onClick={() => setAccountOpen(true)}
+                            title="Account & privacy"
+                            className="flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border border-transparent hover:border-atlas-border hover:bg-atlas-panelHover active:scale-95 transition-all group"
+                        >
+                            <span className="text-atlas-text" data-testid="ananta-emblem">
+                                <AnantaLogo className="h-7 w-7 md:h-9 md:w-9 select-none transition-transform group-hover:scale-105" />
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            data-testid="ananta-wordmark-btn"
+                            onClick={() => window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "dashboard" } }))}
+                            title="Go to Cockpit"
+                            className="pl-1 pr-2.5 py-1 rounded-lg border border-transparent hover:border-atlas-border hover:bg-atlas-panelHover active:scale-95 transition-all"
+                        >
+                            <span className="font-heading font-semibold tracking-tight text-sm md:text-base leading-none text-atlas-text">Ananta</span>
+                        </button>
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                         <EnvironmentToggle />
                         <TradeHistoryPdfDialog />
@@ -256,7 +266,11 @@ function ContextInfo({ active, portfolio }) {
         <div data-testid={`context-${id}`} className="flex items-end justify-between gap-3">
             <div className="min-w-0">
                 <div className="label-tag text-[9px] text-atlas-cyan/70 mb-1" data-testid="page-question">{QUESTION[id]}</div>
-                <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none">{title}</h1>
+                <button type="button" data-testid={`context-home-${id}`} title={`Back to ${title} home`}
+                    onClick={() => window.dispatchEvent(new CustomEvent("ananta:tab-home", { detail: { id } }))}
+                    className="text-left active:scale-[0.99] transition-transform">
+                    <h1 className="font-heading font-light text-2xl md:text-3xl tracking-tight text-atlas-text leading-none hover:text-atlas-cyan transition-colors">{title}</h1>
+                </button>
             </div>
             {/* per-tab primary action(s) portal here — scrolls away with the header */}
             <div id="header-action-slot" data-testid="header-action-slot" className="shrink-0 flex items-center gap-2 pb-0.5" />

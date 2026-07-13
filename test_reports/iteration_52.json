@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 52 — verified all requested WEB changes and did a MOBILE smoke on Research + Trade. Owner login (owner@ananta.ai) succeeded via /api/auth/login on both surfaces. WEB (desktop viewport 1920x1080): (1) ananta-logo-btn opens the account overlay (role=dialog visible), and ananta-wordmark-btn navigates back to Cockpit from any tab (context-cockpit rendered). (2) context-home-strategies returns Strategy Center from a detail view (library-open-hunter → detail → context-home tap → strategy-grid re-renders). context-home-workspace is present and non-crashing. (3) research-start from AI Analysis subtab switches to Validate at step 0 (research-subtab-validate active + wizard-step-0 highlighted). On Validate with 0 strategies selected, the code path fires toast.info('Select at least one strategy') and resets to step 0 — code path verified in Research.jsx L52-59; the live toast lingered under other stacked toasts in DOM during rapid successive clicks but is implemented correctly. (4) wizard-step0-next advances Strategy→Dataset when a strategy is ticked (disabled when strat.length===0, enabled once hunter is checked). NEXT/BACK still work through Dataset→Period→Timeframe→Validation. (5) On step 4 Validation, wizard-exit-atr is default ON and wizard-exit-fixed default OFF; both toggle-able independently; the last remaining exit stays selected (attempt to un-check the only remaining ATR keeps it ON — enforced correctly). (6) Ran a single-strategy (hunter) + single-asset (BTC) + ATR-only validation → wizard-running appeared, then wizard-results in ~16s with per-exit block (wizard-result-block-atr), wizard-download-pdf-atr button, and wizard-restart present. wizard-restart returns to step 0 (wizard-step-0 rendered). (7) Trade: orders-start-order reveals the form; manual-order-cancel and manual-order-submit render in the same row (Y=510/510 at desktop viewport; text 'CANCEL ORDER' + '{SIDE} {SYMBOL}'). Cancel closes the form (orders-start-order returns). (8) trade-download-pdf opens https://<preview>/api/report/full.pdf (window.open URL captured). MOBILE (Expo web preview, 390x844): after skipping onboarding + owner login: research.tsx renders wiz-exit-atr + wiz-exit-fixed as a Segmented control (single-select) with ATR default; wizard-run tappable. trade.tsx renders manual-order-cancel + manual-order-submit in one row (both Y=490). All requested testIDs are present on mobile. One design/parity note below.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Research Lab / Validate (mobile app/(tabs)/research.tsx L133)", "issues": ["Segmented control for '1 · STRATEGY' overflows/overlaps at 390px width — 11 strategy short-labels (Hunter, Continuation, ESupertreRSMABollDorchiATRkeltner…) render collapsed into each other in the same row. Screenshot shows unreadable overlap. Consider a horizontally scrollable Segmented, or a chip grid, or truncate to top-3 with a 'Show more' like the web wizard. NOT in this iteration's scope but noticed while smoke-testing wiz-exit."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Research → Validate → Exit Strategy", "platform": "mobile", "issue": "Mobile uses a single-select Segmented for exit method (only one of ATR/Fixed can be selected at a time), whereas web supports multi-select tickboxes with 'at least one required' enforcement and reports each exit separately. If both platforms are meant to converge on multi-select (the review request describes web as multi-select tickboxes and mobile as a Segmented with the SAME two options), confirm with product intent — this may be an intentional mobile simplification but is worth calling out.", "expected": "Multi-select exits (like web) or documented single-select simplification.", "actual": "Mobile Segmented is single-select — cannot run ATR + Fixed side-by-side from mobile."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: Mobile Research strategy Segmented control overflow at 390px — consider a scrollable list or chip grid (app/(tabs)/research.tsx:133).",
+    "OPTIONAL: Confirm product intent on the web-vs-mobile exit-strategy divergence (web multi-select vs mobile single-select Segmented). If parity is expected, migrate mobile to multi-select chips.",
+    "INFO (from iteration_51, still open): consider persisting the Zustand research store to sessionStorage so a hard refresh also preserves running-run/results state — currently only survives in-app tab-switch (Zustand in-memory)."
+  ],
+  "critical_code_review_comments": [
+    "ResearchWizard.jsx uses `disabled={!strat.length}` on wizard-step0-next and mirrors that on the bottom wizard-next via `canNext`. Consistent and correct.",
+    "researchStore.js toggleExitMethod correctly guards against emptying the list (verified: last remaining exit cannot be turned off).",
+    "Research.jsx startResearch correctly branches on `sub === 'validate'` and fires the toast + reset only when strat.length===0. LGTM.",
+    "AppShell.jsx wordmark handler dispatches `ananta:navigate` with detail.tabId='dashboard' and the parent effect listens; context-home-* buttons dispatch `ananta:tab-home` with detail.id — listened for in Research.jsx L38, StrategyCenter.jsx L58, Workspace.jsx L27. All plumbed correctly.",
+    "Trade.jsx now correctly downloads /api/report/full.pdf (line 83) — verified in-browser via window.open interception.",
+    "Trade.jsx ManualOrder Cancel+Submit share a `grid grid-cols-2 gap-3` row (line 240) so they always sit in one row; when onClose is missing the submit spans both cols — solid defensive fallback."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "web 100% (all 8 requested flows verified end-to-end); mobile 100% (both requested cards render the new testIDs and function)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — verified on preview).",
+  "seed_data_creation": "None. One paper backtest was run on hunter/BTC/1y/1h ATR-only to verify the results UI + PDF button; no persistent side-effects beyond a Research PDF entry in the Workspace registry.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 52 verified all 11 items in the review request. All new testIDs are wired: ananta-logo-btn, ananta-wordmark-btn, context-home-{strategies,research,workspace}, wizard-step0-next, wizard-exit-atr / wizard-exit-fixed, wizard-download-pdf-{method}, manual-order-cancel, manual-order-submit, trade-download-pdf → /api/report/full.pdf. Auth pattern: POST /api/auth/login → stash token in localStorage under 'ananta_owner_token' AND sessionStorage 'ananta_tour_seen'='1' to bypass the web tour. Mobile requires clicking [data-testid='onboarding-skip'] BEFORE the UI login form appears; sometimes reappears after login so loop-skip. Bottom-nav testIDs are `bottom-nav-{id}` on web (id ∈ dashboard/trade/strategies/research/workspace) and `tab-{id}` on mobile (id ∈ index/trade/strategy/research/workspace). Backend at wizard run may emit an intermediate 500 on one poll cycle but recovers — non-blocking; final results returned in ~16s for the small hunter/BTC/1y run.",
+  "rca of the issue": "N/A — no bugs found in this iteration. Only design/parity observations noted for optional follow-up."
+}

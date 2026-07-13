@@ -19,6 +19,14 @@ export default function Workspace() {
     const [health, setHealth] = useState(null);
     const [academyOpen, setAcademyOpen] = useState(false);
     const [killed, setKilled] = useState(false);
+    const [wsTab, setWsTab] = useState("ai");
+
+    // Tapping the "Workspace" header title returns to the first (AI Analytics) tab home.
+    useEffect(() => {
+        const onHome = (e) => { if (e.detail?.id === "workspace") { setWsTab("ai"); window.scrollTo({ top: 0, behavior: "smooth" }); } };
+        window.addEventListener("ananta:tab-home", onHome);
+        return () => window.removeEventListener("ananta:tab-home", onHome);
+    }, []);
 
     useEffect(() => {
         const load = async () => {
@@ -56,7 +64,7 @@ export default function Workspace() {
                 </button>
             </HeaderActionPortal>
 
-            <Tabs defaultValue="ai" className="atlas-tabs">
+            <Tabs value={wsTab} onValueChange={setWsTab} className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
                     <WSTab value="ai" label="AI ANALYTICS" icon={Sparkles} />
                     <WSTab value="engine" label="ENGINE & RISK" icon={SlidersHorizontal} />

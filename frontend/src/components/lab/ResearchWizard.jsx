@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
-    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Clock,
+    TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Clock, Download,
 } from "lucide-react";
 import { useResearchStore } from "@/lib/researchStore";
+import { downloadPdf } from "@/lib/pdfRegistry";
 
 const PERIODS = [{ k: "1m", l: "1 Month" }, { k: "3m", l: "3 Months" }, { k: "6m", l: "6 Months" }, { k: "1y", l: "1 Year" }];
 const TIMEFRAMES = [{ k: "1h", l: "1 Hour" }, { k: "30m", l: "30 Min" }, { k: "15m", l: "15 Min" }];
@@ -16,9 +17,9 @@ const STEPS = [
 /** Guided, visual backtest+validation flow — Strategy → Dataset → Period → Validation → Run → Results. */
 export default function ResearchWizard() {
     const {
-        step, strategies, assets, strat, showAllStrat, picked, period, timeframe, runMC,
-        phase, progress, result, mc, metrics,
-        init, setStep, setShowAllStrat, setPeriod, setTimeframe, setRunMC,
+        step, strategies, assets, strat, showAllStrat, picked, period, timeframe, runMC, exitMethods,
+        phase, progress, runs, metrics,
+        init, setStep, setShowAllStrat, setPeriod, setTimeframe, setRunMC, toggleExitMethod,
         toggleAsset, toggleStrat, run, reset,
     } = useResearchStore();
 
@@ -53,7 +54,13 @@ export default function ResearchWizard() {
             {phase !== "running" && phase !== "done" && (
                 <div className="min-h-[180px]">
                     {step === 0 && (
-                        <StepShell title="Choose strategies" hint="Tick one or more engines to validate together.">
+                        <StepShell title="Choose strategies" hint="Tick one or more engines to validate together."
+                            action={
+                                <button data-testid="wizard-step0-next" onClick={() => setStep(1)} disabled={!strat.length}
+                                    className="flex items-center gap-1.5 rounded-lg bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-4 py-2 disabled:opacity-40 transition-colors">
+                                    NEXT <ChevronRight className="w-4 h-4" />
+                                </button>
+                            }>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="wizard-strategies">
                                 {(showAllStrat ? strategies : strategies.slice(0, 3)).map((s) => {
                                     const m = metrics[s.key];
@@ -125,8 +132,24 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 4 && (
-                        <StepShell title="Choose validation" hint="Backtest runs by default. Add Monte Carlo for a robustness stress-test.">
+                        <StepShell title="Choose validation" hint="Backtest runs by default. Pick your exit engine(s) and add Monte Carlo for a robustness stress-test.">
                             <div className="space-y-3" data-testid="wizard-validations">
+                                <div>
+                                    <div className="label-tag mb-2">EXIT STRATEGY</div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[{ k: "atr", t: "ATR Trailing", d: "Volatility-adaptive trailing stop (default)" }, { k: "fixed", t: "Fixed Target", d: "Fixed $ profit target / stop loss" }].map((em) => {
+                                            const on = exitMethods.includes(em.k);
+                                            return (
+                                                <button key={em.k} data-testid={`wizard-exit-${em.k}`} onClick={() => toggleExitMethod(em.k)}
+                                                    className={`panel border rounded-xl p-3.5 flex items-start gap-2.5 text-left transition-colors ${on ? "border-atlas-cyan bg-atlas-cyan/5" : "border-atlas-border hover:border-atlas-textTertiary"}`}>
+                                                    <span className={`mt-0.5 w-4 h-4 rounded grid place-items-center border shrink-0 ${on ? "bg-atlas-cyan border-atlas-cyan text-atlas-bg" : "border-atlas-textTertiary"}`}>{on && <Check className="w-3 h-3" />}</span>
+                                                    <div><div className="font-heading text-[13px] text-atlas-text">{em.t}</div><div className="font-mono text-[9px] text-atlas-textTertiary mt-0.5">{em.d}</div></div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="font-mono text-[9px] text-atlas-textTertiary mt-1.5">{exitMethods.length === 2 ? "Both selected — Ananta runs and reports each exit separately." : "Tick both to compare exits side-by-side."}</div>
+                                </div>
                                 <label className="panel border-atlas-cyan/40 bg-atlas-cyan/5 rounded-xl p-4 flex items-center gap-3 opacity-90">
                                     <span className="w-5 h-5 rounded grid place-items-center bg-atlas-cyan text-atlas-bg"><Check className="w-3.5 h-3.5" /></span>
                                     <div><div className="font-heading text-sm text-atlas-text">Historical Backtest</div><div className="font-mono text-[10px] text-atlas-textTertiary">Always included</div></div>
@@ -151,7 +174,7 @@ export default function ResearchWizard() {
                     <div className="w-full max-w-md h-2 rounded-full bg-atlas-panel overflow-hidden">
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframe}</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframe} · {exitMethods.map((m) => m.toUpperCase()).join(" + ")} exit</div>
                     <button data-testid="wizard-new-run" onClick={reset}
                         className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
                         <RotateCcw className="w-3.5 h-3.5" /> NEW RUN
@@ -160,7 +183,15 @@ export default function ResearchWizard() {
             )}
 
             {/* results */}
-            {phase === "done" && result && <Results result={result} mc={mc} onReset={reset} />}
+            {phase === "done" && runs.length > 0 && (
+                <div className="space-y-6" data-testid="wizard-results">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-atlas-cyan" /><span className="font-heading text-lg text-atlas-text">Results</span></div>
+                        <button data-testid="wizard-restart" onClick={reset} className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-3 py-1.5 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text"><RotateCcw className="w-3.5 h-3.5" />NEW RUN</button>
+                    </div>
+                    {runs.map((r) => <Results key={r.method} runItem={r} showLabel={runs.length > 1} />)}
+                </div>
+            )}
             {phase === "error" && (
                 <div className="min-h-[120px] flex flex-col items-center justify-center gap-3 py-6" data-testid="wizard-error">
                     <div className="font-heading text-base text-atlas-negative">Backtest failed.</div>
@@ -192,27 +223,50 @@ export default function ResearchWizard() {
     );
 }
 
-function StepShell({ title, hint, children }) {
+function StepShell({ title, hint, action, children }) {
     return (
         <div>
-            <div className="mb-4"><div className="font-heading text-lg text-atlas-text">{title}</div><div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{hint}</div></div>
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div><div className="font-heading text-lg text-atlas-text">{title}</div><div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{hint}</div></div>
+                {action}
+            </div>
             {children}
         </div>
     );
 }
 
-function Results({ result, mc, onReset }) {
+function DownloadPdfButton({ runItem }) {
+    const [prog, setProg] = useState(null); // null idle | "prep" | 0-100
+    const busy = prog !== null;
+    const onClick = async () => {
+        setProg("prep");
+        try {
+            await downloadPdf(runItem.url, `Research_${runItem.method}_report.pdf`, (pct) => setProg(pct == null ? "prep" : pct));
+        } catch { /* toast handled by caller */ }
+        finally { setProg(null); }
+    };
+    return (
+        <button data-testid={`wizard-download-pdf-${runItem.method}`} onClick={onClick} disabled={busy}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-3 py-1.5 font-mono text-[10px] tracking-widest font-bold text-atlas-cyan hover:bg-atlas-cyan/20 disabled:opacity-60 transition-colors">
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            {busy ? (prog === "prep" ? "PREPARING…" : `${prog}%`) : "DOWNLOAD PDF"}
+        </button>
+    );
+}
+
+function Results({ runItem, showLabel }) {
+    const { result, mc, label } = runItem;
     const per = result?.per_symbol || {};
     const rows = Object.entries(per).filter(([, m]) => !m.error);
     const avg = (k) => rows.length ? rows.reduce((a, [, m]) => a + (Number(m[k]) || 0), 0) / rows.length : 0;
     const pf = avg("profit_factor"), ret = avg("total_return_pct");
     const verdict = pf >= 1.5 && ret > 0 ? { t: "ROBUST", cls: "text-atlas-positive" } : pf >= 1.0 ? { t: "MARGINAL", cls: "text-atlas-warning" } : { t: "WEAK", cls: "text-atlas-negative" };
     return (
-        <div className="space-y-4" data-testid="wizard-results">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-atlas-cyan" /><span className="font-heading text-lg text-atlas-text">Results</span>
-                    <span className={`font-mono text-[11px] font-bold tracking-widest ${verdict.cls}`}>· {verdict.t}</span></div>
-                <button data-testid="wizard-restart" onClick={onReset} className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-3 py-1.5 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text"><RotateCcw className="w-3.5 h-3.5" />NEW RUN</button>
+        <div className="space-y-4" data-testid={`wizard-result-block-${runItem.method}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+                {showLabel && <span className="font-mono text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan" data-testid={`wizard-result-exit-${runItem.method}`}>{label} Exit</span>}
+                <span className={`font-mono text-[11px] font-bold tracking-widest ${verdict.cls}`}>· {verdict.t}</span>
+                <DownloadPdfButton runItem={runItem} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="wizard-result-cards">
                 {rows.map(([sym, m]) => (

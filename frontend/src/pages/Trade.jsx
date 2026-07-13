@@ -80,9 +80,9 @@ export default function Trade() {
     };
 
     const downloadPdf = () => {
-        window.open(`${API}/report/trades.pdf`, "_blank");
-        registerPdf({ title: "Trade Report", type: "trades", url: `${API}/report/trades.pdf` });
-        toast.success("PDF DOWNLOAD STARTED", { description: "Saved to Workspace › AI Analytics · Ananta PDFs" });
+        window.open(`${API}/report/full.pdf`, "_blank");
+        registerPdf({ title: "Ananta Full Report", type: "full", url: `${API}/report/full.pdf` });
+        toast.success("PDF DOWNLOAD STARTED", { description: "Trades + full analysis · saved to Workspace › AI Analytics · Ananta PDFs" });
     };
 
     return (
@@ -236,11 +236,19 @@ function ManualOrder({ isOwner, symbols, snapshots, onDone, onClose }) {
                 <Seg options={[["MARKET", "MARKET"], ["LIMIT", "LIMIT"]]} value={otype} onChange={setOtype} testid="manual-order-type" />
             </div>
             {otype === "LIMIT" && <div className="mt-3"><NumField label="LIMIT PRICE" value={limit} onChange={setLimit} testid="manual-order-limit" /></div>}
-            {/* 4. Action */}
-            <button data-testid="manual-order-submit" disabled={busy} onClick={submit}
-                className={`mt-4 w-full rounded-lg py-3 font-mono text-xs font-bold tracking-widest transition-colors ${side === "SELL" ? "bg-atlas-negative text-white hover:opacity-90" : "bg-atlas-cyan text-black hover:opacity-90"} disabled:opacity-50`}>
-                {busy ? "PLACING…" : `${side} ${(activeSym || "").split("/")[0]}`}
-            </button>
+            {/* 4. Action — Cancel + submit share one row */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+                {onClose && (
+                    <button data-testid="manual-order-cancel" onClick={onClose} disabled={busy}
+                        className="w-full rounded-lg py-3 font-mono text-xs font-bold tracking-widest border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary disabled:opacity-50 transition-colors">
+                        CANCEL ORDER
+                    </button>
+                )}
+                <button data-testid="manual-order-submit" disabled={busy} onClick={submit}
+                    className={`w-full rounded-lg py-3 font-mono text-xs font-bold tracking-widest transition-colors ${onClose ? "" : "col-span-2"} ${side === "SELL" ? "bg-atlas-negative text-white hover:opacity-90" : "bg-atlas-cyan text-black hover:opacity-90"} disabled:opacity-50`}>
+                    {busy ? "PLACING…" : `${side} ${(activeSym || "").split("/")[0]}`}
+                </button>
+            </div>
         </div>
     );
 }
