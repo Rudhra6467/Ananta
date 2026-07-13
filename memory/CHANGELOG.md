@@ -876,3 +876,16 @@ Turned the Strategy Center into an "App Store for trading strategies" (catalog-f
 - **Research Wizard persistence** (`components/lab/ResearchWizard.jsx` + new `lib/researchStore.js`): moved wizard state + polling loop into a Zustand store so an in-flight validation run (step/progress/result/mc) survives tab navigation / unmount. Added "New Run" (`wizard-new-run`) button in the running view. Setters handle both raw values and function-updater callbacks.
 - **Strategy Center** (`pages/StrategyCenter.jsx`): removed the filter chips row (Top Rated / Top Internal / Healthiest / Trending) and the main "Filter" button per user request. Search-screen filter drawer retained. Cleaned up `chip` state + `CHIPS` const + unused `Flame` import.
 - Testing agent iter 50 caught a setter regression (function-updater not handled) → fixed; iter 51 all green (web-only). NOTE: persistence is in-memory only; a hard page reload still resets the run (sessionStorage persistence is optional backlog).
+
+## 2026-07-13 — Research/Trade/Header batch (web + partial mobile parity)
+WEB (/app/frontend):
+- Header: split Ananta logo (→ Account overlay) vs wordmark (→ Cockpit from anywhere). Page title on Strategy/Research/Workspace now acts as a HOME button (dispatches `ananta:tab-home`; each page resets to its home view).
+- Research: `Start Research` now guides to Validate → Choose Strategies (step 0); if already on Validate with no strategies it toasts + device-vibrates. Added inline NEXT beside the Choose-Strategies list. Added EXIT STRATEGY tickboxes (ATR default, Fixed; both allowed → runs & reports each exit separately). Longer poll window (240×2s) fixes the prod bug where >2 strategies exceeded the old ~90s frontend timeout ("can't load data"). Inline DOWNLOAD PDF in the results view; toast points to Workspace.
+- Trade: order form now has CANCEL ORDER beside the submit (one row). Toolbar PDF switched from trades-only (/report/trades.pdf) back to the full report (/report/full.pdf) = trades + analysis.
+MOBILE (/app/mobile) parity:
+- Research Validate: added EXIT STRATEGY segmented (ATR default / Fixed), haptic feedback on run, longer poll (200×2s), success alert.
+- Trade: CANCEL ORDER button beside submit (resets the form).
+NOTES:
+- Counterfactual Engine "empty" on production is a data-maturity state (needs resolved counterfactuals over 24h/72h/7d), not a code bug — the panel renders correctly once data resolves.
+- Parity gap: mobile Exit Strategy is single-select (web is multi-select tickboxes with "both"). Flagged for follow-up.
+- Testing agent iter 52: web 8/8 + mobile 2/2 green.
