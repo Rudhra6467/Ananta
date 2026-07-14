@@ -144,7 +144,17 @@ function Validate({ isOwner }: { isOwner: boolean }) {
     <View>
       <Card style={{ marginBottom: spacing.md }} testID="research-wizard">
         <SectionLabel>1 · STRATEGY</SectionLabel>
-        <Segmented testIDPrefix="wiz-strat" options={strategies.map((s) => ({ key: s.key, label: s.name.split(" ")[0] }))} value={strat} onChange={setStrat} />
+        <View style={styles.chipWrap} testID="wiz-strat-grid">
+          {strategies.map((s) => {
+            const on = strat === s.key;
+            return (
+              <Pressable key={s.key} testID={`wiz-strat-${s.key}`} onPress={() => setStrat(s.key)}
+                style={[styles.chip, on && styles.chipOn]}>
+                <Text style={[styles.chipTxt, on && styles.chipTxtOn]} numberOfLines={1}>{s.name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View style={styles.statusLine} testID="research-strat-status">
           <View style={[styles.statusDot, { backgroundColor: selOn ? colors.teal : colors.textFaint }]} />
           <Text style={type.small}>Bot Status: <Text style={{ color: selOn ? colors.teal : colors.textMuted, fontWeight: "700" }}>{selOn ? "ON · live on engine" : "OFF"}</Text></Text>
@@ -361,6 +371,11 @@ const styles = StyleSheet.create({
   indicator: { backgroundColor: colors.teal, height: 2.5, borderRadius: 2 },
   tabLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.2, textTransform: "none" },
   runBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.md },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: spacing.xs },
+  chip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, maxWidth: "100%" },
+  chipOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  chipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 12 },
+  chipTxtOn: { color: colors.teal },
   exitCard: { flex: 1, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.sm + 2 },
   exitCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
   check: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: colors.textFaint, alignItems: "center", justifyContent: "center", marginBottom: 6 },

@@ -892,4 +892,4 @@ NOTES:
 
 ## 2026-07-13 (b) — Mobile exit-strategy full parity
 - Mobile Research Validate: replaced single-select exit Segmented with multi-select TICKBOXES (ATR default, Fixed; both allowed, min-1 guard). Runs one backtest per selected exit and renders a separate result block + exit tag per method — matches web. Testing agent iter 53 green (both + single + min-1 + Trade regression).
-- Known open (pre-existing, out of scope): mobile '1 · STRATEGY' Segmented overflows at 390px with 11 engines.
+- Mobile Research "1 · STRATEGY" selector converted from overflowing Segmented to a wrapping, tappable chip grid (all 11 engines reachable).
