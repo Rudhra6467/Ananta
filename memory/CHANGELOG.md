@@ -889,3 +889,7 @@ NOTES:
 - Counterfactual Engine "empty" on production is a data-maturity state (needs resolved counterfactuals over 24h/72h/7d), not a code bug — the panel renders correctly once data resolves.
 - Parity gap: mobile Exit Strategy is single-select (web is multi-select tickboxes with "both"). Flagged for follow-up.
 - Testing agent iter 52: web 8/8 + mobile 2/2 green.
+
+## 2026-07-13 (b) — Mobile exit-strategy full parity
+- Mobile Research Validate: replaced single-select exit Segmented with multi-select TICKBOXES (ATR default, Fixed; both allowed, min-1 guard). Runs one backtest per selected exit and renders a separate result block + exit tag per method — matches web. Testing agent iter 53 green (both + single + min-1 + Trade regression).
+- Known open (pre-existing, out of scope): mobile '1 · STRATEGY' Segmented overflows at 390px with 11 engines.
