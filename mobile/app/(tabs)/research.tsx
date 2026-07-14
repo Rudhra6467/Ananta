@@ -83,14 +83,16 @@ export default function Research() {
   );
 }
 
+const EXIT_LABELS: Record<string, string> = { atr: "ATR Trailing", fixed: "Fixed Target" };
+
 function Validate({ isOwner }: { isOwner: boolean }) {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<Record<string, any>>({});
   const [strat, setStrat] = useState("hunter");
   const [period, setPeriod] = useState("1m");
-  const [exitMethod, setExitMethod] = useState("atr");
+  const [exitMethods, setExitMethods] = useState<string[]>(["atr"]);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [result, setResult] = useState<any>(null);
+  const [runs, setRuns] = useState<{ method: string; label: string; result: any }[]>([]);
 
   useEffect(() => {
     api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
@@ -99,32 +101,44 @@ function Validate({ isOwner }: { isOwner: boolean }) {
   const selMetric = metrics[strat];
   const selOn = !!selMetric?.enabled && selMetric?.status !== "DISABLED" && selMetric?.status !== "ERROR";
 
+  // At least one exit method must stay selected; default falls back to ATR.
+  const toggleExit = (m: string) => setExitMethods((prev) => {
+    const next = prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m];
+    return next.length === 0 ? ["atr"] : next;
+  });
+
+  const pollRun = async (id: string) => {
+    for (let i = 0; i < 200; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const d = await api.labRun(id);
+      if (d.status === "DONE") return d.result;
+      if (d.status === "ERROR" || d.status === "FAILED") throw new Error(d.error || "failed");
+    }
+    throw new Error("timed out");
+  };
+
   const run = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
     if (!strat) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       return Alert.alert("Select a strategy", "Pick an engine to research.");
     }
+    const methods = exitMethods.length ? exitMethods : ["atr"];
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setPhase("running"); setResult(null);
+    setPhase("running"); setRuns([]);
     try {
-      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: [strat], exit_method: exitMethod });
-      let done = false;
-      for (let i = 0; i < 200 && !done; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const d = await api.labRun(id);
-        if (d.status === "DONE") { setResult(d.result); done = true; }
-        else if (d.status === "ERROR" || d.status === "FAILED") throw new Error(d.error || "failed");
+      const collected: { method: string; label: string; result: any }[] = [];
+      for (const method of methods) {
+        const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: [strat], exit_method: method });
+        const result = await pollRun(id);
+        collected.push({ method, label: EXIT_LABELS[method] || method, result });
+        setRuns([...collected]);
       }
-      if (!done) throw new Error("timed out");
       setPhase("done");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       Alert.alert("Research complete", "Your validation results are ready below.");
     } catch (e: any) { setPhase("error"); Alert.alert("Backtest failed", e?.message); }
   };
-
-  const per = result?.per_symbol || {};
-  const rows = Object.entries(per).filter(([, m]: any) => !m.error);
 
   return (
     <View>
@@ -138,7 +152,20 @@ function Validate({ isOwner }: { isOwner: boolean }) {
         <SectionLabel style={{ marginTop: spacing.md }}>2 · PERIOD (dataset: BTC)</SectionLabel>
         <Segmented testIDPrefix="wiz-period" options={PERIODS} value={period} onChange={setPeriod} />
         <SectionLabel style={{ marginTop: spacing.md }}>3 · EXIT STRATEGY</SectionLabel>
-        <Segmented testIDPrefix="wiz-exit" options={[{ key: "atr", label: "ATR Trailing" }, { key: "fixed", label: "Fixed Target" }]} value={exitMethod} onChange={setExitMethod} />
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          {[{ k: "atr", t: "ATR Trailing", d: "Volatility-adaptive (default)" }, { k: "fixed", t: "Fixed Target", d: "Fixed $ target / stop" }].map((em) => {
+            const on = exitMethods.includes(em.k);
+            return (
+              <Pressable key={em.k} testID={`wiz-exit-${em.k}`} onPress={() => toggleExit(em.k)}
+                style={[styles.exitCard, on && styles.exitCardOn]}>
+                <View style={[styles.check, on && styles.checkOn]}>{on && <Ionicons name="checkmark" size={12} color={colors.bg} />}</View>
+                <Text style={[type.body, { fontWeight: "700", fontSize: 13 }]}>{em.t}</Text>
+                <Text style={[type.small, { fontSize: 10, marginTop: 2 }]}>{em.d}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[type.small, { fontSize: 10, marginTop: 6 }]}>{exitMethods.length === 2 ? "Both selected — each exit is run & reported separately." : "Tick both to compare exits side-by-side."}</Text>
         <Pressable testID="wizard-run" onPress={run} disabled={phase === "running"} style={styles.runBtn}>
           {phase === "running" ? <ActivityIndicator color={colors.bg} /> : <><Ionicons name="rocket" size={16} color={colors.bg} /><Text style={styles.runTxt}>RUN VALIDATION</Text></>}
         </Pressable>
@@ -146,22 +173,31 @@ function Validate({ isOwner }: { isOwner: boolean }) {
       {phase === "running" && <Card style={{ alignItems: "center", paddingVertical: spacing.lg }}><ActivityIndicator color={colors.teal} /><Text style={[type.bodyMuted, { marginTop: spacing.sm }]}>Running backtest…</Text></Card>}
       {phase === "done" && (
         <View testID="wizard-results">
-          {rows.length === 0 ? <Card><Text style={type.bodyMuted}>No results.</Text></Card> : rows.map(([sym, m]: any) => (
-            <Card key={sym} style={{ marginBottom: spacing.sm }}>
-              <Text style={type.h3}>{base(sym)}</Text>
-              <View style={styles.grid}>
-                <Mini label="Return" value={`${(m.total_return_pct ?? 0).toFixed(1)}%`} color={(m.total_return_pct ?? 0) >= 0 ? colors.teal : colors.red} />
-                <Mini label="Win Rate" value={`${(m.win_rate_pct ?? 0).toFixed(0)}%`} />
-                <Mini label="Profit Factor" value={(m.profit_factor ?? 0).toFixed(2)} />
-                <Mini label="Max DD" value={`${(m.max_drawdown_pct ?? 0).toFixed(1)}%`} color={colors.red} />
+          {runs.length === 0 ? <Card><Text style={type.bodyMuted}>No results.</Text></Card> : runs.map((rn) => {
+            const rows = Object.entries(rn.result?.per_symbol || {}).filter(([, m]: any) => !m.error);
+            return (
+              <View key={rn.method} testID={`wizard-result-block-${rn.method}`} style={{ marginBottom: spacing.md }}>
+                {runs.length > 1 && <View style={styles.exitTag} testID={`wizard-result-exit-${rn.method}`}><Text style={styles.exitTagTxt}>{rn.label} Exit</Text></View>}
+                {rows.length === 0 ? <Card><Text style={type.bodyMuted}>No results.</Text></Card> : rows.map(([sym, m]: any) => (
+                  <Card key={sym} style={{ marginBottom: spacing.sm }}>
+                    <Text style={type.h3}>{base(sym)}</Text>
+                    <View style={styles.grid}>
+                      <Mini label="Return" value={`${(m.total_return_pct ?? 0).toFixed(1)}%`} color={(m.total_return_pct ?? 0) >= 0 ? colors.teal : colors.red} />
+                      <Mini label="Win Rate" value={`${(m.win_rate_pct ?? 0).toFixed(0)}%`} />
+                      <Mini label="Profit Factor" value={(m.profit_factor ?? 0).toFixed(2)} />
+                      <Mini label="Max DD" value={`${(m.max_drawdown_pct ?? 0).toFixed(1)}%`} color={colors.red} />
+                    </View>
+                  </Card>
+                ))}
               </View>
-            </Card>
-          ))}
+            );
+          })}
         </View>
       )}
     </View>
   );
 }
+
 
 function Coach({ isOwner }: { isOwner: boolean }) {
   const [aiOn, setAiOn] = useState(false);
@@ -325,6 +361,12 @@ const styles = StyleSheet.create({
   indicator: { backgroundColor: colors.teal, height: 2.5, borderRadius: 2 },
   tabLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.2, textTransform: "none" },
   runBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.md },
+  exitCard: { flex: 1, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.sm + 2 },
+  exitCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  check: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: colors.textFaint, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  checkOn: { backgroundColor: colors.teal, borderColor: colors.teal },
+  exitTag: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.tealDim, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: spacing.sm },
+  exitTagTxt: { color: colors.teal, fontWeight: "800", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase" },
   statusLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
 

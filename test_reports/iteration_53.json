@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 53 — MOBILE ONLY (frontend). Verified the new multi-select EXIT STRATEGY tickboxes on Research → Validate in the Expo web preview (390x844). Owner login (owner@ananta.ai) via /api/auth/login succeeded; onboarding skipped; navigated Cockpit → Research (tab-research) → Validate (research-tab-validate default at index 0). ALL 6 requested checks GREEN: (1) EXIT STRATEGY renders two tickbox cards side-by-side — 'wiz-exit-atr' default ON (teal border + teal-glow background rgba(20,224,201,0.12)) and 'wiz-exit-fixed' default OFF (dark border rgb(28,37,54), transparent bg). (2) Tapping each toggles independently — Fixed OFF→ON turns bg teal-glow while ATR stays ON; ATR ON→OFF turns bg transparent while Fixed stays ON. (3) With only Fixed remaining, tapping Fixed OFF does NOT clear the list — state falls back to ATR ON, Fixed OFF (matches `toggleExit` guard `next.length===0?['atr']:next` at research.tsx L105-108). Screenshot confirms. (4) Both selected + RUN VALIDATION (wizard-run) → running spinner then results in ~36s: TWO result blocks visible — 'wizard-result-block-atr' with 'wizard-result-exit-atr' tag reading 'ATR TRAILING EXIT' and BTC metrics card (Return -1.3%, Win 15%, PF 0.13, DD 0.7%), and 'wizard-result-block-fixed' with 'wizard-result-exit-fixed' tag reading 'FIXED TARGET EXIT' and BTC metrics card (Return -0.7%, Win 23%, PF 0.42, DD 0.5%). (5) Only ATR selected + RUN → in ~18s a SINGLE 'wizard-result-block-atr' rendered; 'wizard-result-block-fixed' absent AND 'wizard-result-exit-atr' tag absent (correctly hidden because `runs.length>1` gate at research.tsx L180). (6) Trade regression: after tapping 'orders-start-order', 'manual-order-cancel' (x=33,y=490,w=159) and 'manual-order-submit' (x=200,y=490,w=157) render in the SAME row (identical y and height=43) at 390px. All 6 items GREEN.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Research Lab / Validate — '1 · STRATEGY' Segmented control (research.tsx:147)", "issues": ["Still overflows at 390px: all 11 strategy short-labels (Hunter, Continuation, ESupertreRSMABollDorchi ATR Keltner …) collapse into each other, unreadable. Unchanged from iter 52 — noted again while smoke-testing the new exit tickboxes. NOT in this iteration's scope; consider a horizontally scrollable Segmented or chip grid in a follow-up."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL / pre-existing: Fix '1 · STRATEGY' Segmented overflow at 390px in /app/mobile/app/(tabs)/research.tsx:147 (make horizontally scrollable or use chip grid). Not blocking; carried over from iter 52."
+  ],
+  "critical_code_review_comments": [
+    "research.tsx toggleExit (L105-108) correctly enforces min-1 with fallback to ['atr'] — verified live: after unchecking the last remaining Fixed, state resets to ATR ON.",
+    "research.tsx run loop (L131-136) sequentially awaits pollRun per exit method and appends to `runs` — this gives per-exit blocks. Note: a shared results container replaces `runs` at start of each new run (`setRuns([])` L128), so previous run's blocks are cleared before the new run begins — correct behavior verified.",
+    "research.tsx exit-tag render is gated by `runs.length > 1` (L180) — matches web parity: no tag needed for a single result block. Verified live (ATR-only run showed no tag).",
+    "Two sequential mobile runs (ATR then Fixed) took ~36s total vs web's ~16s single-run reference (iter 52). Acceptable, but worth noting main agent may want to add per-block progress indication (currently the shared 'Running backtest…' card doesn't say '1 of 2 complete').",
+    "labCreateRun payload uses period='1m' (default from state) and single symbol BTC/USD — same shape as web. LGTM."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "mobile 100% — all 6 requested items GREEN"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — verified on preview).",
+  "seed_data_creation": "None persistent. Two paper backtests (hunter/BTC/1m ATR+Fixed, then hunter/BTC/1m ATR) were executed on preview — no persistent side-effects.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile Research → Validate now supports multi-exit selection identical to web (iter 52). Bottom-nav testIDs: tab-{index,trade,strategy,research,workspace}. Sub-tab testIDs on Research: research-tab-{validate,ai,closed,reports,optimize}. Exit tickboxes: wiz-exit-atr, wiz-exit-fixed. Run button: wizard-run. Result containers: wizard-results wraps per-method wizard-result-block-{method} blocks; wizard-result-exit-{method} tag is only shown when runs.length>1. Login flow: onboarding-skip → login-email-input / login-password-input / login-submit-btn. Onboarding may reappear post-login; loop the skip. During BOTH-exit run mobile takes ~35-40s (two sequential backtests), ATR-only ~18s.",
+  "rca of the issue": "N/A — no bugs found."
+}
