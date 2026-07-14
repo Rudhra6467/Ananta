@@ -907,3 +907,10 @@ MOBILE (/app/mobile) parity:
 - Workspace SYSTEM card removed; Account screen shows System Health (Backend API / Trading Mode / Live Gate).
 - Note: RN Alert.alert is a no-op on Expo WEB preview (works on native) — candidate for a toast wrapper later.
 Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response verified.
+
+## 2026-07-14 (b) — Edit-existing → Test this strategy flow (web + mobile)
+- Strategy Center EDIT sub-tab: added a dropdown (web) / tappable list (mobile) of existing strategies. Selecting opens that strategy's editable detail page.
+- Strategy detail page: added "TEST THIS STRATEGY" button at the bottom (below Analyse). Navigates into the Research Lab Validate flow (dataset → period → timeframe → exit) with the strategy pre-selected.
+  - Web: research store strat=[sKey] + step=1, dispatch ananta:navigate→research, localStorage ananta_research_sub=validate.
+  - Mobile: router param ?strat=<key> read by research Validate via useLocalSearchParams → pre-selects the chip.
+- Testing agent iter 55: web 4/4 + mobile 3/3 green, cross-platform parity confirmed.
