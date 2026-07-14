@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
+import api from "../src/api";
 import { colors, spacing, type, radius } from "../src/theme";
 
 // Account overlay — opened by tapping the Ananta logo. Mirrors the layout in the
@@ -45,6 +46,24 @@ function Row({ icon, label, pill, pillTone = "muted", testID, onPress }: RowProp
   );
 }
 
+function HealthRow({ label, ok, okText, badText, neutral }: { label: string; ok?: boolean; okText: string; badText?: string; neutral?: boolean }) {
+  const dot = neutral || ok == null ? colors.textFaint : ok ? colors.teal : colors.red;
+  const txt = neutral || ok == null ? colors.textMuted : ok ? colors.teal : colors.red;
+  const value = ok == null && !neutral ? "…" : ok === false ? (badText || okText) : okText;
+  return (
+    <View style={styles.credRow} testID={`account-health-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Ionicons name="pulse" size={15} color={colors.textFaint} />
+        <Text style={styles.credKey}>{label}</Text>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: dot }} />
+        <Text style={[styles.credVal, { color: txt }]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function AccountOverlay() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -52,6 +71,21 @@ export default function AccountOverlay() {
 
   const email = owner?.email || "—";
   const initials = (email.split("@")[0] || "A").slice(0, 2).toUpperCase();
+  const [health, setHealth] = useState<any>(null);
+
+  // Live platform status (moved here from Workspace › Engine & Risk).
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const h: any = {};
+      try { await api.riskStatus(); h.backend = true; } catch { h.backend = false; }
+      try { const e = await api.getEnvironment(); h.mode = e.mode; h.gate = e.ready_to_trade; } catch { h.mode = "—"; }
+      if (active) setHealth(h);
+    };
+    load();
+    const t = setInterval(load, 15000);
+    return () => { active = false; clearInterval(t); };
+  }, []);
 
   const onLogout = async () => {
     await logout();
@@ -101,6 +135,16 @@ export default function AccountOverlay() {
             <Text style={styles.credKey}>Authentication</Text>
             <Text style={styles.credVal}>Secure token (JWT)</Text>
           </View>
+        </View>
+
+        {/* System Health (moved from Workspace › Engine & Risk) */}
+        <Text style={styles.sectionLabel}>System Health</Text>
+        <View style={styles.card} testID="account-system-health">
+          <HealthRow label="Backend API" ok={health?.backend} okText="Online" badText="Unreachable" />
+          <View style={styles.divider} />
+          <HealthRow label="Trading Mode" neutral okText={(health?.mode || "—").toUpperCase()} />
+          <View style={styles.divider} />
+          <HealthRow label="Live Gate" ok={health?.gate} okText="Armed" badText="Closed" />
         </View>
 
         {/* invite / promo placeholder banner */}

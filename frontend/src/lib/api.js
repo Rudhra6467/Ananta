@@ -38,9 +38,9 @@ client.interceptors.response.use(
             // (no stale isOwner until a manual reload).
             if (typeof window !== "undefined") window.dispatchEvent(new Event("ananta:session-expired"));
         } else if (!error?.response) {
-            if (error?.code !== "ERR_CANCELED") _softToast("Network issue — retrying shortly. Check your connection.");
+            if (error?.code !== "ERR_CANCELED" && !error?.config?.silent) _softToast("Network issue — retrying shortly. Check your connection.");
         } else if (status >= 500) {
-            _softToast("The server hit a temporary error. Please try again.");
+            if (!error?.config?.silent) _softToast("The server hit a temporary error. Please try again.");
         }
         return Promise.reject(error);
     },
@@ -160,7 +160,7 @@ export const api = {
     labPresets: () => client.get("/lab/presets").then((r) => r.data),
     labCreateRun: (spec) => client.post("/lab/runs", spec).then((r) => r.data),
     labRuns: (limit = 20) => client.get(`/lab/runs?limit=${limit}`).then((r) => r.data),
-    labRun: (id) => client.get(`/lab/runs/${id}`).then((r) => r.data),
+    labRun: (id) => client.get(`/lab/runs/${id}`, { silent: true }).then((r) => r.data),
     labRunPdf: (id) => client.get(`/lab/runs/${id}/pdf`, { responseType: "blob" }).then((r) => r.data),
     labPropose: (runId) => client.post(`/lab/runs/${runId}/propose`).then((r) => r.data),
     deleteLabRun: (id) => client.delete(`/lab/runs/${id}`).then((r) => r.data),

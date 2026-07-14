@@ -9,6 +9,7 @@ import { Card } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { PageHeader } from "../../src/components/PageHeader";
 import { AddStrategySheet } from "../../src/components/AddStrategySheet";
+import { Segmented } from "../../src/components/Segmented";
 import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 import { pct } from "../../src/format";
@@ -45,6 +46,7 @@ export default function StrategyLibrary() {
   const [showFilter, setShowFilter] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [sub, setSub] = useState("deployed");
 
   const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
 
@@ -82,6 +84,30 @@ export default function StrategyLibrary() {
       } />
       <FirstVisitTip tipKey="strategy" text="Tap + to import or build a strategy. Filter and sort the leaderboard to find an edge." />
 
+      <View style={{ marginBottom: spacing.sm }}>
+        <Segmented testIDPrefix="strategy-subtab"
+          options={[{ key: "deployed", label: "DEPLOYED" }, { key: "edit", label: "EDIT" }]}
+          value={sub} onChange={setSub} />
+      </View>
+
+      {sub === "edit" ? (
+        <View testID="strategy-edit-grid">
+          <Text style={[type.small, { marginBottom: spacing.md }]}>Create a new strategy — import from another platform, write your own, or design one with AI. New strategies appear under Deployed once saved.</Text>
+          {[{ id: "import", icon: "cloud-upload-outline", title: "Import Strategy", desc: "Pine · Freqtrade · Jesse · JSON" },
+            { id: "write", icon: "code-slash-outline", title: "Write Strategy", desc: "Author rules in the builder" },
+            { id: "ai", icon: "sparkles-outline", title: "Describe & Build (AI)", desc: "Design a strategy conversationally" }].map((t) => (
+            <Pressable key={t.id} testID={`edit-tool-${t.id}`} onPress={() => setAddOpen(true)} style={styles.editTool}>
+              <View style={styles.editToolIcon}><Ionicons name={t.icon as any} size={20} color={colors.teal} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.body, { fontWeight: "700" }]}>{t.title}</Text>
+                <Text style={type.small}>{t.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <>
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput testID="library-search" value={query} onChangeText={setQuery} placeholder="Search the library…"
@@ -139,6 +165,8 @@ export default function StrategyLibrary() {
           </Card>
         );
       })}
+        </>
+      )}
 
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
         <View style={styles.drawerWrap}>
@@ -254,4 +282,6 @@ const styles = StyleSheet.create({
   drawerWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   drawer: { backgroundColor: colors.bg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, paddingHorizontal: spacing.lg, maxHeight: "85%" },
   drawerBtn: { flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: radius.sm, borderWidth: 1 },
+  editTool: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  editToolIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealGlow, borderWidth: 1, borderColor: colors.tealDim },
 });

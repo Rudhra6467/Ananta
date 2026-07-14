@@ -5,10 +5,10 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 const SUGGESTIONS = [
-    "What's my win rate and which strategy performed best?",
-    "Why did my trades hit trailing stops recently?",
-    "What were the main reasons trades were blocked?",
-    "Which market regime has been most profitable?",
+    "Why did I lose yesterday?",
+    "Which strategy performed best?",
+    "Compare two strategies",
+    "How can I improve my entries?",
 ];
 
 // AI Quant Analyst terminal — plain-English interrogation of the reasoning log &

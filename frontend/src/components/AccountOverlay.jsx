@@ -1,6 +1,8 @@
-import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
 
 // Account overlay (web) — opened by the Ananta logo button. Mirrors the mobile Account
 // layout (Profile header · Features · Settings) and serves the in-app privacy info.
@@ -32,10 +34,39 @@ function Row({ icon: Icon, label, pill, pillTone = "muted", testid }) {
     );
 }
 
+function HealthRow({ label, ok, okText, badText, neutral }) {
+    const tone = neutral || ok == null ? "text-atlas-textTertiary" : ok ? "text-atlas-positive" : "text-atlas-negative";
+    const dot = neutral || ok == null ? "bg-atlas-textTertiary" : ok ? "bg-atlas-positive" : "bg-atlas-negative";
+    return (
+        <div className="flex items-center justify-between px-3 py-3" data-testid={`account-health-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <span className="flex items-center gap-2 font-body text-sm text-atlas-textSecondary"><Activity className="w-3.5 h-3.5 text-atlas-textTertiary" />{label}</span>
+            <span className={`flex items-center gap-1.5 font-mono text-xs ${tone}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />{ok == null && !neutral ? "…" : okText || badText}
+            </span>
+        </div>
+    );
+}
+
 export default function AccountOverlay({ open, onOpenChange }) {
     const { owner, isOwner, logout } = useAuth();
     const email = owner?.email || "Not signed in";
     const initials = (owner?.email?.split("@")[0] || "AN").slice(0, 2).toUpperCase();
+    const [health, setHealth] = useState(null);
+
+    // Live platform status (moved here from Workspace › Engine & Risk). Loads while open.
+    useEffect(() => {
+        if (!open) return;
+        let active = true;
+        const load = async () => {
+            const h = {};
+            try { await api.riskStatus(); h.backend = true; } catch { h.backend = false; }
+            try { const e = await api.getEnvironment(); h.mode = e.mode; h.gate = e.ready_to_trade; } catch { h.mode = "—"; }
+            if (active) setHealth(h);
+        };
+        load();
+        const t = setInterval(load, 15000);
+        return () => { active = false; clearInterval(t); };
+    }, [open]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,6 +134,16 @@ export default function AccountOverlay({ open, onOpenChange }) {
                             <Row icon={Gift} label="Offers" pill="Soon" testid="account-feature-offers" />
                             <Row icon={BarChart3} label="Earn" pill="Soon" testid="account-feature-earn" />
                             <Row icon={FileText} label="Tax reporting" pill="Soon" testid="account-feature-tax" />
+                        </div>
+                    </div>
+
+                    {/* system health (moved from Workspace › Engine & Risk) */}
+                    <div data-testid="account-system-health">
+                        <div className="label-tag mb-2">SYSTEM HEALTH</div>
+                        <div className="rounded-lg border border-atlas-border overflow-hidden divide-y divide-atlas-border">
+                            <HealthRow label="Backend API" ok={health?.backend} okText="Online" badText="Unreachable" />
+                            <HealthRow label="Trading Mode" ok={health?.mode ? true : null} okText={(health?.mode || "—").toUpperCase()} neutral />
+                            <HealthRow label="Live Gate" ok={health?.gate} okText="Armed" badText="Closed" />
                         </div>
                     </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Brain, ChevronDown, Rocket } from "lucide-react";
+import { ShieldCheck, Brain, ChevronDown, Rocket, Sparkles, CalendarRange, FileText } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +13,7 @@ import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import TradingCoach from "@/components/lab/TradingCoach";
 import ClosedTradesAnalysis from "@/components/lab/ClosedTradesAnalysis";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
+import AnantaPdfs from "@/components/AnantaPdfs";
 
 export default function Research() {
     const { isOwner } = useAuth();
@@ -110,15 +111,37 @@ export default function Research() {
                     )}
                 </TabsContent>
 
-                <TabsContent value="analyze" className="m-0 space-y-4">
-                    <TradingCoach isOwner={isOwner} />
-                    <AIAnalystTerminal isOwner={isOwner} strategy={sel} />
+                <TabsContent value="analyze" className="m-0 space-y-6">
+                    <AnalysisSection icon={Sparkles} title="Ask Ananta" subtitle="Ask anything about your trading, strategies or market behavior.">
+                        <AIAnalystTerminal isOwner={isOwner} />
+                    </AnalysisSection>
+                    <AnalysisSection icon={CalendarRange} title="Weekly Review" subtitle="Receive an AI analysis of your last 7 trading days.">
+                        <TradingCoach isOwner={isOwner} />
+                    </AnalysisSection>
+                    <AnalysisSection icon={FileText} title="Reports" subtitle="PDFs from your validation runs — open, analyse or delete.">
+                        <AnantaPdfs isOwner={isOwner} />
+                    </AnalysisSection>
                 </TabsContent>
 
                 <TabsContent value="closed" className="m-0 space-y-4">
                     <ClosedTradesAnalysis isOwner={isOwner} />
                 </TabsContent>
             </Tabs>
+        </div>
+    );
+}
+
+function AnalysisSection({ icon: Icon, title, subtitle, children }) {
+    return (
+        <div className="space-y-3" data-testid={`analysis-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5"><Icon className="w-4 h-4 text-atlas-cyan" /></span>
+                <div>
+                    <div className="font-heading text-lg text-atlas-text leading-none">{title}</div>
+                    <div className="label-tag mt-1 text-[9px] text-atlas-textTertiary">{subtitle}</div>
+                </div>
+            </div>
+            {children}
         </div>
     );
 }

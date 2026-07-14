@@ -88,14 +88,14 @@ const EXIT_LABELS: Record<string, string> = { atr: "ATR Trailing", fixed: "Fixed
 function Validate({ isOwner }: { isOwner: boolean }) {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<Record<string, any>>({});
-  const [strat, setStrat] = useState("hunter");
+  const [strat, setStrat] = useState("");
   const [period, setPeriod] = useState("1m");
   const [exitMethods, setExitMethods] = useState<string[]>(["atr"]);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [runs, setRuns] = useState<{ method: string; label: string; result: any }[]>([]);
 
   useEffect(() => {
-    api.strategyRegistry().then((d) => { const l = d.strategies || []; setStrategies(l); if (l[0]) setStrat(l[0].key); }).catch(() => {});
+    api.strategyRegistry().then((d) => { setStrategies(d.strategies || []); }).catch(() => {});
     api.strategyMetrics().then((d: any) => setMetrics(d?.metrics || {})).catch(() => {});
   }, []);
   const selMetric = metrics[strat];

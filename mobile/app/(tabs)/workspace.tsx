@@ -21,7 +21,6 @@ export default function Workspace() {
   const { isOwner, owner, logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [demo, setDemo] = useState<any>(null);
-  const [env, setEnv] = useState<any>(null);
   const [busy, setBusy] = useState("");
   const [lesson, setLesson] = useState<any>(null);
   const [sub, setSub] = useState("ai");
@@ -29,7 +28,6 @@ export default function Workspace() {
   const load = () => {
     api.settings().then(setSettings).catch(() => {});
     api.demoStatus().then(setDemo).catch(() => {});
-    api.getEnvironment().then(setEnv).catch(() => {});
   };
   useEffect(load, []);
 
@@ -110,13 +108,6 @@ export default function Workspace() {
             ) : <ActivityIndicator color={colors.teal} />}
           </Card>
 
-          <Card style={{ marginBottom: spacing.md }}>
-            <SectionLabel>SYSTEM</SectionLabel>
-            <Row label="Trading Mode" value={(env?.mode || "—").toUpperCase()} />
-            <Row label="Live Gate" value={env?.ready_to_trade ? "Armed" : "Closed"} />
-          </Card>
-
-          {/* Competition Demo */}
           <Card style={{ borderColor: colors.tealDim }} testID="ws-demo">
             <View style={styles.rowBetween}>
               <SectionLabel>COMPETITION DEMO</SectionLabel>
@@ -197,10 +188,6 @@ function NumRow({ label, k, value, isOwner, onSave }: any) {
     </View>
   );
 }
-function Row({ label, value }: { label: string; value: string }) {
-  return <View style={styles.rowBetween}><Text style={type.body}>{label}</Text><Text style={[type.body, { color: colors.teal, fontWeight: "700" }]}>{value}</Text></View>;
-}
-
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4 },

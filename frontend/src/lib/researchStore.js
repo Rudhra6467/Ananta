@@ -35,9 +35,7 @@ export const useResearchStore = create((set, get) => ({
         if (get().loaded) return;
         set({ loaded: true });
         api.strategyRegistry().then((d) => {
-            const l = d.strategies || [];
-            set({ strategies: l });
-            if (l[0] && get().strat.length === 0) set({ strat: [l[0].key] });
+            set({ strategies: d.strategies || [] });
         }).catch(() => {});
         api.strategyMetrics().then((d) => set({ metrics: d?.metrics || {} })).catch(() => {});
         api.labCoverage().then((c) => {
@@ -66,10 +64,19 @@ export const useResearchStore = create((set, get) => ({
     }),
 
     _pollRun: async (id) => {
+        let miss = 0;
         for (let i = 0; i < POLL_MAX_ITERS; i++) {
             await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
             if (get().phase !== "running") return null; // aborted
-            const d = await api.labRun(id);
+            let d;
+            try {
+                d = await api.labRun(id);
+                miss = 0;
+            } catch {
+                // Transient network/5xx during a long run — keep polling silently.
+                if (++miss >= 15) throw new Error("lost connection to run");
+                continue;
+            }
             const base = get()._progressBase || 0;
             const span = get()._progressSpan || 90;
             set({ progress: Math.max(base + 3, Math.min(base + span, base + (d.progress_pct || 0) / 100 * span)) });

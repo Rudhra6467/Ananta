@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LabModal from "@/components/lab/LabModal";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
@@ -103,8 +104,16 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [showFilter, setShowFilter] = useState(false);
     const [addMenu, setAddMenu] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [scTab, setScTab] = useState("deployed");
 
     const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
+
+    // Header title / tab-home returns to the Deployed sub-tab.
+    useEffect(() => {
+        const onHome = (e) => { if (e.detail?.id === "strategies") setScTab("deployed"); };
+        window.addEventListener("ananta:tab-home", onHome);
+        return () => window.removeEventListener("ananta:tab-home", onHome);
+    }, []);
 
     const load = () => {
         const params = {};
@@ -151,40 +160,42 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                 </div>
             </HeaderActionPortal>
 
-            <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
+            <Tabs value={scTab} onValueChange={setScTab} className="atlas-tabs">
+                <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
+                    <SCTab value="deployed" label="DEPLOYED" icon={Power} />
+                    <SCTab value="edit" label="EDIT" icon={Pencil} />
+                </TabsList>
 
-            {!lib ? (
-                <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING LIBRARY</div>
-            ) : lib.length === 0 ? (
-                <div className="panel p-10 text-center" data-testid="library-empty">
-                    <div className="font-mono text-sm text-atlas-textSecondary">No strategies match these filters.</div>
-                    <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
-                    {lib.map((s) => (
-                        <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
-                            onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
-                            onFav={() => api.libraryFavorite(s.id).then(load)} />
-                    ))}
-                    <button data-testid="add-strategy-card" onClick={onImport}
-                        className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-atlas-cyan/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
-                        <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10 transition-colors">
-                            <Upload className="w-5 h-5 text-atlas-textTertiary group-hover:text-atlas-cyan" />
+                <TabsContent value="deployed" className="m-0 space-y-5">
+                    <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
+
+                    {!lib ? (
+                        <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING LIBRARY</div>
+                    ) : lib.length === 0 ? (
+                        <div className="panel p-10 text-center" data-testid="library-empty">
+                            <div className="font-mono text-sm text-atlas-textSecondary">No strategies match these filters.</div>
+                            <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
                         </div>
-                        <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Import Strategy</span>
-                        <span className="font-mono text-[9px] text-atlas-textTertiary">Pine · Freqtrade · Jesse · JSON</span>
-                    </button>
-                    <button data-testid="build-strategy-card" onClick={onBuild}
-                        className="group rounded-2xl border-2 border-dashed border-atlas-border hover:border-violet-500/60 bg-atlas-panel/30 min-h-[180px] flex flex-col items-center justify-center gap-2 transition-all hover:bg-atlas-panelHover">
-                        <div className="w-11 h-11 rounded-xl grid place-items-center border border-atlas-border group-hover:border-violet-500/50 group-hover:bg-violet-500/10 transition-colors">
-                            <Sparkles className="w-5 h-5 text-atlas-textTertiary group-hover:text-violet-400" />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
+                            {lib.map((s) => (
+                                <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
+                                    onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
+                                    onFav={() => api.libraryFavorite(s.id).then(load)} />
+                            ))}
                         </div>
-                        <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">Build with AI</span>
-                        <span className="font-mono text-[9px] text-atlas-textTertiary">Design a strategy conversationally</span>
-                    </button>
-                </div>
-            )}
+                    )}
+                </TabsContent>
+
+                <TabsContent value="edit" className="m-0 space-y-4">
+                    <div className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Create a new strategy — import from another platform, write your own, or design one conversationally with AI. New strategies land in <span className="text-atlas-text">Deployed</span> once saved.</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" data-testid="strategy-edit-grid">
+                        <EditToolCard testid="edit-tool-import" icon={Upload} tone="cyan" title="Import Strategy" desc="Pine · Freqtrade · Jesse · JSON" onClick={onImport} />
+                        <EditToolCard testid="edit-tool-write" icon={Code} tone="cyan" title="Write Strategy" desc="Author rules manually in the builder" onClick={onBuild} />
+                        <EditToolCard testid="edit-tool-ai" icon={Sparkles} tone="violet" title="Describe & Build (AI)" desc="Design a strategy conversationally" onClick={onBuild} />
+                    </div>
+                </TabsContent>
+            </Tabs>
 
             {showFilter && (
                 <FilterDrawer facets={facets} filters={filters} favOnly={favOnly} activeCount={activeCount}
@@ -198,6 +209,32 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     onClose={() => setSearchOpen(false)} />
             )}
         </div>
+    );
+}
+
+/* Deployed / Edit sub-tab trigger */
+function SCTab({ value, label, icon: Icon }) {
+    return (
+        <TabsTrigger value={value} data-testid={`strategy-subtab-${value}`}
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors duration-150 hover:text-white flex items-center gap-2">
+            <Icon className="w-4 h-4" strokeWidth={2} /> {label}
+        </TabsTrigger>
+    );
+}
+
+/* Create-strategy tool card (Edit sub-tab) */
+function EditToolCard({ testid, icon: Icon, title, desc, tone, onClick }) {
+    const accent = tone === "violet" ? "hover:border-violet-500/60 group-hover:text-violet-400 group-hover:border-violet-500/50 group-hover:bg-violet-500/10"
+        : "hover:border-atlas-cyan/60 group-hover:text-atlas-cyan group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10";
+    return (
+        <button data-testid={testid} onClick={onClick}
+            className={`group rounded-2xl border-2 border-dashed border-atlas-border bg-atlas-panel/30 min-h-[160px] flex flex-col items-center justify-center gap-2 p-4 text-center transition-all hover:bg-atlas-panelHover ${accent}`}>
+            <div className={`w-11 h-11 rounded-xl grid place-items-center border border-atlas-border transition-colors ${accent}`}>
+                <Icon className="w-5 h-5 text-atlas-textTertiary" />
+            </div>
+            <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">{title}</span>
+            <span className="font-mono text-[9px] text-atlas-textTertiary">{desc}</span>
+        </button>
     );
 }
 

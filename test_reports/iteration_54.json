@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 54 — verified all 8 requested items across WEB (desktop 1920x1080) and MOBILE (Expo web preview 390x844). Owner login via POST /api/auth/login succeeded on both surfaces (owner@ananta.ai). WEB (all GREEN): (1) Strategy Center renders 'strategy-subtab-deployed' + 'strategy-subtab-edit' — Deployed shows 'strategy-leaderboard' + 'strategy-grid'; Edit shows 'strategy-edit-grid' with 'edit-tool-import' / 'edit-tool-write' / 'edit-tool-ai'; 'strategy-search-btn' + 'strategy-add-btn' present. Opening any 'library-open-*' detail then tapping 'context-home-strategies' returns to Deployed (deployed-state=active, strategy-grid re-rendered). (2) Research Validate has NO strategy pre-selected — 'wizard-step0-next' is disabled=true on first render. (3) 'research-start' from AI Analysis switches to Validate at step 0 (wizard-step-0 visible); on Validate with none selected, a toast fires reading 'Select at least one strategy — Tick one or more engines below to research.' (captured live). (4) Research → AI Analysis subtab shows all three sections: 'analysis-section-ask-ananta' + 'analysis-section-weekly-review' + 'analysis-section-reports' (with 'ws-ananta-pdfs' PDF list inside). (5) Ask Ananta input placeholder='Ask the analyst a question…' is ENABLED (disabled=false) after owner login; submitted 'What is the current status of my portfolio?' via Enter and received a substantive LLM response including account health, win-rate 30%, negative PnL diagnosis, and specific loser trade breakdown — full end-to-end AI works. (6) Workspace › Engine & Risk: 'ws-system-health' NOT present AND the string 'System Health' is absent from the engine tab body. (7) Account overlay (opened via 'ananta-logo-btn') shows 'account-system-health' with all three rows: Backend API=Online, Trading Mode=—, Live Gate=Armed. (8) The lab poll no-toast bug fix was passively verified — no 'Network issue' toast fired during navigation and background lab polls (implementation confirmed: silent flag propagates through polling GETs). MOBILE (all GREEN with one preview-only note): (1) tab-strategy → both 'strategy-subtab-deployed' (leaderboard + search + library cards) and 'strategy-subtab-edit' render; tapping 'edit-tool-import' opens the Add sheet (add-menu-close / add-menu-import / add-menu-manual / add-menu-ai rendered). (2) tab-research → 'research-tab-validate' shows all 11 strategy chips (wiz-strat-hunter, wiz-strat-squeeze, wiz-strat-continuation, wiz-strat-ema-cross, wiz-strat-supertrend, wiz-strat-rsi-momentum, wiz-strat-macd-trend, wiz-strat-bollinger-mr, wiz-strat-donchian-breakout, wiz-strat-atr-breakout, wiz-strat-keltner-breakout) with NO chip pre-selected (initial state strat=''). Tapping wizard-run with none selected correctly no-ops (code path research.tsx L122-125 fires Alert.alert('Select a strategy', 'Pick an engine to research.')). NOTE: On the Expo WEB preview, React Native's Alert.alert renders as a no-op — the alert text is not visible in the DOM; on native iOS/Android the alert will appear. Verified guard prevents the run (no /api/lab/run POST fires). (3) tab-workspace → Engine & Risk subtab: 'ws-system-health' absent AND the previous SYSTEM card is gone (Trading Mode + Live Gate no longer appear on that tab). (4) Navigating to /account (Expo Router root route) renders the Account screen with 'account-system-health' containing all three rows: Backend API=Online, Trading Mode=—, Live Gate=Armed. All 8 acceptance items VERIFIED.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": [
+        {"component": "Alert.alert on Web (research.tsx:121,124,139,140)", "issue": "React Native's Alert.alert is a no-op in Expo web preview — the 'Select a strategy' / 'Owner login required' / 'Research complete' / 'Backtest failed' alerts are invisible on web. Native iOS/Android will render them correctly. If web parity is desired, consider a react-native-web compatible alert (e.g., toast/snackbar) or a small wrapper that falls back to window.alert on web. Reference: /app/mobile/app/(tabs)/research.tsx:121,124,139,140"}
+      ]
+    }
+  },
+  "parity_issues": [
+    {"flow": "Research → RUN VALIDATION with no strategy selected", "platform": "mobile", "issue": "Web shows a Sonner toast ('Select at least one strategy'), but mobile relies on Alert.alert which is a no-op in the Expo web preview (invisible feedback). On native devices this will render, but web-preview reviewers will see nothing.", "expected": "Some visible feedback on both surfaces when RUN is tapped with none selected.", "actual": "Web: toast fires and visible. Mobile web-preview: no visible feedback; native device would show Alert.alert."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: For mobile, replace Alert.alert calls in research.tsx with a cross-platform toast/snackbar (or a wrapper that uses window.alert on web) so Expo-web reviewers can see 'Select a strategy' / 'Research complete' / 'Backtest failed' messages. Not blocking — native devices are unaffected."
+  ],
+  "critical_code_review_comments": [
+    "Research.jsx (web) AI Analysis subtab correctly composes AIAnalystTerminal (Ask Ananta), TradingCoach (Weekly Review), and AnantaPdfs (Reports) with distinct AnalysisSection wrappers — testIDs derived cleanly from titles ('analysis-section-ask-ananta', 'analysis-section-weekly-review', 'analysis-section-reports'). LGTM.",
+    "StrategyCenter.jsx: subtab split (deployed/edit) is clean; EditToolCard accepts testid prop and renders 'edit-tool-{id}'. context-home-strategies listener resets to 'deployed' subtab on tab-home event — verified live.",
+    "AccountOverlay.jsx L141: 'account-system-health' block cleanly moved from Workspace; Backend API/Trading Mode/Live Gate rows share a single HealthRow component. Workspace.jsx no longer imports/renders any System Health block — code removal verified.",
+    "mobile/app/account.tsx L140-147: SYSTEM HEALTH card correctly rendered under 'account-system-health' testID with three HealthRow children (Backend API / Trading Mode / Live Gate). Mirrors web exactly.",
+    "mobile/app/(tabs)/research.tsx L91: strat state initializes to '' (empty). L120-125 run() guard correctly no-ops when strat is empty — verified live (no lab/run POST fires). Only nit: consider a visible toast on web to match web parity.",
+    "mobile/app/(tabs)/strategy.tsx L49,88-100: subtabs split cleanly; edit-tool-{import,write,ai} all wire to setAddOpen(true) which opens the Add sheet (add-menu-*). LGTM.",
+    "researchStore.js + api.js lab poll silent-flag: no 'Network issue' toast observed during navigation between tabs mid-poll on web — fix effective."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "web 100% (5/5 items GREEN incl. AI response), mobile 100% functional (3/3 items GREEN — Alert.alert visibility is a known RN-Web limitation, not a functional bug)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — verified live via /api/auth/login).",
+  "seed_data_creation": "None. One AI Analyst question was submitted to Ask Ananta which triggers LLM+DB reads only (no writes).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "This iteration verified the Strategy Center subtab split (deployed/edit) with edit-tool-{import,write,ai}, the Research 'Ask Ananta' redesign (AIAnalystTerminal enabled for owner + LLM live), removal of ws-system-health from Workspace › Engine & Risk (moved to Account overlay as account-system-health), and the same parity on mobile (Strategy subtabs, Research validate no-preselect, Workspace SYSTEM card removed, Account /account route shows account-system-health). All 8 acceptance items GREEN. Mobile URL for /account is base + '/account' (NOT /workspace/account). Web wizard-step0-next disabled=true when strat.length===0. Ask Ananta uses Enter to submit; LLM response ~10-15s. Only outstanding note: RN Alert.alert is invisible on Expo web preview — consider a toast wrapper for cross-platform visibility.",
+  "rca of the issue": "N/A — no bugs found. One RN-Web limitation noted: Alert.alert is a no-op on Expo web, making 'Select a strategy' feedback invisible in the web preview even though the guard works correctly and native device would render it."
+}
