@@ -893,3 +893,17 @@ NOTES:
 ## 2026-07-13 (b) — Mobile exit-strategy full parity
 - Mobile Research Validate: replaced single-select exit Segmented with multi-select TICKBOXES (ATR default, Fixed; both allowed, min-1 guard). Runs one backtest per selected exit and renders a separate result block + exit tag per method — matches web. Testing agent iter 53 green (both + single + min-1 + Trade regression).
 - Mobile Research "1 · STRATEGY" selector converted from overflowing Segmented to a wrapping, tappable chip grid (all 11 engines reachable).
+
+## 2026-07-14 — Strategy split, AI Analysis redesign, health→account, network-toast fix (web + mobile)
+WEB (/app/frontend):
+- Strategy Center split into DEPLOYED (leaderboard + strategy cards) and EDIT (Import / Write / Describe&Build AI) sub-tabs.
+- Research: NO strategy pre-selected by default; Start Research routes to Validate step 0 / prompts to pick.
+- Research AI Analysis subtab redesigned → "Ask Ananta" (general, NOT Hunter-scoped) + "Weekly Review" + "Reports" (shared AnantaPdfs, extracted to components/AnantaPdfs.jsx). Fixed AI Quant Analyst scoping (was passing strategy=sel=hunter; now none → answers across all).
+- Workspace › Engine & Risk: System Health section removed → moved into Account overlay (AccountOverlay.jsx now fetches riskStatus + environment).
+- Network-error fix: lab-run poll GET marked {silent:true} in api.js (interceptor skips toast on silent); researchStore poll loop tolerates up to 15 consecutive transient failures instead of aborting — stops the "Network issue" toast spam during a research run (root cause of user's prod report).
+MOBILE (/app/mobile) parity:
+- Strategy tab: DEPLOYED / EDIT segmented; Edit tools open Add sheet.
+- Research: no chip pre-selected; RUN guarded with Warning alert.
+- Workspace SYSTEM card removed; Account screen shows System Health (Backend API / Trading Mode / Live Gate).
+- Note: RN Alert.alert is a no-op on Expo WEB preview (works on native) — candidate for a toast wrapper later.
+Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response verified.
