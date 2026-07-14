@@ -98,6 +98,10 @@ function Validate({ isOwner }: { isOwner: boolean }) {
     api.strategyRegistry().then((d) => { setStrategies(d.strategies || []); }).catch(() => {});
     api.strategyMetrics().then((d: any) => setMetrics(d?.metrics || {})).catch(() => {});
   }, []);
+
+  // Pre-select a strategy when arriving from a strategy detail's "Test this strategy".
+  const params = useLocalSearchParams<{ strat?: string }>();
+  useEffect(() => { if (params?.strat) setStrat(String(params.strat)); }, [params?.strat]);
   const selMetric = metrics[strat];
   const selOn = !!selMetric?.enabled && selMetric?.status !== "DISABLED" && selMetric?.status !== "ERROR";
 

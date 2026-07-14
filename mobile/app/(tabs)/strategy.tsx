@@ -92,7 +92,19 @@ export default function StrategyLibrary() {
 
       {sub === "edit" ? (
         <View testID="strategy-edit-grid">
-          <Text style={[type.small, { marginBottom: spacing.md }]}>Create a new strategy — import from another platform, write your own, or design one with AI. New strategies appear under Deployed once saved.</Text>
+          <Text style={[type.small, { marginBottom: spacing.sm }]}>Edit an existing strategy — pick one to open its details, then test it.</Text>
+          {(lib || []).length > 0 && (
+            <View style={styles.editExistingCard} testID="edit-existing-list">
+              {(lib || []).map((s: any) => (
+                <Pressable key={s.id} testID={`edit-existing-${s.id}`} onPress={() => open(s)} style={styles.editExistingRow}>
+                  <Ionicons name="pulse-outline" size={16} color={colors.teal} />
+                  <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{s.name}{s.internal ? "  · Live" : ""}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <Text style={[type.small, { marginBottom: spacing.md }]}>Or create a new strategy — import, write your own, or design one with AI. New strategies appear under Deployed once saved.</Text>
           {[{ id: "import", icon: "cloud-upload-outline", title: "Import Strategy", desc: "Pine · Freqtrade · Jesse · JSON" },
             { id: "write", icon: "code-slash-outline", title: "Write Strategy", desc: "Author rules in the builder" },
             { id: "ai", icon: "sparkles-outline", title: "Describe & Build (AI)", desc: "Design a strategy conversationally" }].map((t) => (
@@ -284,4 +296,6 @@ const styles = StyleSheet.create({
   drawerBtn: { flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: radius.sm, borderWidth: 1 },
   editTool: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   editToolIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealGlow, borderWidth: 1, borderColor: colors.tealDim },
+  editExistingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm },
+  editExistingCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.xs, marginBottom: spacing.md },
 });

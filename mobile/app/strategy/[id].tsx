@@ -132,6 +132,12 @@ export default function StrategyDetail() {
         </View>
       </Card>
 
+      {/* Test this strategy → Research validate, pre-loaded for this strategy */}
+      <Pressable testID="detail-test-strategy" onPress={() => router.push({ pathname: "/(tabs)/research", params: { strat: id as string } })} style={styles.testBtn}>
+        <Ionicons name="shield-checkmark" size={16} color={colors.teal} />
+        <Text style={styles.testTxt}>TEST THIS STRATEGY</Text>
+      </Pressable>
+
       {/* Academy lesson deep-link modal */}
       <Modal visible={lessonOpen} transparent animationType="slide" onRequestClose={() => setLessonOpen(false)}>
         <View style={styles.modalWrap}>
@@ -263,6 +269,8 @@ const styles = StyleSheet.create({
   track: { height: 6, borderRadius: 3, backgroundColor: colors.bgElevated, overflow: "hidden", marginTop: 2 },
   trackFill: { height: 6, borderRadius: 3 },
   learnRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+  testBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: spacing.md, borderWidth: 1, borderColor: colors.tealDim, backgroundColor: colors.tealGlow, borderRadius: radius.md, paddingVertical: spacing.sm + 3 },
+  testTxt: { color: colors.teal, fontWeight: "800", letterSpacing: 1, fontSize: 13 },
   learnTxt: { flex: 1, color: colors.teal, fontSize: 13, fontWeight: "700" },
   modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   modalCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: 40, borderWidth: 1, borderColor: colors.cardBorder },

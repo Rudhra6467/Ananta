@@ -17,6 +17,7 @@ import HelpHint from "@/components/lab/HelpHint";
 import StrategyArchitect from "@/pages/StrategyArchitect";
 import ImportStrategyModal from "@/components/ImportStrategyModal";
 import { useAuth } from "@/context/AuthContext";
+import { useResearchStore } from "@/lib/researchStore";
 import MetricExplainer from "@/components/MetricExplainer";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 
@@ -188,7 +189,26 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                 </TabsContent>
 
                 <TabsContent value="edit" className="m-0 space-y-4">
-                    <div className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Create a new strategy — import from another platform, write your own, or design one conversationally with AI. New strategies land in <span className="text-atlas-text">Deployed</span> once saved.</div>
+                    <div className="panel border-atlas-border rounded-xl p-4 space-y-3" data-testid="edit-existing-panel">
+                        <div>
+                            <div className="label-tag mb-1">EDIT AN EXISTING STRATEGY</div>
+                            <div className="font-mono text-[11px] text-atlas-textSecondary">Pick a strategy to open its details — tweak parameters, then test it.</div>
+                        </div>
+                        <Select value="" onValueChange={(v) => { const s = (lib || []).find((x) => String(x.id) === v); if (s) (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id)); }}>
+                            <SelectTrigger data-testid="edit-strategy-select" className="bg-atlas-panel border-atlas-border font-mono text-sm">
+                                <SelectValue placeholder="Select a strategy to edit…" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-atlas-panel border-atlas-border max-h-72">
+                                {(lib || []).map((s) => (
+                                    <SelectItem key={s.id} value={String(s.id)} data-testid={`edit-strategy-option-${s.id}`}>
+                                        {s.name}{s.internal ? " · Live engine" : ""}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Or create a new strategy — import from another platform, write your own, or design one conversationally with AI. New strategies land in <span className="text-atlas-text">Deployed</span> once saved.</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" data-testid="strategy-edit-grid">
                         <EditToolCard testid="edit-tool-import" icon={Upload} tone="cyan" title="Import Strategy" desc="Pine · Freqtrade · Jesse · JSON" onClick={onImport} />
                         <EditToolCard testid="edit-tool-write" icon={Code} tone="cyan" title="Write Strategy" desc="Author rules manually in the builder" onClick={onBuild} />
@@ -442,6 +462,14 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
     const openEdit = () => { setTab("Parameters"); window.scrollTo({ top: 0, behavior: "smooth" }); };
     const openAnalyse = () => { setAnalyseMode("choice"); setAnalyseOpen(true); };
 
+    // "Test this strategy" → jump into the Research Lab Validate wizard with THIS strategy
+    // pre-selected, landing on the dataset step (dataset → period → timeframe → exit).
+    const testStrategy = () => {
+        useResearchStore.setState({ strat: [sKey], step: 1, phase: "idle", runs: [], progress: 0 });
+        localStorage.setItem("ananta_research_sub", "validate");
+        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
+    };
+
     return (
         <div className="space-y-5" data-testid={`strategy-detail-${sKey}`}>
             {/* header */}
@@ -519,6 +547,13 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
             <button data-testid="detail-analyse-strategy-bottom" onClick={openAnalyse}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
                 <BarChart3 className="w-4 h-4" /> ANALYSE THIS STRATEGY
+            </button>
+
+            {/* Test this strategy → Research Lab Validate wizard, pre-loaded for this strategy */}
+            <button data-testid="detail-test-strategy" onClick={testStrategy}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan font-mono text-sm font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/20 active:scale-[0.99] transition-all">
+                <ShieldCheck className="w-4 h-4" /> TEST THIS STRATEGY
+                <span className="font-mono text-[10px] font-normal text-atlas-textSecondary hidden sm:inline">· dataset → period → timeframe → exit</span>
             </button>
 
             {/* analyse flow */}
