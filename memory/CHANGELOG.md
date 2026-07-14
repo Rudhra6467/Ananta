@@ -914,3 +914,8 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
   - Web: research store strat=[sKey] + step=1, dispatch ananta:navigate→research, localStorage ananta_research_sub=validate.
   - Mobile: router param ?strat=<key> read by research Validate via useLocalSearchParams → pre-selects the chip.
 - Testing agent iter 55: web 4/4 + mobile 3/3 green, cross-platform parity confirmed.
+
+## 2026-07-14 (c) — AI Analysis tab cleanup (web)
+- Removed the "AI Quant Analyst" header block inside Ask Ananta (kept the chat + input).
+- Removed the "AI Trading Coach" card + AI/credits toggle + description entirely; Weekly Review now shows ONLY the "Generate Weekly Review" button (results still render on generate).
+- Taglines: Ask Ananta → "About Trading/Strategy/Market"; Weekly Review → "What/How did you do this week?".

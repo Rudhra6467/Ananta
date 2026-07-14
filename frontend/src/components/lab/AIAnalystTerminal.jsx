@@ -45,12 +45,6 @@ export default function AIAnalystTerminal({ isOwner, strategy }) {
 
     return (
         <div className="panel border-atlas-border rounded-xl overflow-hidden" data-testid="ai-analyst-terminal">
-            <div className="px-4 py-3 border-b border-atlas-border flex items-center gap-2">
-                <Brain className="w-4 h-4 text-atlas-positive" strokeWidth={2} />
-                <span className="font-heading font-medium text-atlas-text">AI Quant Analyst</span>
-                <span className="font-mono text-[9px] uppercase tracking-widest text-atlas-textTertiary ml-1">{strategy ? `scoped: ${strategy}` : "Claude Sonnet · grounded on your data"}</span>
-            </div>
-
             <div ref={scrollRef} className="max-h-[42vh] min-h-[160px] overflow-y-auto atlas-scroll p-4 space-y-3" data-testid="ai-analyst-messages">
                 {messages.length === 0 && (
                     <div className="py-4">

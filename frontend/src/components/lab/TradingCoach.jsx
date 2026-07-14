@@ -2,14 +2,12 @@ import { useState } from "react";
 import { Sparkles, Loader2, TrendingUp, TrendingDown, AlertTriangle, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { Switch } from "@/components/ui/switch";
 
 /**
- * AI Trading Coach — proactive weekly review with a one-click applyable tweak.
- * Gated by a visible AI credits switch (owner-only, consumes LLM credits).
+ * Weekly Review — one-click 7-day AI performance review with an applyable tweak.
+ * Header/tagline live in the parent AnalysisSection; this renders only the button + results.
  */
 export default function TradingCoach({ isOwner }) {
-    const [aiOn, setAiOn] = useState(false);
     const [loading, setLoading] = useState(false);
     const [review, setReview] = useState(null);
     const [applied, setApplied] = useState(false);
@@ -39,36 +37,14 @@ export default function TradingCoach({ isOwner }) {
 
     const rec = review?.recommendation;
     return (
-        <div className="panel border-atlas-border rounded-2xl p-5" data-testid="trading-coach">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-                <div className="flex items-center gap-2.5">
-                    <span className="w-9 h-9 rounded-xl grid place-items-center border border-atlas-cyan/40 bg-atlas-cyan/10"><Sparkles className="w-4.5 h-4.5 text-atlas-cyan" /></span>
-                    <div>
-                        <div className="font-heading text-lg text-atlas-text leading-none">AI Trading Coach</div>
-                        <div className="label-tag mt-1 text-[9px] text-atlas-textTertiary">Weekly review · continuous improvement</div>
-                    </div>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer" title="Uses LLM credits when on">
-                    <span className="font-mono text-[10px] text-atlas-textSecondary uppercase tracking-widest">AI · uses credits</span>
-                    <Switch data-testid="coach-ai-switch" checked={aiOn} onCheckedChange={setAiOn} disabled={!isOwner} />
-                </label>
-            </div>
-
-            {!review && (
-                <div className="flex flex-col items-center text-center gap-3 py-6">
-                    <p className="font-mono text-[11px] text-atlas-textSecondary max-w-md">
-                        Get a 7 day performance review
-                    </p>
-                    <button data-testid="coach-generate-btn" onClick={generate} disabled={!aiOn || loading || !isOwner}
-                        className="flex items-center gap-2 rounded-xl bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-2.5 transition-colors disabled:opacity-40">
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        {loading ? "REVIEWING…" : "GENERATE WEEKLY REVIEW"}
-                    </button>
-                    {!aiOn && <span className="font-mono text-[9px] text-atlas-warning">Enable the AI switch to run (consumes credits)</span>}
-                </div>
-            )}
-
-            {review && (
+        <div data-testid="trading-coach">
+            {!review ? (
+                <button data-testid="coach-generate-btn" onClick={generate} disabled={loading || !isOwner}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan hover:bg-cyan-400 text-atlas-bg font-mono text-[11px] tracking-widest font-bold px-5 py-3.5 transition-colors disabled:opacity-40">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {loading ? "REVIEWING…" : "GENERATE WEEKLY REVIEW"}
+                </button>
+            ) : (
                 <div className="space-y-4" data-testid="coach-review">
                     <p className="font-mono text-[12px] text-atlas-text leading-relaxed">{review.summary}</p>
 
@@ -108,7 +84,7 @@ export default function TradingCoach({ isOwner }) {
                         </div>
                     )}
 
-                    <button data-testid="coach-regenerate-btn" onClick={generate} disabled={loading || !aiOn}
+                    <button data-testid="coach-regenerate-btn" onClick={generate} disabled={loading}
                         className="font-mono text-[10px] tracking-widest text-atlas-textTertiary hover:text-atlas-text transition-colors disabled:opacity-40">
                         {loading ? "REVIEWING…" : "↻ REGENERATE"}
                     </button>

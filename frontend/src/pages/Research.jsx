@@ -112,10 +112,10 @@ export default function Research() {
                 </TabsContent>
 
                 <TabsContent value="analyze" className="m-0 space-y-6">
-                    <AnalysisSection icon={Sparkles} title="Ask Ananta" subtitle="Ask anything about your trading, strategies or market behavior.">
+                    <AnalysisSection icon={Sparkles} title="Ask Ananta" subtitle="About Trading/Strategy/Market">
                         <AIAnalystTerminal isOwner={isOwner} />
                     </AnalysisSection>
-                    <AnalysisSection icon={CalendarRange} title="Weekly Review" subtitle="Receive an AI analysis of your last 7 trading days.">
+                    <AnalysisSection icon={CalendarRange} title="Weekly Review" subtitle="What/How did you do this week?">
                         <TradingCoach isOwner={isOwner} />
                     </AnalysisSection>
                     <AnalysisSection icon={FileText} title="Reports" subtitle="PDFs from your validation runs — open, analyse or delete.">
