@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
 import api from "../src/api";
+import { deleteItem } from "../src/storage";
 import { colors, spacing, type, radius } from "../src/theme";
 
 // Account overlay — opened by tapping the Ananta logo. Mirrors the layout in the
@@ -145,6 +146,18 @@ export default function AccountOverlay() {
           <HealthRow label="Trading Mode" neutral okText={(health?.mode || "—").toUpperCase()} />
           <View style={styles.divider} />
           <HealthRow label="Live Gate" ok={health?.gate} okText="Armed" badText="Closed" />
+        </View>
+
+        {/* Guided setup */}
+        <Text style={styles.sectionLabel}>Guided Setup</Text>
+        <View style={styles.card}>
+          <Pressable testID="account-replay-onboarding" onPress={async () => { await deleteItem("ananta_onboarded"); router.replace("/onboarding"); }} style={styles.credRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="play-circle-outline" size={17} color={colors.teal} />
+              <Text style={styles.credKey}>Replay Onboarding</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
         </View>
 
         {/* invite / promo placeholder banner */}

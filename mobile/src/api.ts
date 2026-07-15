@@ -129,6 +129,9 @@ export const api = {
   labRun: (id: string) => get<any>(`/lab/runs/${id}`),
   labMonteCarlo: (payload: any) => post<any>("/lab/monte_carlo", payload),
 
+  // --- Onboarding paper-trading setup (drives the existing paper engine) ---
+  onboardingPaperSetup: (cfg: any) => post<any>("/onboarding/paper-setup", cfg),
+
   // --- AI (owner, credits) ---
   aiQuery: (question: string, sessionId: string, strategy?: string) =>
     post<any>("/analytics/ai_query", { question, session_id: sessionId, strategy }),

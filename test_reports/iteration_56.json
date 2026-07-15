@@ -1,0 +1,47 @@
+{
+  "summary": "Iter 56: Tested Apple App Review demo account + first-time onboarding on backend + mobile + web regression. Backend 6/7 pytest passing. Mobile onboarding wizard end-to-end works flawlessly (Welcome → Research → Capital(25000) → Alloc(fixed $1000) → Strategies(hunter) → Summary → Start Paper Trading → lands on /tabs). Skip flow, replay from Account, and non-reappearance after completion all verified. Account screen shows System Health card (Backend/Trading Mode/Live Gate); Workspace no longer contains Live Gate. Web owner login regression: page loads cleanly, no onboarding on web. Found ONE backend response-shape bug in /api/auth/login (hardcodes owner) — token/role in JWT are correct so no UI impact today, but response is misleading for any client that trusts it.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/auth/login",
+        "issue": "Response body hardcodes role='owner' and email=OWNER_EMAIL regardless of who logged in (server.py:1385). Demo user (review@ananta.ai) receives {\"email\": \"owner@ananta.ai\", \"role\": \"owner\"} in the response body. JWT itself correctly carries role='demo' and sub='review@ananta.ai' — /auth/me returns the right values — so the mobile UI (Account screen) shows the correct email. Impact today is cosmetic/API-contract only, but any client that consumes the login response directly would misidentify the demo user. Fix: return {\"token\": token, \"email\": email.strip().lower(), \"role\": role_from_authenticate_result}. Requires authenticate() to return role alongside token."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter56_demo_onboarding.py",
+    "/app/test_reports/pytest/iter56_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/auth/login response to reflect the actual authenticated user (email + role from JWT payload) — currently hardcodes owner. Low priority (cosmetic; JWT + /auth/me are correct)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1385 — auth_login returns hardcoded owner identity regardless of who authenticated. `authenticate()` returns only the token; refactor it to return (token, role) or decode the JWT before responding so the login response matches the JWT contents. This is a footgun for any future client relying on the login response body."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter56_demo_onboarding.py"
+  ],
+  "success_rate": {"backend": "86%", "frontend": "100%"},
+  "test_credentials": "Demo: review@ananta.ai / AnantaDemo123! ; Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Portfolio reset to $25,000 (fixed alloc) and $30,000 (percent alloc) as part of onboarding paper-setup tests. Strategy 'hunter' enabled in strategy_meta.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 56 verified the demo onboarding feature end-to-end. All UI flows pass. Only outstanding item is the cosmetic /api/auth/login response bug (hardcoded owner) — the mobile app is unaffected because AuthProvider (or downstream logic) uses JWT/`/auth/me`. Backend test file: /app/backend/tests/test_iter56_demo_onboarding.py.",
+  "rca of the issue": "Bug: /api/auth/login returns hardcoded {email: OWNER_EMAIL, role: 'owner'} because the endpoint was written before the demo role existed and never updated to reflect authenticate()'s multi-role output. Reproduction: `curl -X POST $BASE/api/auth/login -d '{\"email\":\"review@ananta.ai\",\"password\":\"AnantaDemo123!\"}'` → response contains role='owner' and email='owner@ananta.ai'. Mitigation: change `authenticate()` to return (token, email, role) tuple (or decode the JWT before responding) and thread those into the response body."
+}
