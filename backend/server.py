@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # ---- imports that depend on env loaded ----
 from analytics import compute_performance, graduation_readiness, regime_insight, sector_exposure
 import ai_analyst
-from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo
+from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo, _valid_owner_payload
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
 from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
@@ -1382,7 +1382,8 @@ async def auth_login(body: LoginRequest, request: Request):
     token = await authenticate(db, body.email, body.password, ident)
     if not token:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    return {"token": token, "email": os.environ.get("OWNER_EMAIL", "").strip().lower(), "role": "owner"}
+    p = _valid_owner_payload(token) or {}
+    return {"token": token, "email": p.get("sub"), "role": p.get("role", "owner")}
 
 
 @api_router.post("/auth/logout")

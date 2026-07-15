@@ -924,3 +924,11 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - New public route /support (Support URL: https://spot-trading-lab.emergent.host/support) — no auth. Shows the support email vamsimadhavyakasiri@gmail.com (mailto + copy) and a message form that opens the user's mail client pre-filled to that address.
 - Added "Contact Us" row in the Account overlay under SETTINGS (Privacy & Security group) → opens /support in a new tab.
 - Delivery is mailto-based (no email keys). Server-side delivery via Resend can be added later if desired.
+
+## 2026-07-15 (b) — Apple App Review demo account + first-time onboarding (mobile-first, Option A)
+- Auth: added table-driven demo role. auth.py PRIVILEGED_ROLES={owner,demo}, seed_demo() (idempotent), authenticate() now verifies any privileged user in db.users. .env: DEMO_EMAIL=review@ananta.ai / DEMO_PASSWORD=AnantaDemo123!. /auth/login response now returns the ACTUAL authenticated email+role (was hardcoded owner). Clean seam for future multi-user.
+- Backend: POST /api/onboarding/paper-setup (owner/demo) drives the existing paper engine — sets portfolio starting balance (virtual capital), position sizing (fixed USD lot or % of portfolio), enables selected strategies, mode=PAPER. Tests: /app/backend/tests/test_iter56_demo_onboarding.py.
+- Mobile: rebuilt app/onboarding.tsx into the guided first-run flow: Welcome → Research First → Paper wizard (Capital → Allocation → Strategies [built-in + My Strategies + Create Strategy → /library/import, refetch on focus] → Summary → Start Paper Trading → dashboard). Skip-for-now supported. Completion persisted (storage 'ananta_onboarded'); Replay via Account › Guided Setup. zustand added to mobile (available; onboarding uses local state + Stack-preserved mount).
+- Testing agent iter 56: backend 7/7 (after login-body fix), mobile 100%, web regression ok.
+- Apple privacy Q: answer "Yes, we collect data" (Contact Info/email, User Content, User ID; App Functionality; NOT tracking, no ad SDKs).
+- Emails: Option B (no automated approval emails yet; owner reviews waitlist in-app; support page → vamsimadhavyakasiri@gmail.com via mailto).
