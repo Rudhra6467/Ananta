@@ -1,3 +1,25 @@
+## 2026-07-15 — Launch Hardening: demo history seed + web onboarding + Resend (iter57 GREEN, backend+web 5/5)
+
+- **P0 Backend — Demo account pre-seeded with paper-trade history** (`demo_seed.seed_demo_history`):
+  generates ~21 closed PAPER trades over the last 3–7 days (hunter/squeeze/continuation, note='DEMO')
+  + 2 open positions on a fresh capital book, so `review@ananta.ai` lands on a populated dashboard
+  (non-zero realized P&L, trade ledger, live positions, analytics) instead of a blank $25k book.
+  Wired two ways: (1) `auth.seed_demo` seeds it at startup ONLY if `trades` is empty (never clobbers
+  real activity); (2) `onboarding_paper_setup` is now role-aware (`Depends(require_owner)` payload) and
+  re-seeds the history at the chosen capital when role=='demo'. OWNER onboarding stays a clean fresh book.
+- **P0 Web — First-login Paper Trading onboarding wizard ported to web** (`components/WebOnboarding.jsx`):
+  full parity with mobile — Welcome → Research First → Capital → Allocation → Strategies → Summary,
+  drives shared `/api/onboarding/paper-setup`, shown once per browser via localStorage `ananta_onboarded`.
+  Wired into `AppShell` (renders when logged in + not onboarded); the guided-tour auto-open now waits
+  until onboarding is complete. Added `api.onboardingPaperSetup`.
+- **P1 Backend — Resend transactional email** (`email_service.py`, playbook-based, non-blocking via
+  `asyncio.to_thread`): owner notified (`WAITLIST_NOTIFY_EMAIL`) on every new `/access/request`; user
+  notified on approve/reject. All sends are fire-and-forget with errors swallowed so the waitlist flow
+  never breaks. Owner email delivery verified; user delivery requires a **verified Resend domain**
+  (test-mode only delivers to the account's own verified address). Env: `RESEND_API_KEY`, `SENDER_EMAIL`,
+  `WAITLIST_NOTIFY_EMAIL`.
+
+
 ## 2026-07-12b — Header-action consolidation + PDF download fix (web, iter49 GREEN)
 
 - **Per-tab actions moved into the shared scroll-through TOP header** (frees a full row):
