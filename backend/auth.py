@@ -63,10 +63,10 @@ def _secret() -> str:
     return secret
 
 
-def create_access_token(email: str) -> str:
+def create_access_token(email: str, role: str = "owner") -> str:
     payload = {
         "sub": email,
-        "role": "owner",
+        "role": role,
         "type": "access",
         "exp": datetime.now(UTC) + timedelta(hours=ACCESS_TTL_HOURS),
     }
@@ -80,12 +80,18 @@ def _extract_token(request: Request) -> str | None:
     return request.cookies.get("access_token")
 
 
+# Roles that get full app (owner-level) access. `demo` is the permanent App-Review
+# account — same privileges as owner for now (single shared engine); kept as a
+# distinct role so a future multi-user migration can scope it without a rewrite.
+PRIVILEGED_ROLES = {"owner", "demo"}
+
+
 def _valid_owner_payload(token: str) -> dict | None:
     try:
         p = jwt.decode(token, _secret(), algorithms=[JWT_ALG])
     except jwt.InvalidTokenError:
         return None
-    if p.get("type") == "access" and p.get("role") == "owner":
+    if p.get("type") == "access" and p.get("role") in PRIVILEGED_ROLES:
         return p
     return None
 
@@ -118,6 +124,36 @@ async def require_owner(request: Request) -> dict:
     if not p:
         raise HTTPException(status_code=403, detail="Owner access required.")
     return p
+
+
+# ---------- demo / App-Review account ----------
+def demo_configured() -> bool:
+    return bool(os.environ.get("DEMO_EMAIL") and os.environ.get("DEMO_PASSWORD"))
+
+
+async def seed_demo(db) -> None:
+    """Idempotently seed the permanent demo/App-Review account (role='demo').
+
+    No-op when DEMO_EMAIL/DEMO_PASSWORD are absent."""
+    if not demo_configured():
+        return
+    email = os.environ["DEMO_EMAIL"].strip().lower()
+    password = os.environ["DEMO_PASSWORD"]
+    existing = await db.users.find_one({"email": email})
+    if not existing:
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "password_hash": hash_password(password),
+            "role": "demo",
+            "created_at": datetime.now(UTC).isoformat(),
+        })
+        logger.info("Seeded demo account: %s", email)
+    else:
+        upd = {"role": "demo"}
+        if not verify_password(password, existing.get("password_hash", "")):
+            upd["password_hash"] = hash_password(password)
+        await db.users.update_one({"email": email}, {"$set": upd})
 
 
 # ---------- brute-force lockout ----------
@@ -175,15 +211,17 @@ async def seed_owner(db) -> None:
 
 async def authenticate(db, email: str, password: str, ident: str) -> str | None:
     """Returns an access token on success, None on bad credentials.
-    Raises 429 if locked out. Records failures for brute-force protection."""
-    if not owner_configured():
-        return None
+    Raises 429 if locked out. Records failures for brute-force protection.
+
+    Table-driven: any seeded user with a privileged role (owner/demo) can log in.
+    Only seeded accounts exist in db.users today (no self-registration), so this
+    is safe and leaves a clean seam for a future multi-user migration."""
     await check_lockout(db, ident)
     email = (email or "").strip().lower()
-    owner_email = os.environ["OWNER_EMAIL"].strip().lower()
     user = await db.users.find_one({"email": email})
-    if email != owner_email or not user or not verify_password(password, user.get("password_hash", "")):
+    role = (user or {}).get("role")
+    if not user or role not in PRIVILEGED_ROLES or not verify_password(password, user.get("password_hash", "")):
         await _record_fail(db, ident)
         return None
     await _clear_fails(db, ident)
-    return create_access_token(owner_email)
+    return create_access_token(email, role)

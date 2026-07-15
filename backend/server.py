@@ -58,11 +58,11 @@ logger = logging.getLogger(__name__)
 # ---- imports that depend on env loaded ----
 from analytics import compute_performance, graduation_readiness, regime_insight, sector_exposure
 import ai_analyst
-from auth import authenticate, is_owner_request, require_owner, seed_owner
+from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
 from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
-from models import MarketSnapshot
+from models import MarketSnapshot, Portfolio
 from news_source import get_cache_info, get_current_summary
 from position_watcher import PositionWatcher
 from research import ResearchResolverLoop, resolve_counterfactuals, summarize_breaker_accuracy, summarize_funnel, summarize_missed_opportunities, summarize_research, summarize_rejections, summarize_rsi_distribution, summarize_strategy_lab, summarize_winner_profile, summarize_zone_effectiveness
@@ -336,6 +336,57 @@ async def get_portfolio():
 async def portfolio_reset():
     fresh = await reset_portfolio(db)
     return {"ok": True, "portfolio": fresh.model_dump()}
+
+
+class PaperSetup(BaseModel):
+    capital: float = 25000.0
+    allocation_type: str = "fixed"  # "fixed" (USD per trade) | "percent" (% of portfolio)
+    allocation_value: float = 1000.0
+    strategies: list[str] = []
+
+
+@api_router.post("/onboarding/paper-setup", dependencies=[Depends(require_owner)])
+async def onboarding_paper_setup(cfg: PaperSetup):
+    """First-run Paper Trading wizard → drives the existing paper engine.
+
+    1. Virtual Capital  → fresh paper book at the chosen starting balance.
+    2. Per-Trade Allocation → position-sizing settings (fixed USD lot or % of portfolio).
+    3. Strategy Selection → enable the chosen strategies for PAPER execution.
+    Kept as one endpoint so the wizard→engine mapping lives server-side (clean seam
+    for a future multi-user migration)."""
+    # 1. virtual capital
+    cap = max(100.0, float(cfg.capital))
+    fresh = Portfolio(starting_balance=cap, cash=cap, day_start_equity=cap)
+    await db.portfolio.replace_one({"id": "singleton"}, fresh.model_dump(), upsert=True)
+    await db.trades.delete_many({})
+    await db.reasoning.delete_many({})
+
+    # 2. per-trade allocation → sizing
+    s = await load_settings(db)
+    s.trading_mode = "PAPER"
+    if cfg.allocation_type == "percent":
+        pct = max(0.1, min(100.0, float(cfg.allocation_value)))
+        s.adaptive_sizing_enabled = False
+        s.position_size_pct_min = pct
+        s.position_size_pct_max = pct
+    else:
+        lot = max(1.0, float(cfg.allocation_value))
+        s.adaptive_sizing_enabled = True
+        s.normal_lot_usd = lot
+        s.strong_lot_usd = lot
+        s.breakout_lot_usd = lot
+    await save_settings(db, s)
+
+    # 3. enable selected strategies (PAPER)
+    enabled = []
+    for key in cfg.strategies:
+        if get_schema(key):
+            await db.strategy_meta.update_one(
+                {"key": key}, {"$set": {"key": key, "enabled": True, "status": "PAPER"}}, upsert=True,
+            )
+            enabled.append(key)
+
+    return {"ok": True, "portfolio": fresh.model_dump(), "strategies_enabled": enabled}
 
 
 @api_router.post("/positions/{base}/close", dependencies=[Depends(require_owner)])
@@ -3066,6 +3117,7 @@ async def _deferred_startup():
             await load_settings(db)
             await load_portfolio(db)
             await seed_owner(db)
+            await seed_demo(db)
             await db.users.create_index("email", unique=True)
             await _seed_library_if_empty()
             await _bootstrap_declarative()
