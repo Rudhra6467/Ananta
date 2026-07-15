@@ -12,6 +12,7 @@ import OwnerAuthControl from "@/components/OwnerAuthControl";
 import AccountOverlay from "@/components/AccountOverlay";
 import AnantaLogo from "@/components/AnantaLogo";
 import OnboardingPipeline from "@/components/OnboardingPipeline";
+import WebOnboarding from "@/components/WebOnboarding";
 import AskAnanta from "@/components/AskAnanta";
 import SystemHealthChip from "@/components/SystemHealthChip";
 import { useAuth } from "@/context/AuthContext";
@@ -60,16 +61,24 @@ export default function AppShell() {
 function Shell() {
     const { ready, isOwner } = useAuth();
     const { gate } = useAccessGate();
+    const { refresh } = useAppData();
     const [active, setActive] = useState(0);
     const [dir, setDir] = useState(1);
     const touch = useRef(null);
     const hidden = useHideOnScroll(60);
     const [tourOpen, setTourOpen] = useState(false);
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
-    // Onboarding tour. Owner: auto-open once per browser session, always re-launchable,
-    // never permanently dismissed (no "don't show again"). Public: gated to the waitlist.
+    // First-login Paper Trading wizard (web parity with mobile). Shown once per
+    // browser to a logged-in account that hasn't completed setup yet.
     useEffect(() => {
-        if (isOwner && !sessionStorage.getItem("ananta_tour_seen")) setTourOpen(true);
+        setShowOnboarding(isOwner && !localStorage.getItem("ananta_onboarded"));
+    }, [isOwner]);
+
+    // Onboarding tour. Owner: auto-open once per browser session (only AFTER the
+    // first-login wizard is done), always re-launchable. Public: gated to the waitlist.
+    useEffect(() => {
+        if (isOwner && localStorage.getItem("ananta_onboarded") && !sessionStorage.getItem("ananta_tour_seen")) setTourOpen(true);
         const onTour = () => { if (isOwner) setTourOpen(true); else gate("Guided onboarding tour"); };
         window.addEventListener("ananta:tour", onTour);
         return () => window.removeEventListener("ananta:tour", onTour);
@@ -128,6 +137,7 @@ function Shell() {
             <BottomNav active={active} onSelect={go} />
 
             <OnboardingPipeline open={tourOpen} onClose={closeTour} />
+            {showOnboarding && <WebOnboarding onDone={() => { setShowOnboarding(false); refresh(); }} />}
             {["dashboard", "workspace"].includes(TABS[active].id) && <AskAnanta tab={TABS[active].id} />}
 
 

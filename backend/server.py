@@ -239,6 +239,9 @@ async def access_request(body: AccessRequestReq):
            "feature": body.feature, "platform": body.platform, "attempts": 1,
            "created_at": now, "updated_at": now}
     await db.access_requests.insert_one({**doc})
+    import asyncio as _asyncio  # noqa: PLC0415
+    import email_service  # noqa: PLC0415
+    _asyncio.create_task(email_service.notify_owner_new_lead(name, email, body.feature, body.platform))
     return {"ok": True, "status": "pending", "already_on_list": False}
 
 
@@ -257,10 +260,16 @@ async def access_request_action(rid: str, action: str):
     if action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="action must be approve or reject")
     status = "approved" if action == "approve" else "rejected"
+    lead = await db.access_requests.find_one({"id": rid}, {"_id": 0, "name": 1, "email": 1})
     r = await db.access_requests.update_one(
         {"id": rid}, {"$set": {"status": status, "updated_at": datetime.now(UTC).isoformat()}})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="access request not found")
+    if lead and lead.get("email"):
+        import asyncio as _asyncio  # noqa: PLC0415
+        import email_service  # noqa: PLC0415
+        _asyncio.create_task(email_service.notify_user_decision(
+            lead.get("name", ""), lead["email"], approved=(action == "approve")))
     return {"ok": True, "id": rid, "status": status}
 
 
@@ -345,8 +354,8 @@ class PaperSetup(BaseModel):
     strategies: list[str] = []
 
 
-@api_router.post("/onboarding/paper-setup", dependencies=[Depends(require_owner)])
-async def onboarding_paper_setup(cfg: PaperSetup):
+@api_router.post("/onboarding/paper-setup")
+async def onboarding_paper_setup(cfg: PaperSetup, auth: dict = Depends(require_owner)):
     """First-run Paper Trading wizard → drives the existing paper engine.
 
     1. Virtual Capital  → fresh paper book at the chosen starting balance.
@@ -385,6 +394,12 @@ async def onboarding_paper_setup(cfg: PaperSetup):
                 {"key": key}, {"$set": {"key": key, "enabled": True, "status": "PAPER"}}, upsert=True,
             )
             enabled.append(key)
+
+    # Demo / App-Review account → overlay a realistic 3–7 day paper history on the
+    # freshly-configured book so reviewers land on a populated dashboard immediately.
+    if auth.get("role") == "demo":
+        import demo_seed  # noqa: PLC0415
+        await demo_seed.seed_demo_history(db, cap, enable_strategies=False)
 
     return {"ok": True, "portfolio": fresh.model_dump(), "strategies_enabled": enabled}
 

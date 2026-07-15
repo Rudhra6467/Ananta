@@ -155,6 +155,17 @@ async def seed_demo(db) -> None:
             upd["password_hash"] = hash_password(password)
         await db.users.update_one({"email": email}, {"$set": upd})
 
+    # Populate a realistic demo book ONCE so the App-Review account lands on a
+    # live-looking dashboard. Idempotent + safe: never clobbers a book that has
+    # already accrued real trading activity.
+    try:
+        if await db.trades.count_documents({}) == 0:
+            import demo_seed  # noqa: PLC0415
+            out = await demo_seed.seed_demo_history(db)
+            logger.info("Seeded demo history: %s", out)
+    except Exception:  # noqa: BLE001
+        logger.exception("Demo history seed skipped")
+
 
 # ---------- brute-force lockout ----------
 async def check_lockout(db, ident: str) -> None:

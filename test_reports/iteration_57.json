@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 57 Launch Hardening — validated all three items: (1) DEMO role paper-setup pre-seeds ~21 closed trades + 2 open positions with non-zero realized_pnl and equity != starting_balance (backend); (2) OWNER role paper-setup yields a FRESH book with 0 trades and 0 realized_pnl — role-aware demo overlay works; (3) Resend transactional emails — owner-notification on /api/access/request delivered successfully (verified via backend log: 'Sent email to vamsimadhavyakasiri@gmail.com'), user-notification on approve/reject fails gracefully (Resend test-mode rejects non-owner recipients — logged but swallowed, endpoint returns 200 ok). Full web onboarding wizard end-to-end verified (welcome → research → capital(25000) → alloc(fixed 1000) → strategies(hunter) → summary → onboarding-finish → wizard dismissed → localStorage 'ananta_onboarded'='1' → Cockpit shows populated $25k account with toast 'Paper trading is live'). Skip flow also verified: onboarding-skip on research step sets ananta_onboarded=1 and dismisses wizard. Non-reappearance after completion confirmed. Backend 5/5 pytest passing. No critical bugs.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter57_launch_hardening.py",
+    "/app/test_reports/pytest/iter57_launch_hardening.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Cosmetic (from iter56 still open): server.py /api/auth/login response body hardcodes role='owner' and email=OWNER_EMAIL regardless of the authenticated identity. JWT payload is correct; /auth/me returns the right values; but the login response body is a footgun for any future client that trusts it directly. Not blocking this iteration.",
+    "email_service.py — resend errors are swallowed by design (fire-and-forget) and only logged. Good defensive pattern for MVP. In production, consider a dead-letter queue / retry so a genuine outage doesn't silently drop approval emails."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter57_launch_hardening.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Demo: review@ananta.ai / AnantaDemo123! ; Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Demo paper-setup replaced the singleton portfolio with a $25k book + ~21 closed DEMO-tagged trades + 2 open positions. Owner paper-setup then reset to $15k fresh (as designed — shared engine). A few TEST_-prefixed access-request rows were seeded to /api/access_requests (approved / rejected) — safe to leave; idempotent by email.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 57 verified role-aware demo seeding + web onboarding parity + Resend integration. Backend test file: /app/backend/tests/test_iter57_launch_hardening.py (5/5 pass). Web onboarding wizard end-to-end works via localStorage token injection. Note: the paper-setup endpoint mutates the shared owner engine — running the demo test wipes any previous owner book and vice versa (expected MVP behaviour). Resend is in test-mode so only owner-notification emails to WAITLIST_NOTIFY_EMAIL are actually delivered; user-notification emails fail gracefully with a swallowed ResendError.",
+  "rca of the issue": ""
+}

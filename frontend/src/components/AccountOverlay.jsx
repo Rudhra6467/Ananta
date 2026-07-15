@@ -153,7 +153,12 @@ export default function AccountOverlay({ open, onOpenChange }) {
                         <div className="rounded-lg border border-atlas-border overflow-hidden divide-y divide-atlas-border">
                             <Row icon={CreditCard} label="Payment methods" pill="Soon" testid="account-setting-payments" />
                             <Row icon={Bell} label="Notifications" pill="Soon" testid="account-setting-notifications" />
-                            <Row icon={ShieldCheck} label="Privacy &amp; Security" pill="Soon" testid="account-setting-privacy" />
+                            <a href="/privacy" target="_blank" rel="noopener noreferrer" data-testid="account-setting-privacy"
+                                onClick={() => onOpenChange(false)}
+                                className="flex items-center justify-between px-3 py-3 hover:bg-atlas-panelHover transition-colors">
+                                <span className="flex items-center gap-2.5 font-body text-sm text-atlas-textSecondary"><ShieldCheck className="w-4 h-4 text-atlas-textTertiary" /> Privacy &amp; Security</span>
+                                <span className="flex items-center gap-1 font-mono text-[10px] text-atlas-cyan">Policy <ChevronRight className="w-3.5 h-3.5" /></span>
+                            </a>
                             <a href="/support" target="_blank" rel="noopener noreferrer" data-testid="account-contact-us"
                                 onClick={() => onOpenChange(false)}
                                 className="flex items-center justify-between px-3 py-3 hover:bg-atlas-panelHover transition-colors">

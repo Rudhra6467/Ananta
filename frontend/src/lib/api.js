@@ -139,6 +139,7 @@ export const api = {
     coachTradesReview: (mode) => client.post("/coach/trades-review", { mode }).then((r) => r.data),
     // --- auth (Phase 3.5) ---
     login: (email, password) => client.post("/auth/login", { email, password }).then((r) => r.data),
+    onboardingPaperSetup: (cfg) => client.post("/onboarding/paper-setup", cfg).then((r) => r.data),
     logout: () => client.post("/auth/logout").then((r) => r.data),
     me: () => client.get("/auth/me").then((r) => r.data),
     researchShadow: () => client.get("/research/shadow").then((r) => r.data),
