@@ -4,6 +4,7 @@ import AppShell from "@/AppShell";
 import JudgeView from "@/pages/JudgeView";
 import LaunchPage from "@/pages/LaunchPage";
 import SignUp from "@/pages/SignUp";
+import Support from "@/pages/Support";
 import { AuthProvider } from "@/context/AuthContext";
 import { AccessGateProvider } from "@/context/AccessGateContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -19,6 +20,7 @@ export default function App() {
                                 <Route path="/judge" element={<ErrorBoundary where="judge"><JudgeView /></ErrorBoundary>} />
                                 <Route path="/launch" element={<ErrorBoundary where="launch"><LaunchPage /></ErrorBoundary>} />
                                 <Route path="/signup" element={<ErrorBoundary where="signup"><SignUp /></ErrorBoundary>} />
+                                <Route path="/support" element={<ErrorBoundary where="support"><Support /></ErrorBoundary>} />
                                 <Route path="/" element={<ErrorBoundary where="app"><AppShell /></ErrorBoundary>} />
                             </Routes>
                         </BrowserRouter>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity } from "lucide-react";
+import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -154,6 +154,12 @@ export default function AccountOverlay({ open, onOpenChange }) {
                             <Row icon={CreditCard} label="Payment methods" pill="Soon" testid="account-setting-payments" />
                             <Row icon={Bell} label="Notifications" pill="Soon" testid="account-setting-notifications" />
                             <Row icon={ShieldCheck} label="Privacy &amp; Security" pill="Soon" testid="account-setting-privacy" />
+                            <a href="/support" target="_blank" rel="noopener noreferrer" data-testid="account-contact-us"
+                                onClick={() => onOpenChange(false)}
+                                className="flex items-center justify-between px-3 py-3 hover:bg-atlas-panelHover transition-colors">
+                                <span className="flex items-center gap-2.5 font-body text-sm text-atlas-textSecondary"><LifeBuoy className="w-4 h-4 text-atlas-textTertiary" /> Contact Us</span>
+                                <span className="flex items-center gap-1 font-mono text-[10px] text-atlas-cyan">Support <ChevronRight className="w-3.5 h-3.5" /></span>
+                            </a>
                         </div>
                     </div>
 

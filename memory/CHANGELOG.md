@@ -919,3 +919,8 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Removed the "AI Quant Analyst" header block inside Ask Ananta (kept the chat + input).
 - Removed the "AI Trading Coach" card + AI/credits toggle + description entirely; Weekly Review now shows ONLY the "Generate Weekly Review" button (results still render on generate).
 - Taglines: Ask Ananta → "About Trading/Strategy/Market"; Weekly Review → "What/How did you do this week?".
+
+## 2026-07-15 — Support / Contact Us page (web)
+- New public route /support (Support URL: https://spot-trading-lab.emergent.host/support) — no auth. Shows the support email vamsimadhavyakasiri@gmail.com (mailto + copy) and a message form that opens the user's mail client pre-filled to that address.
+- Added "Contact Us" row in the Account overlay under SETTINGS (Privacy & Security group) → opens /support in a new tab.
+- Delivery is mailto-based (no email keys). Server-side delivery via Resend can be added later if desired.
