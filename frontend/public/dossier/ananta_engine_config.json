@@ -1,0 +1,1320 @@
+{
+  "meta": {
+    "document": "Ananta Trading Engine \u2014 Machine-Readable Configuration Export",
+    "generated_utc": "2026-07-16T16:42:57.459174+00:00",
+    "grounded_in_run": "a7a8a0c0-2080-4405-97e7-f97c36cc2f76",
+    "disclaimer": "RiskSettings values below are the engine DEFAULTS from models.RiskSettings. The backtest itself overrides position size to $75 and uses the ATR-exit method with the atr_params shown under backtest_run. The eight declarative strategies were SELECTED in the run config but the Lab backtester's entry scan wires only the three core alpha models (hunter/squeeze/continuation) \u2014 see the Dossier, Part 3/15."
+  },
+  "backtest_run": {
+    "run_id": "a7a8a0c0-2080-4405-97e7-f97c36cc2f76",
+    "kind": "backtest",
+    "symbols": [
+      "BTC/USD",
+      "SOL/USD",
+      "ETH/USD"
+    ],
+    "period": "1y (2025-07-20 -> 2026-07-15)",
+    "window_start": "2025-07-20",
+    "window_end": "2026-07-15",
+    "timeframe": "1h (live-execution baseline); 15m & 30m also replayed for comparison",
+    "exit_method": "ATR Exit (x2.5 stop, 14p, arm 3%, trail x2)",
+    "atr_params": {
+      "multiplier": 2.5,
+      "period": 14,
+      "trail_activation_pct": 3.0,
+      "trail_distance": 2.0
+    },
+    "position_size_usd": 75.0,
+    "baseline_capital": 1200.0,
+    "metric": "return_over_dd",
+    "git_commit": "unknown",
+    "generated": "2026-07-16T13:05:16",
+    "strategies_selected": [
+      "hunter",
+      "squeeze",
+      "continuation",
+      "ema-cross",
+      "supertrend",
+      "rsi-momentum",
+      "macd-trend",
+      "bollinger-mr",
+      "donchian-breakout",
+      "atr-breakout",
+      "keltner-breakout"
+    ]
+  },
+  "execution_model": {
+    "entry_fill": "signal evaluated on closed bar i; fill at bar i+1 OPEN",
+    "exit_intrabar": "pessimistic LOW pass (stops/trail) then CLOSE pass (upside modules)",
+    "slippage_pct_per_leg": 0.05,
+    "fee_source": "RiskSettings.taker_fee_pct (applied to every leg)",
+    "warmup_bars": 200,
+    "analysis_lookback_bars": 750,
+    "no_lookahead": true
+  },
+  "risk_settings_defaults": {
+    "id": "singleton",
+    "max_spread_pct": 0.5,
+    "max_daily_loss_pct": 10.0,
+    "account_max_drawdown_pct": 20.0,
+    "min_confidence": 0.8,
+    "position_size_pct_min": 1.0,
+    "position_size_pct_max": 3.0,
+    "adaptive_sizing_enabled": true,
+    "normal_lot_usd": 75.0,
+    "strong_lot_usd": 75.0,
+    "breakout_lot_usd": 75.0,
+    "breakout_min_confidence": 0.85,
+    "breakout_volume_percentile": 95.0,
+    "breakout_max_spread_pct": 0.2,
+    "breakout_trail_arm_pct": 5.0,
+    "breakout_trail_distance_pct": 3.0,
+    "sl_cooldown_seconds": 7200,
+    "trail_cooldown_seconds": 1800,
+    "vault_max_override_usd": 100.0,
+    "vault_sync_enabled": false,
+    "htf_trend_enabled": true,
+    "level_entry_enabled": true,
+    "level_proximity_pct": 1.5,
+    "level_zone_tol_pct": 0.75,
+    "level_min_touches": 2,
+    "level_lookback_days": 540,
+    "structural_stop_buffer_pct": 2.0,
+    "catastrophe_veto_confidence": 0.8,
+    "rsi_reset_max": 35.0,
+    "rsi_reset_min": 30.0,
+    "volume_exhaustion_window": 6,
+    "pullback_max_green_body_pct": 1.5,
+    "atr_zone_below_mult": 0.3,
+    "atr_zone_above_mult": 0.5,
+    "vcp_enabled": true,
+    "vcp_min_candles": 2,
+    "vcp_max_candles": 4,
+    "vol_exhaustion_ratio_max": 0.6,
+    "squeeze_vol_expansion_min": 1.5,
+    "continuation_enabled": true,
+    "cont_ema_fast": 20,
+    "cont_ema_slow": 50,
+    "cont_trend_rising_lookback": 10,
+    "cont_swing_lookback": 12,
+    "cont_pullback_min_pct": 1.0,
+    "cont_pullback_max_pct": 12.0,
+    "cont_rsi_min": 40.0,
+    "cont_rsi_max": 62.0,
+    "cont_vol_dryup_ratio": 0.9,
+    "cont_max_green_body_pct": 2.0,
+    "cont_support_atr_mult": 0.6,
+    "strong_min_confidence": 0.8,
+    "strong_min_atr_percentile": 60.0,
+    "strong_min_adx": 20.0,
+    "max_concurrent_positions": 8,
+    "stop_loss_pct": 10.0,
+    "trail_arm_pct": 5.0,
+    "trail_distance_pct": 3.0,
+    "dynamic_trail_enabled": true,
+    "dynamic_trail_k": 0.06,
+    "profile_overrides": {},
+    "dynamic_trail_min_pct": 2.0,
+    "dynamic_trail_max_pct": 6.0,
+    "position_watcher_interval_seconds": 15,
+    "taker_fee_pct": 0.4,
+    "maker_fee_pct": 0.25,
+    "breakout_paper_slippage_pct": 0.1,
+    "trading_mode": "PAPER",
+    "manual_kill_switch": false,
+    "ask_ananta_enabled": false,
+    "enabled_symbols": [
+      "BTC/USD",
+      "ETH/USD",
+      "SOL/USD",
+      "AVAX/USD",
+      "XRP/USD",
+      "PAXG/USD",
+      "LINK/USD",
+      "AAVE/USD",
+      "ARB/USD",
+      "RENDER/USD"
+    ],
+    "coinbase_api_key": "",
+    "coinbase_api_secret": "",
+    "kraken_api_key": "",
+    "kraken_api_secret": "",
+    "updated_at": "2026-07-16T16:42:57.459222+00:00"
+  },
+  "risk_settings_hard_bounds": {
+    "float_clamps": {
+      "max_spread_pct": [
+        0.001,
+        5.0
+      ],
+      "max_daily_loss_pct": [
+        0.1,
+        50.0
+      ],
+      "min_confidence": [
+        0.0,
+        1.0
+      ],
+      "position_size_pct_min": [
+        0.1,
+        10.0
+      ],
+      "position_size_pct_max": [
+        0.1,
+        20.0
+      ],
+      "normal_lot_usd": [
+        1.0,
+        1000.0
+      ],
+      "strong_lot_usd": [
+        1.0,
+        1000.0
+      ],
+      "strong_min_confidence": [
+        0.0,
+        1.0
+      ],
+      "strong_min_atr_percentile": [
+        0.0,
+        100.0
+      ],
+      "strong_min_adx": [
+        0.0,
+        100.0
+      ],
+      "stop_loss_pct": [
+        0.1,
+        50.0
+      ],
+      "trail_arm_pct": [
+        0.1,
+        50.0
+      ],
+      "trail_distance_pct": [
+        0.1,
+        50.0
+      ],
+      "vault_max_override_usd": [
+        1.0,
+        1000000.0
+      ],
+      "taker_fee_pct": [
+        0.0,
+        5.0
+      ],
+      "maker_fee_pct": [
+        0.0,
+        5.0
+      ],
+      "breakout_paper_slippage_pct": [
+        0.0,
+        5.0
+      ],
+      "breakout_lot_usd": [
+        1.0,
+        10000.0
+      ],
+      "breakout_min_confidence": [
+        0.0,
+        1.0
+      ],
+      "breakout_volume_percentile": [
+        0.0,
+        100.0
+      ],
+      "breakout_max_spread_pct": [
+        0.0,
+        5.0
+      ],
+      "breakout_trail_arm_pct": [
+        0.1,
+        50.0
+      ],
+      "breakout_trail_distance_pct": [
+        0.1,
+        50.0
+      ],
+      "rsi_reset_max": [
+        0.0,
+        100.0
+      ],
+      "level_proximity_pct": [
+        0.1,
+        10.0
+      ],
+      "squeeze_vol_expansion_min": [
+        1.0,
+        5.0
+      ]
+    },
+    "int_clamps": {
+      "sl_cooldown_seconds": [
+        0,
+        86400
+      ],
+      "trail_cooldown_seconds": [
+        0,
+        86400
+      ],
+      "max_concurrent_positions": [
+        1,
+        20
+      ],
+      "position_watcher_interval_seconds": [
+        5,
+        300
+      ]
+    },
+    "profile_clamps": {
+      "trail_atr_mult": [
+        0.5,
+        6.0
+      ],
+      "profit_arm_pct": [
+        0.5,
+        30.0
+      ],
+      "time_exit_hours": [
+        1.0,
+        1000.0
+      ]
+    }
+  },
+  "atr_exit_defaults": {
+    "multiplier": 2.5,
+    "period": 14,
+    "trail_activation_pct": 3.0,
+    "trail_distance": 2.0
+  },
+  "exit_comparison_configs": [
+    {
+      "key": "fixed_2_1.5",
+      "label": "Fixed $2.00 / $1.50",
+      "exit_method": "fixed",
+      "target_profit": 2.0,
+      "target_loss": 1.5
+    },
+    {
+      "key": "fixed_3_2.25",
+      "label": "Fixed $3.00 / $2.25",
+      "exit_method": "fixed",
+      "target_profit": 3.0,
+      "target_loss": 2.25
+    },
+    {
+      "key": "fixed_4_3",
+      "label": "Fixed $4.00 / $3.00",
+      "exit_method": "fixed",
+      "target_profit": 4.0,
+      "target_loss": 3.0
+    },
+    {
+      "key": "fixed_5_4",
+      "label": "Fixed $5.00 / $4.00",
+      "exit_method": "fixed",
+      "target_profit": 5.0,
+      "target_loss": 4.0
+    },
+    {
+      "key": "atr_baseline",
+      "label": "ATR Baseline (\u00d72.5, 14p)",
+      "exit_method": "atr"
+    }
+  ],
+  "regime_classifier": {
+    "regimes": [
+      "TREND_UP",
+      "TREND_DOWN",
+      "RANGE",
+      "COMPRESSION",
+      "REVERSAL",
+      "NEUTRAL"
+    ],
+    "priority": "compression > reversal(panic) > strong-trend > range > neutral",
+    "thresholds": {
+      "strong_uptrend": "ema20>ema50>ema200 AND price>ema20 AND ADX>=20 AND higher-high/higher-low",
+      "panic": "RSI<=22 AND ATR percentile>=70",
+      "compression": "(BBwidth pct<=30 AND ATR pct<=35) OR ATR pct<=10",
+      "reversal": "panic OR (RSI<=32 AND (ema stack down OR lower-high/lower-low))",
+      "range": "ADX<20"
+    },
+    "inputs": "EMA20/50/200, RSI14, ADX14, ATR14(+percentile), Bollinger bandwidth(20,2)(+percentile), swing structure"
+  },
+  "entry_quality_scoring": {
+    "purpose": "research grading only \u2014 NEVER gates a trade",
+    "grades": {
+      "A+": ">=90",
+      "A": ">=80",
+      "B": ">=65",
+      "C": "<65"
+    },
+    "hunter_components": [
+      "rsi_reset",
+      "volume_exhaustion",
+      "zone_touches",
+      "zone_strength",
+      "trend_alignment",
+      "structure"
+    ],
+    "squeeze_components": [
+      "compression",
+      "atr_coil",
+      "volume_spike",
+      "breakout_strength",
+      "entry_timing"
+    ]
+  },
+  "exit_engine_modules": {
+    "A_structural_failure": {
+      "priority": 1,
+      "action": "EXIT_FULL",
+      "logic": "structural stop / % stop / locked profit-floor breach"
+    },
+    "KILL_emergency": {
+      "priority": 2,
+      "action": "EXIT_FULL",
+      "logic": "injected by caller (existential veto)"
+    },
+    "F_profit_protection": {
+      "priority": 3,
+      "action": "TIGHTEN",
+      "logic": "breakeven at +1R, then lock +1% profit floor"
+    },
+    "B_momentum_exhaustion": {
+      "priority": 4,
+      "action": "EXIT_PARTIAL(50%)",
+      "logic": "overbought zone + volume climax + exhaustion candle"
+    },
+    "S_structure_failure": {
+      "priority": 5,
+      "action": "EXIT_FULL",
+      "logic": "lower-low + momentum dead (RSI<50 & below 20-EMA)"
+    },
+    "D_ema_trend_loss": {
+      "priority": 5,
+      "action": "EXIT_FULL",
+      "logic": "close below 20-EMA / dead-cross"
+    },
+    "C_atr_trail": {
+      "priority": 6,
+      "action": "EXIT_FULL",
+      "logic": "armed trail = peak - X*ATR, arms at +2R"
+    },
+    "E_time_exit": {
+      "priority": 7,
+      "action": "EXIT_FULL",
+      "logic": "capital-efficiency time cap per profile"
+    }
+  },
+  "strategies": {
+    "core_alpha_models": {
+      "hunter": {
+        "type": "reversal",
+        "thesis": "buy fear at validated support",
+        "gates": [
+          "historical support zone",
+          "pullback confirmation (no green-candle chase)",
+          "volume exhaustion (falling volume slope)",
+          "4H RSI momentum reset <= rsi_reset_max"
+        ],
+        "structural_stop": "0.4*ATR below the structure low"
+      },
+      "squeeze": {
+        "type": "volatility expansion",
+        "thesis": "buy expansion out of a coil",
+        "trigger": "Bollinger Bands inside Keltner Channels",
+        "entry": "CONTINUATION (inside-bar break) or RETEST (reclaim of 20-MA basis), not the first breakout candle",
+        "stop": "20-period MA (Bollinger basis)"
+      },
+      "continuation": {
+        "type": "trend pullback",
+        "thesis": "buy the dip in an established uptrend",
+        "trigger": "50-EMA rising AND 20-EMA>50-EMA AND price>50-EMA",
+        "entry": "controlled pullback to 20-EMA, volume drying, RSI 40-62, stabilising candle",
+        "structural_stop": "below pullback low / 50-EMA buffered by 0.4*ATR"
+      }
+    },
+    "declarative_catalog": {
+      "ema-cross": {
+        "name": "EMA Cross",
+        "library_id": "ema-cross",
+        "default_enabled": true,
+        "description": "Dual-EMA crossover: long when the fast EMA crosses above the slow EMA, flat when it crosses back below.",
+        "params": [
+          {
+            "id": "ema_fast",
+            "label": "Fast EMA",
+            "type": "ParamType.INT",
+            "default": 12,
+            "min": 2.0,
+            "max": 100.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "ema_slow",
+            "label": "Slow EMA",
+            "type": "ParamType.INT",
+            "default": 26,
+            "min": 3.0,
+            "max": 300.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "ema_fast": {
+              "fn": "ema",
+              "period": "$ema_fast"
+            },
+            "ema_slow": {
+              "fn": "ema",
+              "period": "$ema_slow"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "ema_fast",
+              "op": "cross_above",
+              "rhs": "ema_slow"
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "ema_fast",
+              "op": "cross_below",
+              "rhs": "ema_slow"
+            }
+          ],
+          "entry_reason": "Fast EMA crossed above slow EMA"
+        }
+      },
+      "supertrend": {
+        "name": "Supertrend",
+        "library_id": "supertrend",
+        "default_enabled": true,
+        "description": "ATR-based trend filter: long on a bullish Supertrend flip, flat on a bearish flip.",
+        "params": [
+          {
+            "id": "st_atr_period",
+            "label": "ATR Period",
+            "type": "ParamType.INT",
+            "default": 10,
+            "min": 2.0,
+            "max": 50.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "st_multiplier",
+            "label": "ATR Multiplier",
+            "type": "ParamType.FLOAT",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 10.0,
+            "step": 0.1,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "st_dir": {
+              "fn": "supertrend_dir",
+              "atr_period": "$st_atr_period",
+              "multiplier": "$st_multiplier"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "st_dir",
+              "op": "cross_above",
+              "rhs": 0
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "st_dir",
+              "op": "cross_below",
+              "rhs": 0
+            }
+          ],
+          "entry_reason": "Supertrend flipped bullish"
+        }
+      },
+      "rsi-momentum": {
+        "name": "RSI Momentum",
+        "library_id": "rsi-momentum",
+        "default_enabled": true,
+        "description": "Buys momentum strength: RSI crossing above the entry level while price holds above a rising trend EMA.",
+        "params": [
+          {
+            "id": "rsi_period",
+            "label": "RSI Period",
+            "type": "ParamType.INT",
+            "default": 14,
+            "min": 2.0,
+            "max": 50.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "rsi_entry",
+            "label": "Entry RSI",
+            "type": "ParamType.INT",
+            "default": 60,
+            "min": 50.0,
+            "max": 90.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "rsi_exit",
+            "label": "Exit RSI",
+            "type": "ParamType.INT",
+            "default": 50,
+            "min": 20.0,
+            "max": 70.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "trend_ema",
+            "label": "Trend EMA",
+            "type": "ParamType.INT",
+            "default": 50,
+            "min": 5.0,
+            "max": 200.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "rsi": {
+              "fn": "rsi",
+              "period": "$rsi_period"
+            },
+            "trend": {
+              "fn": "ema",
+              "period": "$trend_ema"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "rsi",
+              "op": "cross_above",
+              "rhs": "$rsi_entry"
+            },
+            {
+              "lhs": "close",
+              "op": "gt",
+              "rhs": "trend"
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "rsi",
+              "op": "lt",
+              "rhs": "$rsi_exit"
+            }
+          ],
+          "entry_reason": "RSI momentum breakout above trend EMA"
+        }
+      },
+      "macd-trend": {
+        "name": "MACD Trend",
+        "library_id": "macd-trend",
+        "default_enabled": false,
+        "description": "MACD line crossing above its signal while the MACD histogram is above zero (bullish regime).",
+        "params": [
+          {
+            "id": "macd_fast",
+            "label": "MACD Fast",
+            "type": "ParamType.INT",
+            "default": 12,
+            "min": 2.0,
+            "max": 100.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "macd_slow",
+            "label": "MACD Slow",
+            "type": "ParamType.INT",
+            "default": 26,
+            "min": 3.0,
+            "max": 200.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "macd_signal",
+            "label": "Signal",
+            "type": "ParamType.INT",
+            "default": 9,
+            "min": 2.0,
+            "max": 50.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "macd": {
+              "fn": "macd_line",
+              "fast": "$macd_fast",
+              "slow": "$macd_slow"
+            },
+            "sig": {
+              "fn": "macd_signal",
+              "fast": "$macd_fast",
+              "slow": "$macd_slow",
+              "signal": "$macd_signal"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "macd",
+              "op": "cross_above",
+              "rhs": "sig"
+            },
+            {
+              "lhs": "macd",
+              "op": "gt",
+              "rhs": 0
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "macd",
+              "op": "cross_below",
+              "rhs": "sig"
+            }
+          ],
+          "entry_reason": "MACD crossed above signal in bullish regime"
+        }
+      },
+      "bollinger-mr": {
+        "name": "Bollinger Mean Reversion",
+        "library_id": "bollinger-mr",
+        "default_enabled": false,
+        "description": "Fades extremes: buys a close below the lower band, exits back at the middle band.",
+        "params": [
+          {
+            "id": "bb_period",
+            "label": "BB Period",
+            "type": "ParamType.INT",
+            "default": 20,
+            "min": 5.0,
+            "max": 100.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "bb_std",
+            "label": "Std Dev",
+            "type": "ParamType.FLOAT",
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0,
+            "step": 0.1,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "lower": {
+              "fn": "bb_lower",
+              "period": "$bb_period",
+              "std": "$bb_std"
+            },
+            "mid": {
+              "fn": "bb_mid",
+              "period": "$bb_period"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "close",
+              "op": "lt",
+              "rhs": "lower"
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "close",
+              "op": "gte",
+              "rhs": "mid"
+            }
+          ],
+          "entry_reason": "Price closed below the lower Bollinger band"
+        }
+      },
+      "donchian-breakout": {
+        "name": "Donchian Breakout",
+        "library_id": "donchian-breakout",
+        "default_enabled": false,
+        "description": "Channel breakout: long on a new N-period high, flat on a new M-period low.",
+        "params": [
+          {
+            "id": "dc_entry",
+            "label": "Entry Channel",
+            "type": "ParamType.INT",
+            "default": 20,
+            "min": 5.0,
+            "max": 100.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "dc_exit",
+            "label": "Exit Channel",
+            "type": "ParamType.INT",
+            "default": 10,
+            "min": 3.0,
+            "max": 60.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "hi": {
+              "fn": "donchian_high",
+              "period": "$dc_entry"
+            },
+            "lo": {
+              "fn": "donchian_low",
+              "period": "$dc_exit"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "close",
+              "op": "gt",
+              "rhs": "hi"
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "close",
+              "op": "lt",
+              "rhs": "lo"
+            }
+          ],
+          "entry_reason": "Price broke above the Donchian channel high"
+        }
+      },
+      "atr-breakout": {
+        "name": "ATR Breakout",
+        "library_id": "atr-breakout",
+        "default_enabled": false,
+        "description": "Volatility-expansion entry: price breaks above previous close + k\u00d7ATR.",
+        "params": [
+          {
+            "id": "atr_period",
+            "label": "ATR Period",
+            "type": "ParamType.INT",
+            "default": 14,
+            "min": 2.0,
+            "max": 50.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "atr_k",
+            "label": "ATR Multiple",
+            "type": "ParamType.FLOAT",
+            "default": 1.5,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.1,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "lvl": {
+              "fn": "atr_breakout_level",
+              "period": "$atr_period",
+              "k": "$atr_k"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "close",
+              "op": "gt",
+              "rhs": "lvl"
+            }
+          ],
+          "exit": [],
+          "entry_reason": "Price broke previous close + k\u00d7ATR"
+        }
+      },
+      "keltner-breakout": {
+        "name": "Keltner Breakout",
+        "library_id": "keltner-breakout",
+        "default_enabled": false,
+        "description": "Buys a close above the upper Keltner band, exits back below the EMA basis.",
+        "params": [
+          {
+            "id": "kc_ema",
+            "label": "EMA Period",
+            "type": "ParamType.INT",
+            "default": 20,
+            "min": 5.0,
+            "max": 100.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "kc_atr",
+            "label": "ATR Period",
+            "type": "ParamType.INT",
+            "default": 10,
+            "min": 2.0,
+            "max": 50.0,
+            "step": 1.0,
+            "unit": null,
+            "engine_backed": false
+          },
+          {
+            "id": "kc_mult",
+            "label": "ATR Mult",
+            "type": "ParamType.FLOAT",
+            "default": 2.0,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.1,
+            "unit": null,
+            "engine_backed": false
+          }
+        ],
+        "spec": {
+          "indicators": {
+            "up": {
+              "fn": "keltner_upper",
+              "ema_period": "$kc_ema",
+              "atr_period": "$kc_atr",
+              "mult": "$kc_mult"
+            },
+            "mid": {
+              "fn": "keltner_mid",
+              "ema_period": "$kc_ema"
+            }
+          },
+          "entry": [
+            {
+              "lhs": "close",
+              "op": "cross_above",
+              "rhs": "up"
+            }
+          ],
+          "exit": [
+            {
+              "lhs": "close",
+              "op": "cross_below",
+              "rhs": "mid"
+            }
+          ],
+          "entry_reason": "Price closed above the upper Keltner band"
+        }
+      }
+    }
+  },
+  "results_summary": {
+    "per_symbol": {
+      "BTC/USD": {
+        "total_return_pct": -13.586,
+        "trades": 197,
+        "win_rate_pct": 34.0,
+        "max_drawdown_pct": 1.03,
+        "sharpe": -0.149,
+        "sortino": -0.168,
+        "profit_factor": 0.33,
+        "net_pnl": -163.033,
+        "avg_mfe_pct": 1.934,
+        "avg_mae_pct": -1.694,
+        "avg_profit_left_usd": 2.278,
+        "total_profit_left_usd": 448.85,
+        "avg_trade_quality": 53.3,
+        "recommendation": "UNDERPERFORMING - -13.6% at 34.0% win rate; the edge is weak in this window. Re-test other timeframes or parameter presets.",
+        "best_engine": "Fixed $3.00 / $2.25 - -7.45% net return at 34.0% win rate, profit factor 0.69, 0.80% max drawdown over 197 trades.",
+        "regime": {
+          "COMPRESSION": [
+            10,
+            40.0,
+            -2.29
+          ],
+          "NEUTRAL": [
+            70,
+            35.7,
+            -54.67
+          ],
+          "RANGE": [
+            1,
+            0.0,
+            -1.75
+          ],
+          "REVERSAL": [
+            8,
+            50.0,
+            -6.02
+          ],
+          "TREND_UP": [
+            108,
+            31.5,
+            -98.31
+          ]
+        },
+        "exit_modules": {
+          "ATR": [
+            195,
+            34.4,
+            -162.58
+          ],
+          "EOD": [
+            2,
+            0.0,
+            -0.45
+          ]
+        }
+      },
+      "SOL/USD": {
+        "total_return_pct": -23.583,
+        "trades": 249,
+        "win_rate_pct": 36.5,
+        "max_drawdown_pct": 1.53,
+        "sharpe": -0.289,
+        "sortino": -0.268,
+        "profit_factor": 0.25,
+        "net_pnl": -282.994,
+        "avg_mfe_pct": 2.325,
+        "avg_mae_pct": -2.232,
+        "avg_profit_left_usd": 2.881,
+        "total_profit_left_usd": 717.26,
+        "avg_trade_quality": 51.3,
+        "recommendation": "UNDERPERFORMING - -23.6% at 36.5% win rate; the edge is weak in this window. Re-test other timeframes or parameter presets.",
+        "best_engine": "Fixed $5.00 / $4.00 - -25.25% net return at 30.9% win rate, profit factor 0.56, 1.89% max drawdown over 249 trades.",
+        "regime": {
+          "COMPRESSION": [
+            6,
+            16.7,
+            -7.69
+          ],
+          "NEUTRAL": [
+            58,
+            41.4,
+            -45.84
+          ],
+          "RANGE": [
+            5,
+            40.0,
+            -6.44
+          ],
+          "REVERSAL": [
+            6,
+            0.0,
+            -17.9
+          ],
+          "TREND_UP": [
+            174,
+            36.8,
+            -205.12
+          ]
+        },
+        "exit_modules": {
+          "ATR": [
+            249,
+            36.5,
+            -282.99
+          ]
+        }
+      },
+      "ETH/USD": {
+        "total_return_pct": -18.439,
+        "trades": 227,
+        "win_rate_pct": 37.0,
+        "max_drawdown_pct": 1.28,
+        "sharpe": -0.217,
+        "sortino": -0.219,
+        "profit_factor": 0.3,
+        "net_pnl": -221.263,
+        "avg_mfe_pct": 2.291,
+        "avg_mae_pct": -2.036,
+        "avg_profit_left_usd": 2.693,
+        "total_profit_left_usd": 611.35,
+        "avg_trade_quality": 52.3,
+        "recommendation": "UNDERPERFORMING - -18.4% at 37.0% win rate; the edge is weak in this window. Re-test other timeframes or parameter presets.",
+        "best_engine": "Fixed $5.00 / $4.00 - -12.86% net return at 37.0% win rate, profit factor 0.73, 1.52% max drawdown over 227 trades.",
+        "regime": {
+          "COMPRESSION": [
+            6,
+            33.3,
+            -4.59
+          ],
+          "NEUTRAL": [
+            61,
+            34.4,
+            -60.15
+          ],
+          "RANGE": [
+            5,
+            40.0,
+            -3.11
+          ],
+          "REVERSAL": [
+            8,
+            25.0,
+            -10.72
+          ],
+          "TREND_UP": [
+            147,
+            38.8,
+            -142.69
+          ]
+        },
+        "exit_modules": {
+          "ATR": [
+            225,
+            36.9,
+            -221.26
+          ],
+          "EOD": [
+            2,
+            50.0,
+            -0.01
+          ]
+        }
+      }
+    },
+    "multi_timeframe": {
+      "BTC/USD": {
+        "15m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "30m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "1h": [
+          197,
+          -13.586,
+          34.0,
+          1.03,
+          1.934,
+          -1.694
+        ]
+      },
+      "SOL/USD": {
+        "15m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "30m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "1h": [
+          249,
+          -23.583,
+          36.5,
+          1.53,
+          2.325,
+          -2.232
+        ]
+      },
+      "ETH/USD": {
+        "15m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "30m": [
+          0,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "1h": [
+          227,
+          -18.439,
+          37.0,
+          1.28,
+          2.291,
+          -2.036
+        ]
+      }
+    },
+    "exit_comparison": {
+      "BTC/USD": [
+        [
+          "Fixed $2.00/$1.50",
+          0.34,
+          20.3,
+          -0.78,
+          -12.75,
+          0.98
+        ],
+        [
+          "Fixed $3.00/$2.25 (best)",
+          0.69,
+          34.0,
+          -0.45,
+          -7.45,
+          0.8
+        ],
+        [
+          "Fixed $4.00/$3.00",
+          0.68,
+          35.0,
+          -0.62,
+          -10.2,
+          0.97
+        ],
+        [
+          "Fixed $5.00/$4.00",
+          0.64,
+          36.0,
+          -0.91,
+          -15.01,
+          1.32
+        ],
+        [
+          "ATR Baseline (x2.5, 14p)",
+          0.33,
+          34.0,
+          -0.83,
+          -13.59,
+          1.03
+        ]
+      ],
+      "SOL/USD": [
+        [
+          "Fixed $2.00/$1.50",
+          0.42,
+          24.1,
+          -0.66,
+          -13.62,
+          0.87
+        ],
+        [
+          "Fixed $3.00/$2.25",
+          0.51,
+          27.7,
+          -0.8,
+          -16.5,
+          1.06
+        ],
+        [
+          "Fixed $4.00/$3.00",
+          0.52,
+          28.1,
+          -1.03,
+          -21.42,
+          1.39
+        ],
+        [
+          "Fixed $5.00/$4.00 (best)",
+          0.56,
+          30.9,
+          -1.22,
+          -25.25,
+          1.89
+        ],
+        [
+          "ATR Baseline (x2.5, 14p)",
+          0.25,
+          36.5,
+          -1.14,
+          -23.58,
+          1.53
+        ]
+      ],
+      "ETH/USD": [
+        [
+          "Fixed $2.00/$1.50",
+          0.37,
+          21.6,
+          -0.74,
+          -14.04,
+          0.97
+        ],
+        [
+          "Fixed $3.00/$2.25",
+          0.49,
+          26.9,
+          -0.84,
+          -15.94,
+          1.18
+        ],
+        [
+          "Fixed $4.00/$3.00",
+          0.63,
+          32.2,
+          -0.75,
+          -14.25,
+          1.38
+        ],
+        [
+          "Fixed $5.00/$4.00 (best)",
+          0.73,
+          37.0,
+          -0.68,
+          -12.86,
+          1.52
+        ],
+        [
+          "ATR Baseline (x2.5, 14p)",
+          0.3,
+          37.0,
+          -0.97,
+          -18.44,
+          1.28
+        ]
+      ]
+    }
+  }
+}
