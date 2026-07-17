@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, Modal, Alert, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../src/api";
@@ -54,7 +54,6 @@ export default function ExitEngine() {
   const { isOwner } = useAuth();
   const [sub, setSub] = useState("engine");
   const [settings, setSettings] = useState<any>(null);
-  const [advOpen, setAdvOpen] = useState(false);
   const [trades, setTrades] = useState<any[]>([]);
 
   useEffect(() => {
@@ -62,60 +61,22 @@ export default function ExitEngine() {
     api.trades(60).then((t: any) => setTrades(Array.isArray(t) ? t : (t.items || t.trades || []))).catch(() => {});
   }, []);
 
-  const toggleKill = async () => {
-    if (!isOwner) return Alert.alert("Owner login required");
-    const killed = !!settings?.manual_kill_switch;
-    try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); }
-  };
-  const saveNum = async (k: string, v: string) => { const s = await api.updateSettings({ [k]: parseFloat(v) }); setSettings(s); };
-
   return (
     <View style={styles.fill}>
       <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
-        <View style={styles.rowBetween}>
-          <PageHeader title="Exit Engine" question="Configure how your strategies exit trades" />
-          <Pressable testID="ee-advanced" onPress={() => setAdvOpen(true)} style={styles.advBtn}>
-            <Ionicons name="settings-outline" size={13} color={colors.textMuted} /><Text style={styles.advTxt}> ADVANCED</Text>
-          </Pressable>
-        </View>
+        <PageHeader title="Exit Engine" question="Configure how your strategies exit trades" />
         <FirstVisitTip tipKey="exit-engine" text="Build an exit in 4 steps: scope, method, configure, then Test on history or Deploy to paper." />
 
         <View style={{ marginVertical: spacing.md }}>
           <Segmented testIDPrefix="ee-subtab"
-            options={[{ key: "engine", label: "EXIT ENGINE" }, { key: "ai", label: "AI ANALYSIS" }]}
+            options={[{ key: "engine", label: "EXIT ENGINE" }, { key: "risk", label: "RISK MONITOR" }, { key: "ai", label: "AI ANALYSIS" }]}
             value={sub} onChange={setSub} />
         </View>
 
         {sub === "engine" && <ExitFlow isOwner={isOwner} />}
+        {sub === "risk" && <RiskMonitor isOwner={isOwner} settings={settings} setSettings={setSettings} onGotoEngine={() => setSub("engine")} />}
         {sub === "ai" && <AiAnalysis isOwner={isOwner} trades={trades} />}
       </ScrollView>
-
-      <Modal visible={advOpen} transparent animationType="slide" onRequestClose={() => setAdvOpen(false)}>
-        <View style={styles.modalWrap}>
-          <View style={styles.modalCard}>
-            <View style={styles.rowBetween}>
-              <Text style={type.h2}>Advanced Settings</Text>
-              <Pressable testID="ee-adv-close" onPress={() => setAdvOpen(false)}><Ionicons name="close" size={22} color={colors.textMuted} /></Pressable>
-            </View>
-            <View style={styles.rowBetween}>
-              <SectionLabel>ENGINE & RISK</SectionLabel>
-              <Pressable testID="ee-stop-ananta" onPress={toggleKill} style={[styles.stopBtn, settings?.manual_kill_switch && styles.stopBtnOn]}>
-                <Ionicons name="power" size={13} color={colors.red} />
-                <Text style={styles.stopTxt}>{settings?.manual_kill_switch ? "RELEASE" : "STOP ANANTA"}</Text>
-              </Pressable>
-            </View>
-            {settings ? (
-              <View style={{ marginTop: spacing.sm }}>
-                <NumRow label="Stop-Loss %" k="stop_loss_pct" value={settings.stop_loss_pct} isOwner={isOwner} onSave={saveNum} />
-                <NumRow label="Trail Arm %" k="trail_arm_pct" value={settings.trail_arm_pct} isOwner={isOwner} onSave={saveNum} />
-                <NumRow label="Trail Distance %" k="trail_distance_pct" value={settings.trail_distance_pct} isOwner={isOwner} onSave={saveNum} />
-                <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={saveNum} />
-                <NumRow label="Daily Loss Cap %" k="max_daily_loss_pct" value={settings.max_daily_loss_pct} isOwner={isOwner} onSave={saveNum} />
-              </View>
-            ) : <ActivityIndicator color={colors.teal} />}
-          </View>
-        </View>
-      </Modal>
 
       <AskAnanta tab="workspace" routeName="workspace" />
     </View>
@@ -392,6 +353,81 @@ function AiAnalysis({ isOwner, trades }: { isOwner: boolean; trades: any[] }) {
   );
 }
 
+function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner: boolean; settings: any; setSettings: (s: any) => void; onGotoEngine: () => void }) {
+  const [risk, setRisk] = useState<any>(null);
+  useEffect(() => {
+    api.riskStatus().then(setRisk).catch(() => {});
+    const t = setInterval(() => api.riskStatus().then(setRisk).catch(() => {}), 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  const save = async (k: string, v: string) => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    try { const s = await api.updateSettings({ [k]: parseFloat(v) }); setSettings(s); } catch (e: any) { Alert.alert("Save failed", e?.message); }
+  };
+  const toggleKill = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    const killed = !!settings?.manual_kill_switch;
+    try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); }
+  };
+
+  if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.lg }} />;
+
+  const engineName = settings.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
+  const trailMult = settings.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
+  const safe = risk?.status?.overall_safe !== false;
+  const killed = !!settings.manual_kill_switch;
+
+  return (
+    <View>
+      <Card testID="rm-engine-summary" style={{ marginBottom: spacing.md }}>
+        <View style={styles.rowBetween}>
+          <SectionLabel>ENTRY & EXIT ENGINE</SectionLabel>
+          <Pressable testID="rm-goto-engine" onPress={onGotoEngine} style={styles.linkBtn}>
+            <Text style={styles.linkTxt}>Configure in Exit Engine</Text>
+            <Ionicons name="arrow-forward" size={13} color={colors.teal} />
+          </Pressable>
+        </View>
+        <View style={styles.rmStatusRow}>
+          <Text style={styles.rmStatusLabel}>ACTIVE EXIT ENGINE</Text>
+          <Text style={[styles.rmStatusVal, { color: colors.teal }]}>{engineName} ●</Text>
+        </View>
+        <SummaryRow label="Trail Multiplier" value={`${trailMult}x`} />
+        <SummaryRow label="Breakeven Arm" value={`${settings.trail_arm_pct}%`} />
+        <SummaryRow label="Hard Stop-Loss" value={`${settings.stop_loss_pct}%`} />
+      </Card>
+
+      <Card testID="rm-safeguards">
+        <View style={styles.rowBetween}>
+          <SectionLabel>RISK MONITOR · SAFEGUARDS</SectionLabel>
+          <Pressable testID="rm-stop-ananta" onPress={toggleKill} style={[styles.stopBtn, killed && styles.stopBtnOn]}>
+            <Ionicons name="power" size={13} color={colors.red} />
+            <Text style={styles.stopTxt}>{killed ? "RELEASE" : "STOP ANANTA"}</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.rmStatusRow, { marginBottom: spacing.sm }]}>
+          <Text style={styles.rmStatusLabel}>RISK STATUS</Text>
+          <Text style={[styles.rmStatusVal, { color: safe ? colors.teal : colors.red }]}>{safe ? "Protected ●" : "Alert ●"}</Text>
+        </View>
+        <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={save} />
+        <NumRow label="Daily Loss Cap %" k="max_daily_loss_pct" value={settings.max_daily_loss_pct} isOwner={isOwner} onSave={save} />
+        <NumRow label="Max Spread %" k="max_spread_pct" value={settings.max_spread_pct} isOwner={isOwner} onSave={save} />
+        <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={save} />
+        <NumRow label="Normal Lot (USD)" k="normal_lot_usd" value={settings.normal_lot_usd} isOwner={isOwner} onSave={save} />
+      </Card>
+    </View>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={[type.body, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[type.body, { fontWeight: "800" }]}>{value}</Text>
+    </View>
+  );
+}
+
 const fmt = (x: any) => (typeof x === "number" ? x.toFixed(2) : x ?? "-");
 
 function ChipRow({ label, items, value, onPick, prefix }: any) {
@@ -426,6 +462,11 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   advBtn: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
   advTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.5 },
+  linkBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  linkTxt: { color: colors.teal, fontWeight: "800", fontSize: 11, letterSpacing: 0.3 },
+  rmStatusRow: { paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder, marginTop: 4 },
+  rmStatusLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  rmStatusVal: { fontSize: 18, fontWeight: "800", marginTop: 4 },
   stepBar: { flexDirection: "row", gap: 6, marginBottom: spacing.lg },
   stepCol: { flex: 1, alignItems: "center" },
   stepTxt: { fontSize: 10, color: colors.textFaint, fontWeight: "700", letterSpacing: 0.2 },

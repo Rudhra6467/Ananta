@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { SlidersHorizontal, Sparkles, Archive, FileText, Power, Settings2, Loader2, Wand2 } from "lucide-react";
+import { SlidersHorizontal, Sparkles, Archive, FileText, Power, Shield, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useAppData } from "@/context/AppDataContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import SettingsPage from "@/pages/Settings";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 import AnantaPdfs from "@/components/AnantaPdfs";
@@ -48,13 +47,17 @@ export default function ExitEngine() {
                 <div className="flex items-center justify-between gap-2 border-b border-atlas-border mb-5 flex-wrap">
                     <TabsList className="bg-transparent w-auto justify-start gap-0 rounded-none h-auto p-0">
                         <ETab value="engine" label="EXIT ENGINE" icon={SlidersHorizontal} />
+                        <ETab value="risk" label="RISK MONITOR" icon={Shield} />
                         <ETab value="ai" label="AI ANALYSIS" icon={Sparkles} />
                     </TabsList>
-                    <AdvancedSettings />
                 </div>
 
                 <TabsContent value="engine" className="m-0">
                     <ExitEngineWorkflow />
+                </TabsContent>
+
+                <TabsContent value="risk" className="m-0">
+                    <SettingsPage onGotoExitEngine={() => { setTab("engine"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
                 </TabsContent>
 
                 <TabsContent value="ai" className="m-0 space-y-6">
@@ -79,23 +82,6 @@ function ETab({ value, label, icon: Icon }) {
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors hover:text-white flex items-center gap-2">
             <Icon className="w-4 h-4" strokeWidth={2} /> {label}
         </TabsTrigger>
-    );
-}
-
-function AdvancedSettings() {
-    return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <button data-testid="ee-advanced-settings"
-                    className="flex items-center gap-1.5 rounded-full border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary font-mono text-[10px] tracking-widest px-3 py-2 mb-2 transition-colors">
-                    <Settings2 className="w-3.5 h-3.5" /> ADVANCED SETTINGS
-                </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto atlas-scroll bg-atlas-bg border-atlas-border">
-                <DialogHeader><DialogTitle className="font-heading text-atlas-text">Advanced — Engine, Sizing, Guardrails &amp; Credentials</DialogTitle></DialogHeader>
-                <SettingsPage />
-            </DialogContent>
-        </Dialog>
     );
 }
 

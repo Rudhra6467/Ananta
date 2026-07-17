@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 // Cache the settings payload so re-opening renders instantly from cache.
 let _settingsCache = null;
 
-export default function SettingsPage() {
+export default function SettingsPage({ onGotoExitEngine } = {}) {
     const [s, setS] = useState(_settingsCache);
     const [saving, setSaving] = useState(false);
     const [risk, setRisk] = useState(null);
@@ -116,7 +116,8 @@ export default function SettingsPage() {
                             { testid: "face-arm", icon: Target, label: "Breakeven Arm", value: `${s.trail_arm_pct}%` },
                             { testid: "face-stop", icon: Shield, label: "Hard Stop-Loss", value: `${s.stop_loss_pct}%` },
                         ]}
-                        cta="Open Engine" onOpen={() => setOpenModal("exit")}
+                        cta={onGotoExitEngine ? "Configure in Exit Engine" : "Open Engine"}
+                        onOpen={() => (onGotoExitEngine ? onGotoExitEngine() : setOpenModal("exit"))}
                     />
 
                     {/* Q3 — Risk Monitor */}
@@ -134,11 +135,13 @@ export default function SettingsPage() {
                     />
                 </div>
 
-                {/* ---- Q1 modal ---- */}
-                <ExitEngineModal
-                    open={openModal === "exit"} onOpenChange={(o) => setOpenModal(o ? "exit" : null)}
-                    settings={s} onPersist={persistPatch} isOwner={isOwner}
-                />
+                {/* ---- Q1 modal (only when this page owns exit config; hidden inside Exit Engine tab) ---- */}
+                {!onGotoExitEngine && (
+                    <ExitEngineModal
+                        open={openModal === "exit"} onOpenChange={(o) => setOpenModal(o ? "exit" : null)}
+                        settings={s} onPersist={persistPatch} isOwner={isOwner}
+                    />
+                )}
 
                 {/* ---- Q3 modal ---- */}
                 <LabModal open={openModal === "risk"} onOpenChange={(o) => setOpenModal(o ? "risk" : null)}

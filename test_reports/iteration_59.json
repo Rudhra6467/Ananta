@@ -1,0 +1,24 @@
+{
+  "summary": "Iter 59 — Frontend-only regression test for Exit Engine tab restructure (3 sub-tabs: EXIT ENGINE / RISK MONITOR / AI ANALYSIS; Advanced Settings removed). Verified end-to-end on BOTH surfaces. WEB (desktop 1920x900, owner login via API + localStorage, onboarding-skip): exactly 3 sub-tabs found ([ee-subtab-engine, ee-subtab-risk, ee-subtab-ai]); zero ee-advanced/ee-advanced-settings buttons. RISK MONITOR sub-tab renders both cards quad-exit-engine (CTA 'Configure in Exit Engine') + quad-risk (CTA 'Open Risk Monitor'). Clicking 'Configure in Exit Engine' switches to EXIT ENGINE sub-tab (data-state=active) and opens NO modal (0 visible dialogs). 'Open Risk Monitor' opens the LabModal with RISK THRESHOLDS + ADAPTIVE LOT SIZING + EXECUTION CONTROLS (kill-switch + settings-run-cycle-btn) + Exchange Credentials — risk-save-btn click returned toast 'SETTINGS SAVED · Risk engine and exchange config updated.' AI subtab still renders ee-explain-run. MOBILE (Expo web preview 390x844, owner login → onboarding-start-exploring → onboarding-skip → tab-workspace): 3 sub-tabs in Segmented control; NO ee-advanced. RISK MONITOR shows rm-engine-summary (read-only ACTIVE EXIT ENGINE 'ATR Trailing Stop ●' + Trail Multiplier 2x + Breakeven Arm 1.6% + Hard Stop-Loss 2.2%) and rm-safeguards (RISK STATUS Protected ●, rm-stop-ananta STOP ANANTA button, and exactly 5 editable NumRows: ee-set-min_confidence / max_daily_loss_pct / max_spread_pct / max_concurrent_positions / normal_lot_usd). Verified NO stop_loss and NO trail editors exist under Risk Monitor (dup guard). Tap rm-goto-engine switches to EXIT ENGINE sub-tab; 3 scope cards visible (ee-scope-strategy, ee-scope-coin, ee-scope-global) and Scope/Method/Configure/Deploy step labels all present. AI ANALYSIS sub-tab still shows ee-explain-run. All acceptance criteria satisfied on both platforms — no parity divergence, no blocking issues.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Web /app/frontend/src/pages/ExitEngine.jsx line 60 embeds SettingsPage inside the risk sub-tab via <SettingsPage onGotoExitEngine=... />; this renders the FULL settings page (including its outer TooltipProvider/quad grid header 'How is Ananta set up?' sub-elements) inside a tab. Works today because Settings.jsx conditionally hides the exit-config modal when onGotoExitEngine is passed, but any future top-level markup added to Settings.jsx will leak into the Exit Engine → Risk Monitor tab. Consider splitting the risk-only view into a dedicated component to prevent accidental bleed.",
+    "Mobile /app/mobile/app/(tabs)/workspace.tsx RiskMonitor: editable rows use onEndEditing → onSave which fires per-field PUT to /api/settings; for the demo user this means 5 potential network round-trips if all fields change. Not a bug but consider debouncing or a single Save button parity with web."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% (web + mobile all acceptance items pass)"},
+  "test_credentials": "Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (verified working from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. risk-save-btn click on web wrote settings via PUT /api/settings but with the currently-loaded values (no user edit before save), so no state drift.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Exit Engine tab restructure fully verified. On web, to bypass the provisioning modal after setting localStorage 'ananta_owner_token', click [data-testid=onboarding-skip] (top-right SKIP/CLOSE) — the modal auto-runs its animated pipeline. Mobile flow: login → click onboarding-start-exploring → click onboarding-skip → click data-testid tab-workspace (not bottom-tab-workspace). Mobile bottom tabs are tab-index / tab-strategy / tab-research / tab-workspace / tab-trade. All Exit Engine mobile testIDs (ee-subtab-*, ee-scope-*, ee-method-*, rm-*) verified to render.",
+  "rca of the issue": ""
+}
