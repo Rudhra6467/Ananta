@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="368.461" timestamp="2026-07-17T18:12:21.279058+00:00" hostname="agent-env-f38528a7-fb55-4fde-95ad-386468e0d3a7"><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[fixed]" time="123.385"><failure message="AssertionError: final status=QUEUED for fixed&#10;assert 'QUEUED' == 'DONE'&#10;  &#10;  - DONE&#10;  + QUEUED">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=QUEUED for fixed
+E   assert 'QUEUED' == 'DONE'
+E     
+E     - DONE
+E     + QUEUED</failure></testcase><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[atr]" time="122.523"><failure message="AssertionError: final status=QUEUED for atr&#10;assert 'QUEUED' == 'DONE'&#10;  &#10;  - DONE&#10;  + QUEUED">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=QUEUED for atr
+E   assert 'QUEUED' == 'DONE'
+E     
+E     - DONE
+E     + QUEUED</failure></testcase><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[native]" time="122.506"><failure message="AssertionError: final status=QUEUED for native&#10;assert 'QUEUED' == 'DONE'&#10;  &#10;  - DONE&#10;  + QUEUED">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=QUEUED for native
+E   assert 'QUEUED' == 'DONE'
+E     
+E     - DONE
+E     + QUEUED</failure></testcase></testsuite></testsuites>

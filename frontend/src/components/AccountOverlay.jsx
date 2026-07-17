@@ -3,6 +3,7 @@ import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldChe
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import LearningHub from "@/components/LearningHub";
 
 // Account overlay (web) — opened by the Ananta logo button. Mirrors the mobile Account
 // layout (Profile header · Features · Settings) and serves the in-app privacy info.
@@ -136,6 +137,9 @@ export default function AccountOverlay({ open, onOpenChange }) {
                             <Row icon={FileText} label="Tax reporting" pill="Soon" testid="account-feature-tax" />
                         </div>
                     </div>
+
+                    {/* learning hub (migrated from Workspace) */}
+                    <LearningHub onClose={() => onOpenChange(false)} />
 
                     {/* system health (moved from Workspace › Engine & Risk) */}
                     <div data-testid="account-system-health">

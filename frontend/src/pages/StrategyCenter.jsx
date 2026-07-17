@@ -182,7 +182,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                             {lib.map((s) => (
                                 <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
                                     onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
-                                    onFav={() => api.libraryFavorite(s.id).then(load)} />
+                                    onFav={() => api.libraryFavorite(s.id).then(load)} onDeploy={load} />
                             ))}
                         </div>
                     )}
@@ -379,13 +379,29 @@ function FilterDrawer({ facets, filters, favOnly, activeCount, onToggle, onFav, 
 }
 
 
-function LibraryCard({ s, metric, isOwner, onOpen, onFav }) {
+function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
     const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
     const r = s.historical_results || {};
     const wired = !!(s.internal || (s.wireable && s.engine_key));
     const roi = metric ? metric.roi : r.roi;
     const roiCls = roi > 0 ? "text-atlas-positive" : roi < 0 ? "text-atlas-negative" : "text-atlas-text";
     const status = wired ? (metric?.status || "PAPER") : "CATALOG";
+    const deployed = status === "PAPER" || status === "LIVE";
+    const [deploying, setDeploying] = useState(false);
+
+    const deploy = async (e) => {
+        e.stopPropagation();
+        if (!isOwner) { toast.error("Owner login required to deploy"); return; }
+        if (deployed) { onOpen(); return; }  // already live/paper → open detail to manage
+        setDeploying(true);
+        try {
+            const next = await api.strategySetState(s.engine_key, { enabled: true });
+            toast.success("Deployed to paper engine", { description: `${s.name} → ${next.status || "PAPER"}` });
+            onDeploy?.();
+        } catch (err) { toast.error("Deploy failed", { description: String(err?.response?.data?.detail || err?.message) }); }
+        finally { setDeploying(false); }
+    };
+
     return (
         <div data-testid={`library-card-${s.id}`}
             className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
@@ -419,6 +435,15 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav }) {
                 <Kv label="Win Rate" value={`${r.win_rate}%`} />
                 <Kv label="Sharpe" value={r.sharpe} />
             </div>
+            {wired && (
+                <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
+                    className={`relative z-10 pointer-events-auto flex items-center justify-center gap-1.5 rounded-lg py-2.5 font-mono text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${
+                        deployed ? "border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"
+                            : "bg-atlas-cyan text-atlas-bg border border-atlas-cyan hover:brightness-110"}`}>
+                    {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
+                    {deployed ? "MANAGE" : "DEPLOY"}
+                </button>
+            )}
         </div>
     );
 }

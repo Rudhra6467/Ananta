@@ -313,14 +313,18 @@ class RiskSettings(BaseModel):
     strong_min_adx: float = 20.0  # 1h ADX floor for STRONG
     max_concurrent_positions: int = 8  # max open positions across symbols
     # exits (per-position, evaluated by the position watcher every 15s)
-    stop_loss_pct: float = 10.0  # SWING PIVOT: wide stop for patient holds
-    trail_arm_pct: float = 5.0  # SWING PIVOT: lets trends breathe before locking
-    trail_distance_pct: float = 3.0  # SWING PIVOT: wide leash prevents shakeouts (static fallback)
+    stop_loss_pct: float = 2.2  # tightened default (deep-research exit tuning)
+    trail_arm_pct: float = 1.6  # arm the trail sooner to protect winners
+    trail_distance_pct: float = 0.9  # tighter leash on the static trail fallback
+    profit_protection_enabled: bool = True  # Module F breakeven + profit-floor (ON by default)
     # volatility-adaptive trailing envelope: dynamic_trail = clamp(k * ATR_percentile, min, max)
     dynamic_trail_enabled: bool = True  # when True (and ATR percentile known) the trail distance flexes with volatility
     dynamic_trail_k: float = 0.06  # slope: ATR percentile 0-100 -> ~0-6% before clamping
     # Research-Lab-promoted exit-profile overrides {strategy: {field: value}} (manual approval gate)
     profile_overrides: dict = {}
+    # Exit Engine: user's preferred exit method (UI/record) + per-coin exit overrides {SYMBOL: {field: value}}
+    exit_method_pref: str = "native"
+    asset_exit_overrides: dict = {}
     dynamic_trail_min_pct: float = 2.0  # floor for the adaptive trailing distance
     dynamic_trail_max_pct: float = 6.0  # ceiling for the adaptive trailing distance
     position_watcher_interval_seconds: int = 15

@@ -1,0 +1,21 @@
+<svg width="192" height="256" viewBox="0 0 48 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Ananta">
+  <defs>
+    <linearGradient id="mattesilver" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E2E4E9"/>
+      <stop offset="55%" stop-color="#C0C5CE"/>
+      <stop offset="100%" stop-color="#878E99"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 2 L24 40" stroke="url(#mattesilver)" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M24 2 L20.5 9 H27.5 Z" fill="url(#mattesilver)"/>
+  <path d="M9 8 V20 Q9 28 24 30" stroke="url(#mattesilver)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M9 8 L5.8 14 H12.2 Z" fill="url(#mattesilver)"/>
+  <path d="M39 8 V20 Q39 28 24 30" stroke="url(#mattesilver)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M39 8 L35.8 14 H42.2 Z" fill="url(#mattesilver)"/>
+  <path d="M9 18 H39" stroke="url(#mattesilver)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M24 30 L24 62" stroke="url(#mattesilver)" stroke-width="2.4" stroke-linecap="round"/>
+  <g opacity="0.28">
+    <path d="M16 44 L32 52 L32 44 L16 52 Z" fill="#E2E4E9"/>
+    <path d="M16 44 L32 52 M16 52 L32 44" stroke="#E2E4E9" stroke-width="1"/>
+  </g>
+</svg>

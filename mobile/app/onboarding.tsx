@@ -77,7 +77,7 @@ export default function Onboarding() {
   return (
     <View style={[styles.fill, { paddingTop: insets.top }]} testID={`onboarding-${step}`}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}>
-        <View style={styles.logoRow}><Logo size={30} /><Text style={styles.brand}>Ananta</Text></View>
+        <View style={styles.logoRow}><Logo size={44} showWord={false} color="#D2D6DC" /><Text style={styles.brand}>Ananta</Text></View>
 
         {step === "welcome" && (
           <Hero

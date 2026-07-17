@@ -46,7 +46,7 @@ export default function Login() {
     >
       <View style={[styles.container, { paddingTop: insets.top + spacing.xxl }]}>
         <View style={styles.brand}>
-          <Logo size={48} showWord />
+          <Logo size={56} showWord color="#D2D6DC" />
           <Text style={[type.bodyMuted, { marginTop: spacing.md, textAlign: "center" }]}>
             The operator&apos;s cockpit. Monitor the algorithm, manage positions, stay in control.
           </Text>

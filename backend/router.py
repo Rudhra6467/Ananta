@@ -12,22 +12,27 @@ Chain. It does not place orders — each model owns its own entry logic.
 from __future__ import annotations
 
 # Active executors per regime (independent traders).
-# Hunter = "buys fear" (reversals/pullbacks). Squeeze = "buys expansion".
+# Deep-research restriction (tightened): each core model trades ONLY in the regime where it
+# has a demonstrated edge, and NEUTRAL/RANGE/TREND_DOWN are stood down entirely.
+#   Hunter       -> REVERSAL only ("buys fear" after acceptance)
+#   Squeeze      -> COMPRESSION only (volatility coil -> expansion)
+#   Continuation -> TREND_UP only (gated further by the 4H trend filter, htf_trend_enabled)
+#   NEUTRAL / RANGE / TREND_DOWN -> NO trading (stand aside)
 _REGIME_MAP: dict[str, list[str]] = {
-    "TREND_UP": ["hunter", "continuation"],   # pullbacks into trend support (reversal + continuation)
-    "REVERSAL": ["hunter"],            # stabilized / deep-discount reversal
-    "COMPRESSION": ["squeeze"],        # volatility coil -> expansion
-    "RANGE": ["squeeze"],              # range edges can still coil & expand
-    "NEUTRAL": ["hunter", "squeeze", "continuation"],  # fallback: let all look
-    "TREND_DOWN": [],                  # no long executors in a confirmed downtrend
+    "TREND_UP": ["continuation"],   # continuation only, behind the 4H trend filter
+    "REVERSAL": ["hunter"],         # stabilized / deep-discount reversal
+    "COMPRESSION": ["squeeze"],     # volatility coil -> expansion
+    "RANGE": [],                    # stand aside — squeeze restricted to COMPRESSION
+    "NEUTRAL": [],                  # BLOCKED — no trading in a mixed/undecided market
+    "TREND_DOWN": [],               # no long executors in a confirmed downtrend
 }
 
 _RATIONALE: dict[str, str] = {
-    "TREND_UP": "Strong uptrend — Hunter hunts deep pullbacks; Continuation buys shallow dips to the 20-EMA.",
+    "TREND_UP": "Strong uptrend — Continuation buys shallow dips to the 20-EMA (4H trend filter required).",
     "REVERSAL": "Oversold/panic — Hunter buys fear after acceptance.",
     "COMPRESSION": "Volatility coiled — Squeeze waits for a confirmed expansion.",
-    "RANGE": "Low-trend range — Squeeze watches the edges for a break.",
-    "NEUTRAL": "Mixed — all models may evaluate.",
+    "RANGE": "Low-trend range — no eligible executor; standing aside.",
+    "NEUTRAL": "Mixed / undecided — trading BLOCKED until the regime resolves.",
     "TREND_DOWN": "Confirmed downtrend — no long executors active.",
 }
 
@@ -37,7 +42,7 @@ ACTIVE_EXECUTORS = ("hunter", "squeeze", "continuation")
 def route(regime_label: str | None) -> dict:
     """Return the eligible active models for a regime + a human rationale."""
     label = regime_label or "NEUTRAL"
-    eligible = _REGIME_MAP.get(label, ["hunter", "squeeze"])
+    eligible = _REGIME_MAP.get(label, [])  # unknown/blocked regimes -> stand aside
     return {
         "regime": label,
         "eligible_models": eligible,

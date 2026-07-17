@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable, Modal, TextInput } from "react-native";
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable, Modal, TextInput, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -174,6 +174,9 @@ export default function StrategyLibrary() {
               <Stat label="WIN" value={`${r.win_rate}%`} />
               <Stat label="SHARPE" value={String(r.sharpe)} />
             </View>
+            {(s.internal || (s.wireable && s.engine_key)) && (
+              <DeployCardButton s={s} isOwner={isOwner} onDone={load} onManage={() => open(s)} />
+            )}
           </Card>
         );
       })}
@@ -227,6 +230,33 @@ const LB_LABELS: Record<string, string> = {
   sharpe: "Sharpe", sortino: "Sortino", profit_factor: "Profit Factor",
   max_drawdown: "Max DD", avg_trade: "Avg Trade", trades: "Trades", rating: "Rating",
 };
+
+function DeployCardButton({ s, isOwner, onDone, onManage }: { s: any; isOwner: boolean; onDone: () => void; onManage: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const deployed = s.internal;  // internal engines run live; catalog/wireable are deploy-to-paper
+  const deploy = async () => {
+    if (deployed) return onManage();
+    if (!isOwner) return Alert.alert("Owner login required to deploy");
+    setBusy(true);
+    try {
+      const next = await api.strategySetState(s.engine_key, "PAPER");
+      Alert.alert("Deployed", `${s.name} → ${next?.status || "PAPER"} engine.`);
+      onDone();
+    } catch (e: any) { Alert.alert("Deploy failed", e?.response?.data?.detail || e?.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Pressable testID={`card-deploy-${s.id}`} onPress={deploy} disabled={busy}
+      style={[styles.deployBtn, deployed && styles.deployBtnGhost]}>
+      {busy ? <ActivityIndicator color={colors.bg} /> : (
+        <>
+          <Ionicons name={deployed ? "settings-outline" : "rocket"} size={15} color={deployed ? colors.teal : colors.bg} />
+          <Text style={[styles.deployTxt, deployed && { color: colors.teal }]}>  {deployed ? "MANAGE" : "DEPLOY"}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
 
 function StrategyLeaderboard({ onOpen }: { onOpen: (r: any) => void }) {
   const [sort, setSort] = useState("ai_health_score");
@@ -298,4 +328,7 @@ const styles = StyleSheet.create({
   editToolIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealGlow, borderWidth: 1, borderColor: colors.tealDim },
   editExistingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm },
   editExistingCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.xs, marginBottom: spacing.md },
+  deployBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: spacing.sm + 3, marginTop: spacing.md },
+  deployBtnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.cardBorder },
+  deployTxt: { color: colors.bg, fontWeight: "800", letterSpacing: 0.8, fontSize: 13 },
 });

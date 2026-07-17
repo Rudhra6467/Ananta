@@ -219,6 +219,8 @@ def _module_F_profit_protection(pos, last: float, prof: StrategyProfile, setting
     The highest applicable floor wins; only tightens (never loosens)."""
     if pos.avg_cost <= 0:
         return None
+    if not getattr(settings, "profit_protection_enabled", True):
+        return None  # breakeven / profit-protection disabled by the user
     peak = max(pos.peak_price or pos.avg_cost, last)
     mfe_pct = (peak - pos.avg_cost) / pos.avg_cost * 100.0
     R = _risk_per_unit(pos, settings)

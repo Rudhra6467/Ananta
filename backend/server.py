@@ -120,6 +120,9 @@ class SettingsUpdate(BaseModel):
     stop_loss_pct: float | None = None
     trail_arm_pct: float | None = None
     trail_distance_pct: float | None = None
+    profit_protection_enabled: bool | None = None
+    exit_method_pref: str | None = None
+    asset_exit_overrides: dict | None = None
     dynamic_trail_enabled: bool | None = None
     profile_overrides: dict | None = None
     position_watcher_interval_seconds: int | None = None

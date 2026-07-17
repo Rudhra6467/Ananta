@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Menu, UserCircle2, Play, Network, BrainCircuit, FlaskConical, ArrowRight, Sparkles, X } from "lucide-react";
-import AnantaLogo from "@/components/AnantaLogo";
+import AnantaTrident from "@/components/AnantaTrident";
 import { useAccessGate } from "@/context/AccessGateContext";
 
 const TEAL = "#14E0C9";
@@ -72,7 +72,8 @@ export default function LaunchPage() {
                     {/* Brand */}
                     <button data-testid="launch-brand" onClick={goHome} className="group flex items-center gap-3">
                         <span className="grid place-items-center rounded-full border border-atlas-border bg-atlas-panel/50 p-1.5 transition-transform group-hover:scale-105" style={{ boxShadow: `0 0 24px -6px ${TEAL}55` }}>
-                            <AnantaLogo className="h-11 w-11 md:h-14 md:w-14" />
+                            <AnantaTrident size={44} className="md:hidden" />
+                            <AnantaTrident size={56} className="hidden md:block" />
                         </span>
                         <span className="font-heading text-3xl font-semibold tracking-tight md:text-5xl">Ananta</span>
                     </button>

@@ -8,10 +8,10 @@ import { colors } from "../../src/theme";
 
 const TABS: Record<string, { title: string; icon: keyof typeof Ionicons.glyphMap }> = {
   index: { title: "Cockpit", icon: "speedometer" },
-  trade: { title: "Trade", icon: "swap-horizontal" },
   strategy: { title: "Strategy", icon: "git-branch" },
   research: { title: "Research", icon: "flask" },
-  workspace: { title: "Workspace", icon: "options" },
+  workspace: { title: "Exit Engine", icon: "options" },
+  trade: { title: "Trade", icon: "swap-horizontal" },
 };
 
 function BottomBar({ state, navigation }: MaterialTopTabBarProps) {
@@ -47,10 +47,10 @@ export default function TabsLayout() {
       screenOptions={{ swipeEnabled: true, lazy: true }}
     >
       <SwipeTabs.Screen name="index" options={{ title: "Cockpit" }} />
-      <SwipeTabs.Screen name="trade" options={{ title: "Trade" }} />
       <SwipeTabs.Screen name="strategy" options={{ title: "Strategy" }} />
       <SwipeTabs.Screen name="research" options={{ title: "Research" }} />
-      <SwipeTabs.Screen name="workspace" options={{ title: "Workspace" }} />
+      <SwipeTabs.Screen name="workspace" options={{ title: "Exit Engine" }} />
+      <SwipeTabs.Screen name="trade" options={{ title: "Trade" }} />
     </SwipeTabs>
   );
 }

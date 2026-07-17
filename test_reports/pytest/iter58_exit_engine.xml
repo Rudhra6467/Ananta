@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="6" time="371.721" timestamp="2026-07-17T18:01:57.716942+00:00" hostname="agent-env-f38528a7-fb55-4fde-95ad-386468e0d3a7"><testcase classname="tests.test_iter58_exit_engine.TestSettingsDefaults" name="test_get_settings_new_defaults" time="3.232" /><testcase classname="tests.test_iter58_exit_engine.TestSettingsDefaults" name="test_put_settings_persists_new_fields" time="0.940" /><testcase classname="tests.test_iter58_exit_engine.TestRegimeRouter" name="test_router_module_direct" time="0.000" /><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[fixed]" time="122.387"><failure message="AssertionError: final status=RUNNING for fixed&#10;assert 'RUNNING' == 'DONE'&#10;  &#10;  - DONE&#10;  + RUNNING">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=RUNNING for fixed
+E   assert 'RUNNING' == 'DONE'
+E     
+E     - DONE
+E     + RUNNING</failure></testcase><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[atr]" time="122.539"><failure message="AssertionError: final status=RUNNING for atr&#10;assert 'RUNNING' == 'DONE'&#10;  &#10;  - DONE&#10;  + RUNNING">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=RUNNING for atr
+E   assert 'RUNNING' == 'DONE'
+E     
+E     - DONE
+E     + RUNNING</failure></testcase><testcase classname="tests.test_iter58_exit_engine.TestLabExitBacktest" name="test_lab_backtest_flow[native]" time="122.555"><failure message="AssertionError: final status=RUNNING for native&#10;assert 'RUNNING' == 'DONE'&#10;  &#10;  - DONE&#10;  + RUNNING">backend/tests/test_iter58_exit_engine.py:122: in test_lab_backtest_flow
+    assert status == "DONE", f"final status={status} for {exit_method}"
+E   AssertionError: final status=RUNNING for native
+E   assert 'RUNNING' == 'DONE'
+E     
+E     - DONE
+E     + RUNNING</failure></testcase></testsuite></testsuites>

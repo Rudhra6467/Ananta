@@ -61,9 +61,9 @@ export default function WebOnboarding({ onDone }) {
     return (
         <div className="fixed inset-0 z-[70] bg-atlas-bg/97 backdrop-blur-xl overflow-y-auto grid-bg" data-testid="web-onboarding">
             <div className="max-w-lg mx-auto px-5 py-8 min-h-full flex flex-col">
-                <div className="flex items-center gap-2 mb-6">
-                    <AnantaLogo className="h-7 w-7 text-atlas-text" />
-                    <span className="font-heading font-semibold tracking-tight text-atlas-text">Ananta</span>
+                <div className="flex flex-col items-center text-center mb-6">
+                    <AnantaTrident size={56} />
+                    <span className="font-heading font-semibold tracking-tight text-atlas-text mt-2 text-lg">Ananta</span>
                 </div>
 
                 {step === "welcome" && (
@@ -250,3 +250,4 @@ function SummaryRow({ label, value }) {
         </div>
     );
 }
+

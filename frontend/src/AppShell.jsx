@@ -5,7 +5,7 @@ import Dashboard from "@/pages/Dashboard";
 import Trade from "@/pages/Trade";
 import StrategyCenter from "@/pages/StrategyCenter";
 import Research from "@/pages/Research";
-import Workspace from "@/pages/Workspace";
+import ExitEngine from "@/pages/ExitEngine";
 import EnvironmentToggle from "@/components/EnvironmentToggle";
 import TradeHistoryPdfDialog from "@/components/TradeHistoryPdfDialog";
 import OwnerAuthControl from "@/components/OwnerAuthControl";
@@ -21,10 +21,10 @@ import { AppDataProvider, useAppData } from "@/context/AppDataContext";
 
 const TABS = [
     { id: "dashboard", label: "Cockpit", icon: LayoutDashboard, Component: Dashboard },
-    { id: "trade", label: "Trade", icon: CandlestickChart, Component: Trade },
     { id: "strategies", label: "Strategy", icon: Brain, Component: StrategyCenter },
     { id: "research", label: "Research", icon: FlaskConical, Component: Research },
-    { id: "workspace", label: "Workspace", icon: SlidersHorizontal, Component: Workspace },
+    { id: "workspace", label: "Exit Engine", icon: SlidersHorizontal, Component: ExitEngine },
+    { id: "trade", label: "Trade", icon: CandlestickChart, Component: Trade },
 ];
 
 /* Native-feed header physics: hides on scroll-down, glides back on scroll-up. */
@@ -271,7 +271,7 @@ function ContextInfo({ active, portfolio }) {
         );
     }
 
-    const title = id === "strategies" ? "Strategy Center" : id === "research" ? "Research Lab" : "Workspace";
+    const title = id === "strategies" ? "Strategy Center" : id === "research" ? "Research Lab" : id === "workspace" ? "Exit Engine" : "Exit Engine";
     return (
         <div data-testid={`context-${id}`} className="flex items-end justify-between gap-3">
             <div className="min-w-0">
