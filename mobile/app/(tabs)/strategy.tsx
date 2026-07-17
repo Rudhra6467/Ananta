@@ -177,6 +177,11 @@ export default function StrategyLibrary() {
             {(s.internal || (s.wireable && s.engine_key)) && (
               <DeployCardButton s={s} isOwner={isOwner} onDone={load} onManage={() => open(s)} />
             )}
+            {!s.internal && !s.wireable && s.reference_only && (
+              <View testID={`library-reference-note-${s.id}`} style={styles.referenceNote}>
+                <Text style={styles.referenceNoteTxt}>{s.reference_note || "Analysis only"}</Text>
+              </View>
+            )}
           </Card>
         );
       })}
@@ -314,6 +319,8 @@ const styles = StyleSheet.create({
   chipTxt: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
   addHeaderBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.teal, alignItems: "center", justifyContent: "center" },
   gradeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, minWidth: 22, alignItems: "center" },
+  referenceNote: { marginTop: spacing.sm, borderWidth: 1, borderStyle: "dashed", borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: 8, paddingHorizontal: 10, alignItems: "center" },
+  referenceNoteTxt: { color: colors.textFaint, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   gradeTxt: { fontSize: 10, fontWeight: "800" },
   sortChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },
   lbRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.cardBorder },

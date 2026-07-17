@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 58 (this session) — Verified all scope items across backend, web and mobile. BACKEND (5/5 pytest pass in /app/backend/tests/test_iter58_wiring_and_whatif.py): GET /api/library returns 16 items; turtle/time-series-momentum/stochastic-momentum/vwap-mr each have wireable=true & engine_key set; pairs-trading has reference_only=true, reference_note='Analysis only — requires 2-asset engine', wireable falsy. /api/strategy/registry and /api/strategy/metrics both include all 4 new keys. Deploy path PUT /api/strategy/turtle/state returns {status:'PAPER', enabled:true}. Exit Engine lab backtest (BTC/ETH/SOL, 3m, 1h, hunter, exit_method=atr, atr_params={2.5,14,1.6,2.0}) polls to DONE (~90s), returns result.per_symbol AND result.exit_comparison[sym][tf] with populated rows (label/total_return_pct/win_rate_pct/profit_factor/max_drawdown_pct/trades) plus winner_key at each block level. WEB (desktop 1920x900): Strategy tab shows card-deploy-<id> for all 4 new keys; pairs-trading shows card-reference-note-pairs-trading (exact text 'Analysis only — requires 2-asset engine') and NO deploy button. Exit Engine tab renders the redesigned horizontal step bar (1.Scope → 2.Method → 3.Configure → 4.Deploy); completed full flow scope-global → method-atr_trailing → wf-next-3 → wf-test; after ~150s the wf-result section rendered Backtest Performance table (BTC/USD, ETH/USD, SOL/USD rows) AND 'What-If — same entries, different exit' table with per-exit rows and winner marked. MOBILE (Expo web preview, 390x844, owner login → onboarding-start-exploring → onboarding-skip): Strategy tab shows all 4 card-deploy buttons and library-reference-note-pairs-trading with no deploy for pairs-trading. Exit Engine tab shows the redesigned step bar + all 3 large scope cards (ee-scope-strategy/coin/global); full flow ee-scope-global → ee-next-1 → ee-method-atr_trailing → ee-next-3 → ee-test completed backtest at ~145s; BACKTEST PERFORMANCE table rendered with rows and 'WHAT-IF — SAME ENTRIES, OTHER EXITS' section rendered with winner star ★. No parity divergence. No blocking bugs found.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter58_wiring_and_whatif.py",
+    "/app/test_reports/pytest/iter58_wiring_whatif.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Web Exit Engine backtest can take up to 90-120s to return (backend runs 3 symbols × 1h × 3m + full What-If exit comparison). Consider surfacing a progress indicator / percentage so users don't think the button is dead — currently the button just shows disabled state.",
+    "In /app/frontend/src/lib/api.js the token key is 'ananta_owner_token' but the web onboarding wizard uses 'ananta_onboarded' — the two keys use different prefixes for related state. Not a bug but worth aligning."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter58_wiring_and_whatif.py"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (both web + mobile flows completed)"},
+  "test_credentials": "Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None new. The Deploy-path test flips turtle to PAPER then back to DISABLED at teardown, so no leftover live strategy state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 58 wiring+What-If verified end-to-end. Backend regression file: /app/backend/tests/test_iter58_wiring_and_whatif.py (5/5 pass, ~2 min due to real lab backtest). Web flow needs both `ananta_owner_token` AND `ananta_onboarded=1` in localStorage; setting ananta_owner_token without ananta_onboarded=1 forces the onboarding-provisioning modal (dismissable via visible 'Skip' link). Mobile flow requires login → onboarding-start-exploring → onboarding-skip. Lab backtest with exit_method=atr, symbols=BTC/ETH/SOL, 3m/1h routinely takes ~90-150s to reach DONE — poll patiently.",
+  "rca of the issue": ""
+}

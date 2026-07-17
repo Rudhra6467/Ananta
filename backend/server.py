@@ -2699,7 +2699,7 @@ async def _bootstrap_declarative():
     strategy so only the default-enabled batch trades (others start DISABLED); owner
     changes are preserved. (2) backfill engine_key/wireable on existing library docs."""
     from strategy.declarative_defs import DECLARATIVE  # noqa: PLC0415
-    from library_seed import WIRED_ENGINE_KEYS  # noqa: PLC0415
+    from library_seed import REFERENCE_ONLY, WIRED_ENGINE_KEYS  # noqa: PLC0415
     for key, d in DECLARATIVE.items():
         existing = await db.strategy_meta.find_one({"key": key}, {"_id": 1})
         if not existing:
@@ -2711,6 +2711,9 @@ async def _bootstrap_declarative():
     for lib_id, ekey in WIRED_ENGINE_KEYS.items():
         await db.strategy_library.update_one(
             {"id": lib_id}, {"$set": {"engine_key": ekey, "wireable": True}})
+    for lib_id, note in REFERENCE_ONLY.items():
+        await db.strategy_library.update_one(
+            {"id": lib_id}, {"$set": {"reference_only": True, "reference_note": note}})
 
     # (3) rehydrate IMPORTED declarative strategies into the runtime registry (P2).
     from strategy.declarative_defs import register_imported  # noqa: PLC0415

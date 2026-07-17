@@ -444,6 +444,12 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
                     {deployed ? "MANAGE" : "DEPLOY"}
                 </button>
             )}
+            {!wired && s.reference_only && (
+                <div data-testid={`card-reference-note-${s.id}`}
+                    className="relative z-10 pointer-events-none rounded-lg border border-dashed border-atlas-border bg-atlas-bg/40 py-2 px-3 text-center font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">
+                    {s.reference_note || "Analysis only"}
+                </div>
+            )}
         </div>
     );
 }

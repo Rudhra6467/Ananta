@@ -14,9 +14,9 @@ import { colors, spacing, type, radius } from "../../src/theme";
 const SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const CORE = ["hunter", "squeeze", "continuation"];
 const SCOPES = [
-  { id: "strategy", label: "Strategy", icon: "layers-outline", desc: "One alpha model (Hunter / Squeeze / Continuation)." },
-  { id: "coin", label: "Specific Coin", icon: "logo-bitcoin", desc: "Override the exit for a single market." },
-  { id: "global", label: "Global", icon: "globe-outline", desc: "Default exit for everything." },
+  { id: "strategy", name: "Modify Exit for a Strategy", label: "Strategy", icon: "layers-outline", desc: "Apply this exit to one alpha model (Hunter / Squeeze / Continuation)." },
+  { id: "coin", name: "Modify Exit for a Specific Coin", label: "Specific Coin", icon: "logo-bitcoin", desc: "Override the exit for a single market, e.g. BTC/USD." },
+  { id: "global", name: "Modify Global Exit", label: "Global", icon: "globe-outline", desc: "The default exit for all strategies and coins." },
 ];
 const METHODS = [
   { id: "fixed_pct", name: "Fixed % Target + Stop", desc: "Simple target and stop. Best for beginners.", icon: "flag-outline", engine: "fixed" },
@@ -73,7 +73,7 @@ export default function ExitEngine() {
     <View style={styles.fill}>
       <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
         <View style={styles.rowBetween}>
-          <PageHeader title="Exit Engine" question="How should trades be closed?" />
+          <PageHeader title="Exit Engine" question="Configure how your strategies exit trades" />
           <Pressable testID="ee-advanced" onPress={() => setAdvOpen(true)} style={styles.advBtn}>
             <Ionicons name="settings-outline" size={13} color={colors.textMuted} /><Text style={styles.advTxt}> ADVANCED</Text>
           </Pressable>
@@ -187,85 +187,127 @@ function ExitFlow({ isOwner }: { isOwner: boolean }) {
 
   return (
     <View>
-      <View style={styles.dots}>
-        {["Scope", "Method", "Configure", "Test/Deploy"].map((l, i) => (
-          <View key={l} style={[styles.dot, step === i + 1 && styles.dotActive]}>
-            <Text style={[styles.dotTxt, step === i + 1 && { color: colors.teal }]}>{i + 1}. {l}</Text>
-          </View>
-        ))}
-      </View>
+      <StepBar step={step} />
 
       {step === 1 && (
-        <Card testID="ee-step1">
-          <SectionLabel>STEP 1 — WHAT TO MODIFY?</SectionLabel>
+        <View testID="ee-step1">
+          <StepHead n={1} q="What do you want to modify?" />
           {SCOPES.map((s) => (
-            <Pressable key={s.id} testID={`ee-scope-${s.id}`} onPress={() => setScope(s.id)} style={[styles.optRow, scope === s.id && styles.optRowActive]}>
-              <Ionicons name={s.icon as any} size={18} color={colors.teal} />
-              <View style={{ flex: 1 }}>
-                <Text style={type.body}>{s.label}</Text>
-                <Text style={type.small}>{s.desc}</Text>
+            <Pressable key={s.id} testID={`ee-scope-${s.id}`} onPress={() => setScope(s.id)}
+              style={[styles.bigCard, scope === s.id && styles.bigCardActive]}>
+              <View style={[styles.bigIcon, scope === s.id && styles.bigIconActive]}>
+                <Ionicons name={s.icon as any} size={20} color={colors.teal} />
               </View>
-              {scope === s.id && <Ionicons name="checkmark-circle" size={18} color={colors.teal} />}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bigTitle}>{s.name}</Text>
+                <Text style={[type.small, { marginTop: 3, lineHeight: 17 }]}>{s.desc}</Text>
+              </View>
+              <Ionicons name={scope === s.id ? "checkmark-circle" : "chevron-forward"} size={19}
+                color={scope === s.id ? colors.teal : colors.textFaint} />
             </Pressable>
           ))}
-          {scope === "strategy" && <ChipRow items={CORE} value={strategy} onPick={setStrategy} prefix="ee-strat" />}
-          {scope === "coin" && <ChipRow items={SYMBOLS} value={coin} onPick={setCoin} prefix="ee-coin" />}
-          <Pressable testID="ee-next-1" disabled={!scope} onPress={() => setStep(2)} style={[styles.btn, styles.btnPrimary, !scope && { opacity: 0.4 }]}>
+          {scope === "strategy" && <ChipRow label="STRATEGY" items={CORE} value={strategy} onPick={setStrategy} prefix="ee-strat" />}
+          {scope === "coin" && <ChipRow label="COIN" items={SYMBOLS} value={coin} onPick={setCoin} prefix="ee-coin" />}
+          <Pressable testID="ee-next-1" disabled={!scope} onPress={() => setStep(2)} style={[styles.btn, styles.btnPrimary, styles.btnFull, !scope && { opacity: 0.4 }]}>
             <Text style={styles.btnPrimaryTxt}>CONTINUE</Text>
           </Pressable>
-        </Card>
+        </View>
       )}
 
       {step === 2 && (
-        <Card testID="ee-step2">
-          <SectionLabel>STEP 2 — CHOOSE EXIT METHOD</SectionLabel>
+        <View testID="ee-step2">
+          <StepHead n={2} q="Choose an exit method" sub="Eight proven exit styles — pick the one that fits your approach." />
           {METHODS.map((m) => (
-            <Pressable key={m.id} testID={`ee-method-${m.id}`} onPress={() => pick(m)} style={styles.optRow}>
-              <Ionicons name={m.icon as any} size={18} color={colors.teal} />
-              <View style={{ flex: 1 }}>
-                <Text style={type.body}>{m.name}</Text>
-                <Text style={type.small}>{m.desc}</Text>
+            <Pressable key={m.id} testID={`ee-method-${m.id}`} onPress={() => pick(m)}
+              style={[styles.bigCard, method?.id === m.id && styles.bigCardActive]}>
+              <View style={[styles.bigIcon, method?.id === m.id && styles.bigIconActive]}>
+                <Ionicons name={m.icon as any} size={19} color={colors.teal} />
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Text style={styles.bigTitle}>{m.name}</Text>
+                  {m.engine === "native" && <Text style={styles.engineTag}>UNIVERSAL ENGINE</Text>}
+                </View>
+                <Text style={[type.small, { marginTop: 3, lineHeight: 17 }]}>{m.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={colors.textFaint} />
             </Pressable>
           ))}
-          <Pressable testID="ee-back-2" onPress={() => setStep(1)} style={[styles.btn, styles.btnGhost]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
-        </Card>
+          <Pressable testID="ee-back-2" onPress={() => setStep(1)} style={[styles.btn, styles.btnGhost, styles.btnFull]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
+        </View>
       )}
 
       {step === 3 && method && (
-        <Card testID="ee-step3">
-          <SectionLabel>STEP 3 — CONFIGURE: {method.name.toUpperCase()}</SectionLabel>
-          {FIELDS[method.id].length === 0 && <Text style={[type.small, { marginVertical: spacing.sm }]}>No parameters — exits the full position when momentum dies.</Text>}
-          {FIELDS[method.id].map((f) => (
-            <NumRow key={f.k} label={f.label} k={f.k} value={cfg[f.k]} isOwner onSave={(k: string, v: string) => setF(k, v)} />
-          ))}
-          {(method.engine === "native" || method.id === "chandelier") && (
-            <Text style={styles.note}>Tested via the closest supported engine ({method.engine === "atr" ? "ATR trailing" : "Universal Exit Engine"}).</Text>
-          )}
+        <View testID="ee-step3">
+          <StepHead n={3} q={`Configure: ${method.name}`} sub="Only the parameters relevant to this method are shown." />
+          <Card>
+            {FIELDS[method.id].length === 0 && <Text style={[type.small, { marginBottom: spacing.sm }]}>No parameters — exits the full position when momentum dies (overbought + volume climax + exhaustion candle).</Text>}
+            {FIELDS[method.id].map((f) => (
+              <NumRow key={f.k} label={f.label} k={f.k} value={cfg[f.k]} isOwner onSave={(k: string, v: string) => setF(k, v)} />
+            ))}
+            {(method.engine === "native" || method.id === "chandelier") && (
+              <Text style={styles.note}>Tested via the closest supported engine ({method.engine === "atr" ? "ATR trailing" : "Universal Exit Engine"}).</Text>
+            )}
+          </Card>
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
             <Pressable testID="ee-back-3" onPress={() => setStep(2)} style={[styles.btn, styles.btnGhost]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
             <Pressable testID="ee-next-3" onPress={() => setStep(4)} style={[styles.btn, styles.btnPrimary]}><Text style={styles.btnPrimaryTxt}>CONTINUE</Text></Pressable>
           </View>
-        </Card>
+        </View>
       )}
 
       {step === 4 && method && (
-        <Card testID="ee-step4">
-          <SectionLabel>STEP 4 — TEST OR DEPLOY</SectionLabel>
-          <Text style={[type.small, { marginBottom: spacing.sm }]}>Scope: <Text style={{ color: colors.text }}>{scope === "strategy" ? strategy : scope === "coin" ? coin : "Global"}</Text>  ·  Method: <Text style={{ color: colors.text }}>{method.name}</Text></Text>
+        <View testID="ee-step4">
+          <StepHead n={4} q="Test or Deploy" sub="Test on historical data first, then deploy when you're confident." />
+          <Card>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryK}>SCOPE</Text>
+              <Text style={styles.summaryV}>{scope === "strategy" ? strategy : scope === "coin" ? coin : "Global"}</Text>
+            </View>
+            <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.cardBorder }]}>
+              <Text style={styles.summaryK}>METHOD</Text>
+              <Text style={styles.summaryV}>{method.name}</Text>
+            </View>
+          </Card>
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
             <Pressable testID="ee-test" onPress={runTest} disabled={testing} style={[styles.btn, styles.btnGhost, { borderColor: colors.tealDim }]}>
-              {testing ? <ActivityIndicator color={colors.teal} /> : <><Ionicons name="play" size={13} color={colors.teal} /><Text style={[styles.btnGhostTxt, { color: colors.teal }]}>  TEST</Text></>}
+              {testing ? <ActivityIndicator color={colors.teal} /> : <><Ionicons name="play" size={13} color={colors.teal} /><Text style={[styles.btnGhostTxt, { color: colors.teal }]}>  TEST THIS EXIT</Text></>}
             </Pressable>
             <Pressable testID="ee-deploy" onPress={deploy} disabled={deploying} style={[styles.btn, styles.btnPrimary]}>
               {deploying ? <ActivityIndicator color={colors.bg} /> : <><Ionicons name="rocket" size={13} color={colors.bg} /><Text style={styles.btnPrimaryTxt}>  DEPLOY</Text></>}
             </Pressable>
           </View>
-          <Pressable testID="ee-back-4" onPress={() => setStep(3)} style={[styles.btn, styles.btnGhost, { marginTop: spacing.sm }]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
+          <Pressable testID="ee-back-4" onPress={() => setStep(3)} style={[styles.btn, styles.btnGhost, styles.btnFull]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
           {result && <TestResult result={result} />}
-        </Card>
+        </View>
       )}
+    </View>
+  );
+}
+
+function StepBar({ step }: { step: number }) {
+  const labels = ["Scope", "Method", "Configure", "Deploy"];
+  return (
+    <View style={styles.stepBar}>
+      {labels.map((l, i) => {
+        const n = i + 1; const active = step === n; const done = step > n;
+        return (
+          <View key={l} style={styles.stepCol}>
+            <Text numberOfLines={1} style={[styles.stepTxt, (active || done) && styles.stepTxtOn]}>{n}. {l}</Text>
+            <View style={[styles.stepUnderline, active && styles.stepUnderlineActive, done && styles.stepUnderlineDone]} />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function StepHead({ n, q, sub }: { n: number; q: string; sub?: string }) {
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      <Text style={styles.stepKicker}>STEP {n}</Text>
+      <Text style={styles.stepQ}>{q}</Text>
+      {!!sub && <Text style={[type.small, { marginTop: 4, lineHeight: 17 }]}>{sub}</Text>}
     </View>
   );
 }
@@ -290,18 +332,19 @@ function TestResult({ result }: { result: any }) {
       })}
       <SectionLabel style={{ marginTop: spacing.md }}>WHAT-IF — SAME ENTRIES, OTHER EXITS</SectionLabel>
       {syms.map((s) => {
-        const ec = (per[s] || {}).exit_comparison || {};
+        const byTf = (result.exit_comparison || {})[s] || {};
+        const ec = byTf["1h"] || byTf[Object.keys(byTf)[0]] || {};
         const rows = ec.rows || {};
-        const keys = Object.keys(rows);
+        const keys = Object.keys(rows).filter((k) => !rows[k].error);
         if (!keys.length) return null;
         return (
           <View key={s} style={{ marginBottom: spacing.sm }}>
             <Text style={[type.small, { color: colors.textMuted }]}>{s}{ec.winner_key ? ` · best: ${rows[ec.winner_key]?.label}` : ""}</Text>
             {keys.map((k) => (
               <View key={k} style={styles.resRow}>
-                <Text style={[type.small, { flex: 1, color: k === ec.winner_key ? colors.teal : colors.textMuted }]}>{rows[k].label}{k === ec.winner_key ? " ★" : ""}</Text>
+                <Text style={[type.small, { flex: 1, color: k === ec.winner_key ? colors.teal : colors.textMuted }]} numberOfLines={1}>{rows[k].label}{k === ec.winner_key ? " ★" : ""}</Text>
                 <Text style={styles.resVal}>PF {fmt(rows[k].profit_factor)}</Text>
-                <Text style={styles.resVal}>{fmt(rows[k].total_return_pct)}%</Text>
+                <Text style={[styles.resVal, { color: (rows[k].total_return_pct ?? 0) >= 0 ? colors.teal : colors.red }]}>{fmt(rows[k].total_return_pct)}%</Text>
               </View>
             ))}
           </View>
@@ -351,14 +394,17 @@ function AiAnalysis({ isOwner, trades }: { isOwner: boolean; trades: any[] }) {
 
 const fmt = (x: any) => (typeof x === "number" ? x.toFixed(2) : x ?? "-");
 
-function ChipRow({ items, value, onPick, prefix }: any) {
+function ChipRow({ label, items, value, onPick, prefix }: any) {
   return (
-    <View style={styles.chipWrap}>
-      {items.map((it: string) => (
-        <Pressable key={it} testID={`${prefix}-${it.replace("/", "-")}`} onPress={() => onPick(it)} style={[styles.chip, value === it && styles.chipActive]}>
-          <Text style={[styles.chipTxt, value === it && { color: colors.teal }]}>{it}</Text>
-        </Pressable>
-      ))}
+    <View style={{ marginTop: spacing.sm }}>
+      {!!label && <Text style={[type.label, { marginBottom: 6 }]}>{label}</Text>}
+      <View style={styles.chipWrap}>
+        {items.map((it: string) => (
+          <Pressable key={it} testID={`${prefix}-${it.replace("/", "-")}`} onPress={() => onPick(it)} style={[styles.chip, value === it && styles.chipActive]}>
+            <Text style={[styles.chipTxt, value === it && { color: colors.teal }]}>{it}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -380,12 +426,24 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   advBtn: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
   advTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.5 },
-  dots: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: spacing.md },
-  dot: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
-  dotActive: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
-  dotTxt: { fontSize: 9, color: colors.textFaint, fontWeight: "700", letterSpacing: 0.4 },
-  optRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder },
-  optRowActive: { backgroundColor: colors.tealGlow, borderRadius: radius.sm },
+  stepBar: { flexDirection: "row", gap: 6, marginBottom: spacing.lg },
+  stepCol: { flex: 1, alignItems: "center" },
+  stepTxt: { fontSize: 10, color: colors.textFaint, fontWeight: "700", letterSpacing: 0.2 },
+  stepTxtOn: { color: colors.teal, fontWeight: "800" },
+  stepUnderline: { height: 2, alignSelf: "stretch", backgroundColor: colors.cardBorder, borderRadius: 2, marginTop: 7 },
+  stepUnderlineActive: { backgroundColor: colors.teal },
+  stepUnderlineDone: { backgroundColor: colors.tealDim },
+  stepKicker: { color: colors.teal, fontWeight: "800", fontSize: 11, letterSpacing: 1 },
+  stepQ: { color: colors.text, fontWeight: "700", fontSize: 18, marginTop: 4 },
+  bigCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, backgroundColor: colors.card, marginBottom: spacing.sm },
+  bigCardActive: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  bigIcon: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealGlow },
+  bigIconActive: { borderColor: colors.teal },
+  bigTitle: { color: colors.text, fontWeight: "700", fontSize: 15 },
+  engineTag: { color: colors.gold, fontSize: 8, fontWeight: "800", letterSpacing: 0.6, borderWidth: 1, borderColor: colors.goldDim || colors.gold, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.sm },
+  summaryK: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  summaryV: { color: colors.text, fontSize: 13, fontWeight: "700" },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
   chip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingVertical: 6, paddingHorizontal: spacing.sm },
   chipActive: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
@@ -397,6 +455,7 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: colors.teal },
   btnPrimaryTxt: { color: colors.bg, fontWeight: "800", letterSpacing: 0.6, fontSize: 12 },
   btnGhost: { borderWidth: 1, borderColor: colors.cardBorder },
+  btnFull: { alignSelf: "stretch" },
   btnGhostTxt: { color: colors.textMuted, fontWeight: "700", letterSpacing: 0.6, fontSize: 12 },
   resRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 5, borderTopWidth: 1, borderTopColor: colors.cardBorder },
   resVal: { color: colors.textMuted, fontWeight: "700", fontSize: 11, fontVariant: ["tabular-nums"] },

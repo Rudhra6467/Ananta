@@ -108,6 +108,74 @@ def _shift(series, n):
     return [None] * n + series[:-n] if n > 0 else series
 
 
+def _sma_series(series, period):
+    """SMA over a series that may contain None; a window with any None yields None."""
+    period = max(1, int(period))
+    out = [None] * len(series)
+    for i in range(len(series)):
+        if i + 1 < period:
+            continue
+        window = series[i + 1 - period:i + 1]
+        if any(x is None for x in window):
+            continue
+        out[i] = sum(window) / period
+    return out
+
+
+def _roc(vals, period):
+    """Rate of change (%) over `period` bars: (v - v[-period]) / v[-period] * 100."""
+    period = max(1, int(period))
+    out = [None] * len(vals)
+    for i in range(period, len(vals)):
+        base = vals[i - period]
+        out[i] = ((vals[i] - base) / base * 100.0) if base else 0.0
+    return out
+
+
+def _stoch(bars, k_period, smooth, d_period, want):
+    """Stochastic oscillator. Returns smoothed %K or %D as a full-length series."""
+    highs = _col(bars, "high"); lows = _col(bars, "low"); close = _col(bars, "close")
+    k_period = max(1, int(k_period)); n = len(bars)
+    raw = [None] * n
+    for i in range(n):
+        if i + 1 < k_period:
+            continue
+        ll = min(lows[i + 1 - k_period:i + 1]); hh = max(highs[i + 1 - k_period:i + 1])
+        raw[i] = 100.0 * (close[i] - ll) / (hh - ll) if hh > ll else 50.0
+    k = _sma_series(raw, smooth)
+    if want == "stoch_k":
+        return k
+    return _sma_series(k, d_period)
+
+
+def _vwap(bars, period):
+    """Rolling volume-weighted average price over `period` bars (typical price)."""
+    period = max(1, int(period)); n = len(bars)
+    tp = [(float(b[2]) + float(b[3]) + float(b[4])) / 3 for b in bars]
+    vol = _col(bars, "volume"); out = [None] * n
+    for i in range(n):
+        if i + 1 < period:
+            continue
+        pv = sum(tp[j] * vol[j] for j in range(i + 1 - period, i + 1))
+        vv = sum(vol[j] for j in range(i + 1 - period, i + 1))
+        out[i] = (pv / vv) if vv > 0 else tp[i]
+    return out
+
+
+def _vwap_band(bars, period, sigma, upper):
+    """VWAP ± sigma × rolling std(close) band."""
+    period = max(1, int(period)); vw = _vwap(bars, period); close = _col(bars, "close")
+    n = len(bars); out = [None] * n
+    for i in range(n):
+        if vw[i] is None:
+            continue
+        window = close[i + 1 - period:i + 1]
+        m = sum(window) / period
+        sd = (sum((x - m) ** 2 for x in window) / period) ** 0.5
+        out[i] = vw[i] + sigma * sd if upper else vw[i] - sigma * sd
+    return out
+
+
 def _build(name, spec, bars, params):
     fn = spec["fn"]
     p = lambda k, d=None: _resolve_num(spec.get(k, d), params)  # noqa: E731
@@ -158,6 +226,14 @@ def _build(name, spec, bars, params):
         return [(e + mult * a) if (e is not None and a is not None) else None for e, a in zip(ema, atr)]
     if fn in ("supertrend_dir", "supertrend_line"):
         return _supertrend(bars, int(p("atr_period", 10)), p("multiplier", 3.0), fn)
+    if fn == "roc":
+        return _roc(close, int(p("period", 30)))
+    if fn in ("stoch_k", "stoch_d"):
+        return _stoch(bars, int(p("k_period", 14)), int(p("smooth", 3)), int(p("d_period", 3)), fn)
+    if fn == "vwap":
+        return _vwap(bars, int(p("period", 20)))
+    if fn in ("vwap_lower", "vwap_upper"):
+        return _vwap_band(bars, int(p("period", 20)), p("sigma", 2.0), fn == "vwap_upper")
     raise ValueError(f"unknown indicator fn '{fn}'")
 
 
@@ -268,6 +344,9 @@ SUPPORTED_FNS: dict[str, list[str]] = {
     "atr_breakout_level": ["period", "k"],
     "keltner_upper": ["ema_period", "atr_period", "mult"], "keltner_mid": ["ema_period"],
     "supertrend_dir": ["atr_period", "multiplier"], "supertrend_line": ["atr_period", "multiplier"],
+    "roc": ["period"],
+    "stoch_k": ["k_period", "d_period", "smooth"], "stoch_d": ["k_period", "d_period", "smooth"],
+    "vwap": ["period"], "vwap_lower": ["period", "sigma"], "vwap_upper": ["period", "sigma"],
 }
 SUPPORTED_OPS: set[str] = {"cross_above", "cross_below", "gt", "lt", "gte", "lte", "rising", "falling"}
 

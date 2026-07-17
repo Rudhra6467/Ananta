@@ -69,6 +69,14 @@ WIRED_ENGINE_KEYS = {
     "ema-cross": "ema-cross", "supertrend": "supertrend", "rsi-momentum": "rsi-momentum",
     "macd-trend": "macd-trend", "bollinger-mr": "bollinger-mr", "donchian-breakout": "donchian-breakout",
     "atr-breakout": "atr-breakout", "keltner-breakout": "keltner-breakout",
+    "turtle": "turtle", "time-series-momentum": "time-series-momentum",
+    "stochastic-momentum": "stochastic-momentum", "vwap-mr": "vwap-mr",
+}
+
+# Catalog strategies that CANNOT be wired to the single-asset declarative engine (need a
+# multi-asset / spread engine). Surfaced as reference-only (no Deploy button) with a clear note.
+REFERENCE_ONLY = {
+    "pairs-trading": "Analysis only — requires 2-asset engine",
 }
 
 
@@ -78,6 +86,9 @@ def library() -> list[dict]:
         if e["id"] in WIRED_ENGINE_KEYS:
             e["engine_key"] = WIRED_ENGINE_KEYS[e["id"]]
             e["wireable"] = True
+        if e["id"] in REFERENCE_ONLY:
+            e["reference_only"] = True
+            e["reference_note"] = REFERENCE_ONLY[e["id"]]
     return entries
 
 

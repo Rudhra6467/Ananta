@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
     Target, Activity, GitBranch, ShieldCheck, PieChart, TrendingDown, Clock, Wind,
-    Layers, Coins, Globe, ChevronRight, Loader2, Play, Rocket, CheckCircle2, FlaskConical, ArrowLeft,
+    Layers, Coins, Globe, Loader2, Play, Rocket, CheckCircle2, FlaskConical, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -257,9 +257,10 @@ function TestResult({ result, method }) {
             <div>
                 <SubHead icon={FlaskConical} title="What-If — same entries, different exit" sub="If you'd used another exit on the exact same trades, the result would have been:" />
                 {syms.map((s) => {
-                    const ec = (per[s] || {}).exit_comparison || {};
+                    const byTf = (result.exit_comparison || {})[s] || {};
+                    const ec = byTf["1h"] || byTf[Object.keys(byTf)[0]] || {};
                     const rows = ec.rows || {};
-                    const keys = Object.keys(rows);
+                    const keys = Object.keys(rows).filter((k) => !rows[k].error);
                     if (!keys.length) return null;
                     return (
                         <div key={s} className="mb-3">
@@ -281,19 +282,22 @@ function TestResult({ result, method }) {
 const fmt = (x) => (typeof x === "number" ? x.toFixed(2) : x ?? "—");
 
 function StepDots({ step }) {
-    const labels = ["Scope", "Method", "Configure", "Test / Deploy"];
+    const labels = ["Scope", "Method", "Configure", "Deploy"];
     return (
-        <div className="flex items-center gap-2">
-            {labels.map((l, i) => (
-                <div key={l} className="flex items-center gap-2">
-                    <div className={`flex items-center gap-1.5 font-mono text-[10px] tracking-widest px-2.5 py-1 rounded-full border ${
-                        step === i + 1 ? "border-atlas-cyan text-atlas-cyan bg-atlas-cyan/10"
-                            : step > i + 1 ? "border-atlas-positive/40 text-atlas-positive" : "border-atlas-border text-atlas-textTertiary"}`}>
-                        {i + 1}. {l}
+        <div className="flex items-stretch gap-2" data-testid="exit-stepbar">
+            {labels.map((l, i) => {
+                const n = i + 1; const active = step === n; const done = step > n;
+                return (
+                    <div key={l} className="flex-1 flex flex-col gap-2">
+                        <div className={`font-mono text-[11px] tracking-widest text-center truncate ${
+                            active ? "text-atlas-cyan font-bold" : done ? "text-atlas-positive/80" : "text-atlas-textTertiary"}`}>
+                            {n}. {l}
+                        </div>
+                        <div className={`h-[2px] rounded-full transition-colors ${
+                            active ? "bg-atlas-cyan" : done ? "bg-atlas-positive/40" : "bg-atlas-border"}`} />
                     </div>
-                    {i < labels.length - 1 && <ChevronRight className="w-3 h-3 text-atlas-border" />}
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
