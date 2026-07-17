@@ -1,3 +1,37 @@
+## 2026-07-17 — Wire 4 catalog strategies + Exit Engine 3-tab restructure (iter58/59 GREEN, web+mobile+backend)
+
+- **P0 — All catalog strategies now testable/deployable.** Wired the last 4 reference-only specs to the
+  declarative engine so they get Deploy + Test buttons (web + mobile parity): `turtle`, `time-series-momentum`,
+  `stochastic-momentum`, `vwap-mr`. Added indicator primitives to `backend/declarative_engine.py`
+  (`roc`, `stoch_k`, `stoch_d`, `vwap`, `vwap_lower`/`vwap_upper`) + SUPPORTED_FNS entries; defs in
+  `backend/strategy/declarative_defs.py`; wiring in `backend/library_seed.py` (WIRED_ENGINE_KEYS) + bootstrap
+  backfill in `server.py` (_bootstrap_declarative). Verified: /api/library=16, registry/metrics include all 4,
+  deploy→PAPER works, real declarative backtests produce metrics.
+- **Pairs Trading kept REFERENCE-ONLY** (per owner decision): true 2-asset spread strategy the single-asset
+  declarative engine can't run. Marked via `REFERENCE_ONLY` in library_seed → backend `reference_only=true`,
+  `reference_note="Analysis only — requires 2-asset engine"`; web shows `card-reference-note-*`, mobile
+  `library-reference-note-*`; NO deploy button on either surface.
+- **What-If (counterfactual) FIX (web + mobile):** both TestResult views were reading the wrong path
+  (`per_symbol[sym].exit_comparison`); backend returns it at `result.exit_comparison[symbol][timeframe]`.
+  Now reads the correct nested block → the "What-If — same entries, different exit" comparison table renders.
+- **Exit Engine UI polish (web + mobile) to match owner reference:** clean horizontal connecting-line step bar
+  (1. Scope → 2. Method → 3. Configure → 4. Deploy), large scope cards with full "Modify Exit for a
+  Strategy/Specific Coin/Global Exit" names + icons + chevrons; subtitle "Configure how your strategies exit
+  trades".
+- **Exit Engine 3-tab restructure (web + mobile, iter59):** tab now has 3 sub-tabs
+  **Exit Engine → Risk Monitor → AI Analysis**. Removed the "Advanced Settings" button/modal. The former
+  advanced content moved into the new **Risk Monitor** sub-tab, split to avoid duplication:
+  * "Entry & Exit Engine" card = READ-ONLY summary (Active Exit Engine, Trail Multiplier, Breakeven Arm,
+    Hard Stop-Loss); its CTA navigates to the Exit Engine sub-tab (no exit-config modal).
+  * "Risk Monitor / Safeguards" = the only editor for risk/entry safeguards (min confidence, daily loss cap,
+    max spread, max open positions, sizing, kill-switch, credentials). Exit stop/trail edited ONLY in the
+    Exit Engine workflow — no duplicate editors across the two sub-tabs.
+  * Web: `Settings.jsx` gained optional `onGotoExitEngine` prop (hides the exit-config modal + repoints the
+    card CTA); `ExitEngine.jsx` renders `<SettingsPage onGotoExitEngine=...>` in the risk sub-tab.
+  * Mobile: `workspace.tsx` Segmented → 3 options; new `RiskMonitor` component (rm-engine-summary +
+    rm-safeguards); Advanced modal + button removed.
+
+
 ## 2026-07-15 — Launch Hardening: demo history seed + web onboarding + Resend (iter57 GREEN, backend+web 5/5)
 
 - **P0 Backend — Demo account pre-seeded with paper-trade history** (`demo_seed.seed_demo_history`):
