@@ -388,6 +388,7 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
     const status = wired ? (metric?.status || "PAPER") : "CATALOG";
     const deployed = status === "PAPER" || status === "LIVE";
     const [deploying, setDeploying] = useState(false);
+    const [expanded, setExpanded] = useState(false);
 
     const deploy = async (e) => {
         e.stopPropagation();
@@ -423,31 +424,49 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
                 <div className="font-heading font-medium text-base md:text-lg text-atlas-text leading-tight truncate">{s.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                     <span className="font-mono text-[9px] text-atlas-textTertiary truncate">{s.style} · {s.source}</span>
+                    <span className={`ml-auto shrink-0 font-mono text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border"}`}>{status}</span>
                 </div>
-                <div className="flex items-center gap-1 mt-1">
-                    {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3 h-3 ${n <= s.rating ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
-                    <span className={`ml-auto font-mono text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border"}`}>{status}</span>
+                <div className="font-body text-xs text-atlas-textSecondary mt-1.5 leading-relaxed line-clamp-2">{s.description || s.ideal_market || "—"}</div>
+            </div>
+            {expanded && (
+                <div className="relative z-10 pointer-events-none rounded-lg border border-atlas-border bg-atlas-bg/40 p-3">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[11px]">
+                        <Kv label="ROI" value={`${roi > 0 ? "+" : ""}${roi}%`} cls={roiCls} />
+                        <Kv label="Health" value={s.ai_health_score} cls={s.ai_health_score >= 60 ? "text-atlas-positive" : s.ai_health_score >= 35 ? "text-atlas-warning" : "text-atlas-negative"} />
+                        <Kv label="Win Rate" value={`${r.win_rate}%`} />
+                        <Kv label="Sharpe" value={r.sharpe} />
+                    </div>
+                    <div className="flex items-center gap-1 mt-2">
+                        {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3 h-3 ${n <= s.rating ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                    </div>
                 </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[11px] relative z-10 pointer-events-none">
-                <Kv label="ROI" value={`${roi > 0 ? "+" : ""}${roi}%`} cls={roiCls} />
-                <Kv label="Health" value={s.ai_health_score} cls={s.ai_health_score >= 60 ? "text-atlas-positive" : s.ai_health_score >= 35 ? "text-atlas-warning" : "text-atlas-negative"} />
-                <Kv label="Win Rate" value={`${r.win_rate}%`} />
-                <Kv label="Sharpe" value={r.sharpe} />
-            </div>
-            {wired && (
-                <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
-                    className={`relative z-10 pointer-events-auto flex items-center justify-center gap-1.5 rounded-lg py-2.5 font-mono text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${
-                        deployed ? "border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"
-                            : "bg-atlas-cyan text-atlas-bg border border-atlas-cyan hover:brightness-110"}`}>
-                    {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
-                    {deployed ? "MANAGE" : "DEPLOY"}
-                </button>
             )}
-            {!wired && s.reference_only && (
+            {!wired && s.reference_only ? (
                 <div data-testid={`card-reference-note-${s.id}`}
                     className="relative z-10 pointer-events-none rounded-lg border border-dashed border-atlas-border bg-atlas-bg/40 py-2 px-3 text-center font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">
                     {s.reference_note || "Analysis only"}
+                </div>
+            ) : (
+                <div className="relative z-10 pointer-events-auto flex items-center justify-between gap-2 mt-auto pt-3 border-t border-atlas-border">
+                    <button data-testid={`card-edit-${s.id}`} onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                        className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text transition-colors">
+                        <Pencil className="w-3.5 h-3.5" /> EDIT
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <button data-testid={`card-details-${s.id}`} onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+                            className="rounded-full border border-atlas-border px-3 py-1.5 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                            {expanded ? "HIDE" : "DETAILS"}
+                        </button>
+                        {wired && (
+                            <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
+                                className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 font-mono text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${
+                                    deployed ? "border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10"
+                                        : "bg-atlas-cyan text-atlas-bg border border-atlas-cyan hover:brightness-110"}`}>
+                                {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
+                                {deployed ? "MANAGE" : "DEPLOY"}
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

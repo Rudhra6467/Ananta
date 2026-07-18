@@ -1,0 +1,39 @@
+{
+  "summary": "Verified (1) WebOnboarding critical crash fix and (2) Strategy Center card + leaderboard redesign on both web and mobile against the shared FastAPI backend. WebOnboarding now renders 'Welcome to Ananta' correctly on fresh owner login with 0 ReferenceError console errors — fix confirmed (AnantaLogo import used at L65). Strategy Center on web (1440x900): bottom-nav-strategies works, strategy-leaderboard shows Sort dropdown, exactly 2 rows initially, and Show more expands to 8; Sort dropdown functional (ROI sort reordered top row hunter→turtle). Cards: hunter (PAPER) shows MANAGE (outlined), continuation (initially DISABLED) shows DEPLOY (teal bg-atlas-cyan); Details toggles metrics panel (ROI/Health/Win Rate/Sharpe/stars) with label DETAILS↔HIDE; card-edit-hunter opens strategy-detail-hunter (not deploy); pairs-trading has card-reference-note-pairs-trading and NO edit/details/deploy buttons. Mobile (Expo web preview, 390x844): parity confirmed — strategy-leaderboard, leaderboard-sort (opens modal with 11 leaderboard-sort-<key> options, ROI sort reorders), leaderboard-showmore (2→8), 16 library-card-<id> cards, hunter has edit/details/deploy (label MANAGE), Details toggles card-metrics-hunter, pairs-trading has library-reference-note-pairs-trading and no buttons, tapping card-edit-hunter navigates to /strategy/hunter. NAMING NOTE: task expected 'leaderboard-showmore' on web but web code uses 'strategy-leaderboard-show-more' — see parity_issues.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Strategy leaderboard show-more testID", "platform": "web", "issue": "Web StrategyCenter.jsx uses data-testid='strategy-leaderboard-show-more' while mobile uses testID='leaderboard-showmore' and the task/spec expects 'leaderboard-showmore'. Functionality works on both; only the testID name diverges.", "expected": "leaderboard-showmore (matches mobile)", "actual": "strategy-leaderboard-show-more"},
+    {"flow": "Strategy leaderboard sort testID", "platform": "web", "issue": "Web uses 'leaderboard-sort-select' (shadcn Select) while mobile uses 'leaderboard-sort' + modal with 'leaderboard-sort-<key>' options. Functionality works on both; naming diverges.", "expected": "leaderboard-sort (matches mobile) or documented divergence", "actual": "leaderboard-sort-select"}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "(Optional / naming) Rename web testID 'strategy-leaderboard-show-more' → 'leaderboard-showmore' to match mobile and the spec.",
+    "(Optional / naming) Rename web testID 'leaderboard-sort-select' → 'leaderboard-sort' to match mobile."
+  ],
+  "critical_code_review_comments": [
+    "LibraryCard onDeploy calls parent load() which refetches metrics — verified in-code and via a real deploy call on 'continuation' (status flipped to PAPER as seen in card badge). A minor race means the button label update can lag the badge update by one render tick; not user-visible in practice.",
+    "OnboardingPipeline modal (fixed inset-0 z-[60]) blocks interactions on every fresh owner login until 'ENTER ANANTA' is tapped — expected behavior but does prevent programmatic bypass via localStorage flags alone (test agents must click through)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not retested per task)", "frontend": "100% (web + mobile Strategy Center redesign + WebOnboarding fix)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH",
+  "seed_data_creation": "None. Deploy click on 'continuation' strategy flipped its state DISABLED → PAPER via POST /api/strategies/continuation/state (owner-authenticated). No cleanup required — feature is idempotent and status can be flipped back from the detail view.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "WebOnboarding.jsx uses <AnantaLogo/> (line 65) — fix verified with fresh login (localStorage cleared). Strategy Center: web cards use data-testid pattern library-card-<id>, card-edit-<id>, card-details-<id>, card-deploy-<id>, card-reference-note-<id>. Mobile equivalents use testID pattern (rendered as data-testid) with library-card-<id>, card-edit-<id>, card-details-<id>, card-deploy-<id>, card-metrics-<id>, library-reference-note-<id>. Leaderboard testIDs differ between surfaces (see parity_issues). To reproduce owner login flow: clear localStorage, click OWNER LOGIN → fill 2 inputs (no type attr on email) → submit → dismiss OnboardingPipeline via 'ENTER ANANTA' → navigate to bottom-nav-strategies.",
+  "rca of the issue": "WebOnboarding.jsx crash previously reported in iter60 — RCA already documented there. Verified fixed in iter61: line 5 imports AnantaLogo, line 65 renders <AnantaLogo className='h-14 w-14'/>. No <AnantaTrident/> reference remains. Login flow renders WebOnboarding welcome screen with zero ReferenceError/console errors and no ErrorBoundary crash."
+}
