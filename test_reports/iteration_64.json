@@ -1,0 +1,35 @@
+{
+  "summary": "Phase C server-backed 'My Reports History' verified end-to-end on web. Backend: 13/13 tests pass on /api/lab/runs (owner-gate, list projection excludes _id/result, limit cap 100, get-by-id, PDF for DONE, DELETE 404 for missing, all endpoints reject public with 403). Frontend: on Research > AI ANALYSIS the AnantaPdfs component renders 23 report rows (matches API: 25 total, 2 health_sweep filtered out client-side). Every documented data-testid is present. Same panel renders identically on Exit Engine > AI ANALYSIS (23 rows). Owner gate shows correct copy for logged-out users. PDF download endpoint returns application/pdf (10.4 KB). No 'pdf' keys in localStorage — history is truly server-backed and persists across reload. Delete button wired (verified via DELETE missing-id -> 404). Note: the 3rd render location (Workspace > AI ANALYTICS) in /app/frontend/src/pages/Workspace.jsx exists but the Workspace page is NOT imported/routed in /app/frontend/src/AppShell.jsx (bottom nav is Cockpit/Strategy/Research/Exit Engine/Trade), so that copy is dead code from a user's perspective.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_lab_runs_history.py",
+    "/app/test_reports/pytest/iter64_phase_c.xml"
+  ],
+  "action_items": [
+    "OPTIONAL / CODE-HYGIENE: /app/frontend/src/pages/Workspace.jsx renders AnantaPdfs under 'AI ANALYTICS > Ananta PDFs' but the Workspace page is not imported/routed in AppShell.jsx (only Cockpit/Strategy/Research/Exit Engine/Trade are wired). Either route Workspace so users can actually reach that 3rd surface, or delete the dead code and update the PRD to reflect the two live render locations (Research › AI ANALYSIS and Exit Engine › AI ANALYSIS)."
+  ],
+  "critical_code_review_comments": [
+    "AnantaPdfs mounts twice on screens that show two sub-tabs sharing the same route (Research and Exit Engine each mount their own copy). Each mount independently polls /api/lab/runs every 5s while any run is QUEUED/RUNNING. Not a bug today (single active surface at a time) but worth debouncing via a shared hook if a 3rd surface is added.",
+    "GET /api/lab/runs returns 'runs' unpaginated up to the server-side cap (Query(le=100)). AnantaPdfs asks for 50 then slices to 30 client-side; the trimming from 50→30 is fine but the server-side default of 30 already respects the 'latest 30' spec — passing limit=30 would be more honest and save payload.",
+    "downloadPdf calls /lab/runs/{id}/pdf via api client which auto-injects the owner Bearer token — verified working (200 + application/pdf)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lab_runs_history.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used existing 25 lab_runs (23 non-health + 2 health_sweep) to verify list filtering. No destructive DELETE performed against real runs — DELETE endpoint verified via missing-id -> 404 assertion and by observing the wired delete button is enabled on DONE rows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend uvicorn is started with --reload and watches /app/backend/tests/. Creating or editing a test file there triggers a slow reload; if requests to the backend start timing out with 502s, run `sudo supervisorctl restart backend` and wait ~25s. conftest.py autouse fixture patches requests.Session.request to inject the owner Bearer token on POST/PUT/DELETE/PATCH — public/unauth assertions on mutating verbs MUST use urllib (see _raw_request helper) or they'll get an authenticated response and mislead you (e.g. 404 instead of 403).",
+  "rca of the issue": ""
+}
