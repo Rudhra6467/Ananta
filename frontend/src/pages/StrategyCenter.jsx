@@ -195,10 +195,12 @@ function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
                     </span>
                     <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-text transition-colors" />
                 </button>
-                <button data-testid="add-option-ai" onClick={onCreate}
-                    className="w-full flex items-center justify-center gap-1.5 pt-1 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" /> Prefer to describe it in words? Build with AI
-                </button>
+                <div className="pt-2 mt-1 border-t border-atlas-border/60">
+                    <button data-testid="add-option-ai" onClick={onCreate}
+                        className="w-full flex items-center justify-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-textSecondary transition-colors">
+                        <Sparkles className="w-3 h-3" /> Prefer to describe it in words? Build with AI (advanced)
+                    </button>
+                </div>
             </div>
         </LabModal>
     );
