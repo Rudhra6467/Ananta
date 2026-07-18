@@ -1,4 +1,13 @@
-## 2026-07-18 — Strategy Center card + leaderboard redesign (web + mobile, iter61 GREEN) + fixes
+## 2026-07-18 — Strategy card simplification (web + mobile) — reduce bottom clutter
+
+- Per user feedback the cards felt overloaded (Edit + Details + Deploy). Removed the "Details" button
+  and the inline metrics expander from BOTH web (`StrategyCenter.jsx` LibraryCard) and mobile
+  (`strategy.tsx` StrategyCard). Cards now have a MAX of two actions: a secondary **Edit** (left) and a
+  single primary button (**DEPLOY** teal when inactive / **MANAGE** outlined when active). Description
+  trimmed to one line. ROI/Win/Sharpe/Health/stars now live only on the strategy detail screen (opened
+  via tapping the card / Edit). Status badge stays top-right, consistent colors. Verified web + mobile.
+
+
 
 - **CRITICAL FIX:** `WebOnboarding.jsx` referenced an undefined `<AnantaTrident/>` → ReferenceError crash
   (blank screen) on fresh owner login. Swapped to the imported `<AnantaLogo/>` (also aligns onboarding

@@ -12,11 +12,9 @@ import { AddStrategySheet } from "../../src/components/AddStrategySheet";
 import { Segmented } from "../../src/components/Segmented";
 import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
-import { pct } from "../../src/format";
 
 const STATUS_TONE: Record<string, any> = { LIVE: "teal", PAPER: "amber", DISABLED: "muted", CATALOG: "neutral", WIRED: "teal" };
 const GRADE_COLOR: Record<string, string> = { A: colors.teal, B: colors.teal, C: colors.amber, D: colors.amber, E: colors.red };
-const healthColor = (v: number) => (v >= 60 ? colors.teal : v >= 35 ? colors.amber : colors.red);
 
 const CHIPS = [
   { id: "top_rated", label: "Top Rated", icon: "star" },
@@ -218,9 +216,7 @@ const CARD_ICON = (s: any): any => {
 };
 
 function StrategyCard({ s, status, isOwner, onOpen, onReload }: { s: any; status: string; isOwner: boolean; onOpen: () => void; onReload: () => void }) {
-  const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const r = s.historical_results || {};
   const grade = s.ai_grade || "C";
   const gColor = GRADE_COLOR[grade] || colors.amber;
   const active = status === "LIVE" || status === "PAPER";
@@ -251,22 +247,8 @@ function StrategyCard({ s, status, isOwner, onOpen, onReload }: { s: any; status
       <Pressable onPress={onOpen}>
         <Text style={[type.h3, { marginTop: spacing.sm }]} numberOfLines={1}>{s.name}</Text>
         <Text style={[type.small, { marginTop: 2 }]} numberOfLines={1}>{s.style} · {s.source}</Text>
-        <Text style={[type.body, { marginTop: 6, color: colors.textMuted }]} numberOfLines={2}>{s.description || s.ideal_market || "—"}</Text>
+        <Text style={[type.body, { marginTop: 6, color: colors.textMuted }]} numberOfLines={1}>{s.description || s.ideal_market || "—"}</Text>
       </Pressable>
-
-      {expanded && (
-        <View style={styles.metricsBox} testID={`card-metrics-${s.id}`}>
-          <View style={styles.rowBetween}>
-            <Stat label="ROI" value={pct(r.roi)} color={r.roi >= 0 ? colors.teal : colors.red} />
-            <Stat label="HEALTH" value={String(s.ai_health_score)} color={healthColor(s.ai_health_score)} />
-            <Stat label="WIN" value={`${r.win_rate ?? 0}%`} />
-            <Stat label="SHARPE" value={String(r.sharpe ?? 0)} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 3, marginTop: 8 }}>
-            {[1, 2, 3, 4, 5].map((n) => <Ionicons key={n} name={n <= s.rating ? "star" : "star-outline"} size={12} color={n <= s.rating ? colors.amber : colors.textFaint} />)}
-          </View>
-        </View>
-      )}
 
       {s.reference_only ? (
         <View testID={`library-reference-note-${s.id}`} style={styles.referenceNote}>
@@ -278,16 +260,11 @@ function StrategyCard({ s, status, isOwner, onOpen, onReload }: { s: any; status
             <Ionicons name="create-outline" size={15} color={colors.textMuted} />
             <Text style={styles.editTxt}>Edit</Text>
           </Pressable>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Pressable testID={`card-details-${s.id}`} onPress={() => setExpanded((v) => !v)} style={styles.detailsBtn}>
-              <Text style={styles.detailsTxt}>{expanded ? "Hide" : "Details"}</Text>
+          {deployable && (
+            <Pressable testID={`card-deploy-${s.id}`} onPress={primary} disabled={busy} style={[styles.primaryBtn, active && styles.primaryBtnGhost]}>
+              {busy ? <ActivityIndicator color={colors.bg} size="small" /> : <Text style={[styles.primaryTxt, active && { color: colors.teal }]}>{active ? "MANAGE" : "DEPLOY"}</Text>}
             </Pressable>
-            {deployable && (
-              <Pressable testID={`card-deploy-${s.id}`} onPress={primary} disabled={busy} style={[styles.primaryBtn, active && styles.primaryBtnGhost]}>
-                {busy ? <ActivityIndicator color={colors.bg} size="small" /> : <Text style={[styles.primaryTxt, active && { color: colors.teal }]}>{active ? "MANAGE" : "DEPLOY"}</Text>}
-              </Pressable>
-            )}
-          </View>
+          )}
         </View>
       )}
     </Card>
@@ -347,15 +324,6 @@ function StrategyLeaderboard({ onOpen }: { onOpen: (r: any) => void }) {
         </Pressable>
       </Modal>
     </Card>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <View style={{ alignItems: "flex-start" }}>
-      <Text style={type.label}>{label}</Text>
-      <Text style={[type.h3, { fontSize: 15, color: color || colors.text }]}>{value}</Text>
-    </View>
   );
 }
 
