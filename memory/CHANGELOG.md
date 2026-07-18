@@ -1045,3 +1045,53 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Testing agent iter 56: backend 7/7 (after login-body fix), mobile 100%, web regression ok.
 - Apple privacy Q: answer "Yes, we collect data" (Contact Info/email, User Content, User ID; App Functionality; NOT tracking, no ad SDKs).
 - Emails: Option B (no automated approval emails yet; owner reviews waitlist in-app; support page → vamsimadhavyakasiri@gmail.com via mailto).
+
+---
+
+## 2026-07-18 — Research Lab deep analytics, Strategy Health, Strategy Center redesign (web)
+
+### Research Lab Phase A + B (web, tested — iteration_62.json)
+- ResearchWizard results now surface on-screen (previously PDF-only): Summary Verdict card,
+  MFE/MAE capture card, Exit-Module performance table, Regime breakdown table, Exit A/B/C
+  comparison table (★winner), and a Multi-Timeframe side-by-side comparison.
+- researchStore.js: timeframe step is now MULTI-SELECT (1h default + 30m/15m); sends
+  `compare_timeframes=true` when >1 TF selected (backend already supported it).
+
+### Strategy Health Dashboard + daily sweep + PDF (web + backend, verified e2e — iteration_63.json)
+- NEW backend: lab/health_sweep.py (aggregate per-strategy health card + recommendation badge
+  logic: "Good for Paper Trading"/"Needs Improvement"/"Not Recommended Currently").
+- lab/runner.py: LabWorker handles kind="health_sweep" (lightweight — per-strategy isolated
+  backtest across BTC/ETH/SOL × 1h/30m/15m + ONE exit-comparison on primary/1h; ~12-13 min for
+  6 strategies, pure CPU, no LLM credits). HealthSweepScheduler runs a scoped sweep daily
+  (core + enabled strategies, 3m window). Results upserted to `strategy_health` (id=latest).
+- NEW endpoints: GET /api/lab/health (public read), GET /api/lab/health/status (public),
+  POST /api/lab/health/run (owner; scope=full|scoped, period=3m|6m|1y; 409 if one running).
+- lab/lab_report.py: _health_block renders the full-analysis PDF (per-strategy recommendation,
+  headline, best TF/exit, regime table). Served via existing /api/lab/runs/{id}/pdf.
+- NEW frontend: components/lab/StrategyHealthPanel.jsx + Research "HEALTH" sub-tab. Cards show
+  best TF/exit, 5 metrics, MFE capture bar, regime chips, recommendation badge; PDF download;
+  owner "Run Full Analysis" with warning + live progress.
+- server.py _compute_strategy_metrics: added max_drawdown_pct, profit_factor, recent_form,
+  recent_form_pct (derived from each strategy's trade ledger).
+
+### INFRA FIX (lab/runner.py): BrokenProcessPool recovery
+- A crashed backtest worker (abrupt child death) previously poisoned the rest of a multi-cell
+  sweep (only TimeoutError triggered a pool reset). Added `_run_cell()` helper that recycles the
+  pool AND retries once on BrokenProcessPool, so one crash no longer errors all remaining strategies.
+
+### Strategy Center redesign (web, verified e2e — iteration_63.json)
+- pages/StrategyCenter.jsx: removed Leaderboard + DEPLOYED/EDIT sub-tabs → single clean grid.
+  Cards: icon+name, 1-line desc, prominent colored STATUS badge top-right (grade REMOVED from grid),
+  activity line, Edit + one primary Deploy/Manage (optimistic status flip on deploy).
+- Detail view rebuilt: identity + status/grade, 5-metric grid (Win Rate · Total P&L · Max DD ·
+  Profit Factor · Recent Form), How it Works, Best Used In (Purpose/Works best/Avoid), "Show more"
+  expander for secondary (health/live snapshot/DNA/timeline/AI), 3 bottom actions
+  (Test in Research Lab · Deploy/Manage in Paper · Edit Parameters).
+- Add flow simplified: AddStrategyChooser modal — Create New Strategy + Import JSON, with
+  "Build with AI (advanced)" as a clearly secondary link below a divider. (Copy Existing = fast-follow.)
+
+### Follow-ups / backlog
+- Add "Copy Existing" (clone) to the Add flow (needs a backend clone endpoint).
+- StrategyCenter.jsx is ~900 lines — split into subcomponents later.
+- Startup race: LabWorker occasionally needs the job already queued at boot to dequeue (restart-safe).
+- Bring lighter Research Lab analytics + Strategy Health to mobile (deferred; web-first agreed).

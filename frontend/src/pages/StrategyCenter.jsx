@@ -289,7 +289,8 @@ function timeAgo(ts) {
 function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
     const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
     const wired = !!(s.internal || (s.wireable && s.engine_key));
-    const status = wired ? (metric?.status || "PAPER") : "CATALOG";
+    const [localStatus, setLocalStatus] = useState(null);
+    const status = localStatus || (wired ? (metric?.status || "PAPER") : "CATALOG");
     const deployed = status === "PAPER" || status === "LIVE";
     const [deploying, setDeploying] = useState(false);
 
@@ -300,6 +301,7 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
         setDeploying(true);
         try {
             const next = await api.strategySetState(s.engine_key, { enabled: true });
+            setLocalStatus(next.status || "PAPER");  // optimistic — flip the badge instantly
             toast.success("Deployed to paper engine", { description: `${s.name} → ${next.status || "PAPER"}` });
             onDeploy?.();
         } catch (err) { toast.error("Deploy failed", { description: String(err?.response?.data?.detail || err?.message) }); }
