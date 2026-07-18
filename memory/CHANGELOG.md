@@ -1,3 +1,27 @@
+## 2026-07-17 — BUGFIX: Research Lab backtests showed ZERO trades for all non-core strategies
+
+- **Root cause:** `lab/backtest.py::_scan_entry` only evaluated the 3 core strategies
+  (`hunter/squeeze/continuation` via `ALL_STRATEGIES`). Every declarative catalog strategy
+  (EMA Cross, Supertrend, Bollinger MR, RSI/MACD, Donchian/ATR/Keltner breakout, and the newly
+  wired Turtle / Time Series Momentum / Stochastic Momentum / VWAP MR) was never dispatched to the
+  declarative engine, so they generated 0 entries → the Lab PDF showed no trades. Only hunter/
+  squeeze/continuation ever produced results.
+- **Fix:** wired declarative entries into the shared replay engine — `run_backtest` now builds
+  `decl_specs` for any selected catalog key (default params from `DECLARATIVE`) and `_scan_entry`
+  evaluates them via `declarative_engine.evaluate` after the core checks (no regime gate; entries
+  from the strategy's own rules, exits from the selected Lab exit method). Because `run_multi_exit`
+  calls `run_backtest`, this also fixes the exit-comparison / What-If for these strategies.
+- **Verified:** e2e Lab run (turtle, BTC/USD, 3m, ATR exit) → 63 entries / 63 trades, correct
+  `strategy_breakdown={turtle}`, working exit_comparison (was 0 trades before). Core hunter path
+  unchanged. Regression tests added: `backend/tests/test_lab_declarative_wiring.py` (9 passed).
+- **Live/Paper status (investigated, no bug):** the live engine (`trading_engine.evaluate_symbol`,
+  ~line 1420) ALREADY dispatches declarative strategies for entries via `all_declarative_keys()`,
+  gated by deploy status (`strategy_entry_allowed`) and **restricted to PAPER/DRY_RUN** — declarative
+  catalog strategies are intentionally paper-only; Hunter/Squeeze/Continuation remain the only
+  LIVE-routing entry drivers (existing safety design). Exits handled by `position_watcher.py`
+  (consults each strategy's declarative exit spec). The 4 newly wired keys now flow through both.
+
+
 ## 2026-07-17 — Wire 4 catalog strategies + Exit Engine 3-tab restructure (iter58/59 GREEN, web+mobile+backend)
 
 - **P0 — All catalog strategies now testable/deployable.** Wired the last 4 reference-only specs to the

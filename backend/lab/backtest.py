@@ -32,6 +32,8 @@ from router import continuation_allowed, hunter_allowed, squeeze_allowed
 from squeeze import evaluate_squeeze
 from continuation import evaluate_continuation
 from lab import data_store
+from strategy.declarative_defs import DECLARATIVE
+from declarative_engine import evaluate as _decl_evaluate
 
 logger = logging.getLogger("ananta.lab.backtest")
 
@@ -94,6 +96,14 @@ def run_backtest(
                 setattr(s, k, v)
 
     allowed = {x.lower() for x in strategies} if strategies else set(ALL_STRATEGIES)
+    # Declarative (catalog) strategies selected for this run — evaluated via the shared
+    # declarative engine so they fire real entries in the Lab (parity with the deploy path).
+    # Default params from the catalog definition keep the backtest deterministic.
+    decl_specs: dict[str, tuple] = {}
+    for _k in allowed:
+        _d = DECLARATIVE.get(_k)
+        if _d:
+            decl_specs[_k] = (_d["spec"], {p.id: p.default for p in _d["params"]})
     # normalise exit method: legacy "engine" == "native" (full Universal Exit Engine)
     if exit_method == "engine":
         exit_method = "native"
@@ -232,6 +242,17 @@ def run_backtest(
             if ct.triggered:
                 strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
                 _conf = getattr(ct, "confidence", None) or getattr(ct, "score", None)
+        # Declarative catalog strategies (ema-cross, supertrend, turtle, vwap-mr, ...) — no regime
+        # gate; entries come from the strategy's own rule spec, exits from the selected exit method.
+        if strategy is None and decl_specs:
+            for _dk, (_spec, _params) in decl_specs.items():
+                try:
+                    _dsig = _decl_evaluate(_spec, window, _params)
+                except Exception:
+                    continue
+                if _dsig.entry:
+                    strategy, entry_profile, struct_stop = _dk, _dk, None
+                    break
         if strategy is None:
             return None
         return {"i": i, "strategy": strategy, "entry_profile": entry_profile,
