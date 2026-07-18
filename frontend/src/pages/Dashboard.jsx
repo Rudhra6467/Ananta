@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronRight, RefreshCw, Sparkles, Plus, Search, X, Loader2 } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Sparkles, Plus, Search, X, Loader2 } from "lucide-react";
 import {
     Cell as RCell,
     Pie,
@@ -24,7 +24,7 @@ const ROSE = "#F43F5E";
 const MUTED = "#5C6370";
 
 export default function Dashboard() {
-    const { portfolio, snapshots, enabledSymbols, trades, brain, summary, regime, refresh } = useAppData();
+    const { portfolio, snapshots, enabledSymbols, trades, summary, regime, refresh } = useAppData();
     const { isOwner } = useAuth();
     const [selected, setSelected] = useState(null);
     const [candles, setCandles] = useState([]);
@@ -64,7 +64,6 @@ export default function Dashboard() {
                     <Sparkles className="w-4 h-4" /> WEEKLY AI REVIEW
                 </button>
             </div>
-            <BotBrainStrip brain={brain} regime={regime} scanned={enabledSymbols.length} onRefresh={refresh} />
             {/* Watchlist (80%) + Charts (20%) on one row */}
             <div className="flex gap-3 items-stretch">
                 <div className="flex-[4] min-w-0">
@@ -116,26 +115,6 @@ function WeeklyReviewModal({ open, onClose }) {
 }
 
 /* ---------------- AI Coach headline banner (credit-free) ---------------- */
-/* ---------------- Bot-brain strip (account metrics live in the top header now) ---------------- */
-function BotBrainStrip({ brain, regime, scanned, onRefresh }) {
-    const total = brain?.total_evaluations ?? 0;
-    const qualified = brain?.greenlit ?? 0;
-    const rejected = Math.max(total - qualified, 0);
-    return (
-        <div className="panel p-4 relative" data-testid="bot-brain-strip">
-            <button data-testid="cockpit-refresh" onClick={onRefresh} className="absolute top-3 right-3 text-atlas-textSecondary hover:text-atlas-text transition-colors">
-                <RefreshCw className="w-4 h-4" />
-            </button>
-            <div className="grid grid-cols-2 gap-2">
-                <MatrixCell testid="cockpit-metric-setups" label="Setups" value={total} />
-                <MatrixCell testid="cockpit-metric-scanned" label="Scanned" value={scanned} />
-                <MatrixCell testid="cockpit-metric-rejected" label="Rejected" value={rejected} valueClass="text-atlas-negative" />
-                <MatrixCell testid="cockpit-metric-qualified" label="Qualified" value={qualified} valueClass="text-atlas-positive" />
-            </div>
-        </div>
-    );
-}
-
 /* Compact market-regime pill shown next to a section title (replaces the full Regime row). */
 function RegimeTag({ regime }) {
     const label = regime === "BULLISH" ? "Bull" : regime === "BEARISH" ? "Bear" : "Neutral";
@@ -144,15 +123,6 @@ function RegimeTag({ regime }) {
         <span data-testid="regime-tag" className="font-mono text-[10px] text-atlas-textTertiary">
             (Market · <span className={`font-bold ${cls}`} data-testid="regime-value">{label}</span>)
         </span>
-    );
-}
-
-function MatrixCell({ label, value, valueClass = "text-atlas-text", testid }) {
-    return (
-        <div className="rounded-lg border border-atlas-border px-4 py-3" data-testid={testid}>
-            <div className="label-tag">{label}</div>
-            <div className={`font-mono text-xl font-bold tabular-nums mt-0.5 ${valueClass}`}>{value}</div>
-        </div>
     );
 }
 
