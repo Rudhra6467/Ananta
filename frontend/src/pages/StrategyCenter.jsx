@@ -310,7 +310,7 @@ export function StrategyLeaderboard({ onOpen }) {
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <div className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">STRATEGY LEADERBOARD</span></div>
                 <Select value={sort} onValueChange={setSort}>
-                    <SelectTrigger data-testid="leaderboard-sort-select"
+                    <SelectTrigger data-testid="leaderboard-sort"
                         className="w-auto bg-atlas-panel border-atlas-border rounded px-2.5 py-1.5 font-mono text-[11px] text-atlas-text focus:border-atlas-cyan h-auto gap-1.5">
                         <SelectValue />
                     </SelectTrigger>
@@ -331,7 +331,7 @@ export function StrategyLeaderboard({ onOpen }) {
                 ))}
             </div>
             {all.length > 2 && (
-                <button data-testid="strategy-leaderboard-show-more" onClick={() => setShowAll((v) => !v)}
+                <button data-testid="leaderboard-showmore" onClick={() => setShowAll((v) => !v)}
                     className="mt-2 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
                     {showAll ? "Show less" : `Show more (${all.length - 2})`}
                 </button>

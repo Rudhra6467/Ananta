@@ -1,3 +1,27 @@
+## 2026-07-18 — Strategy Center card + leaderboard redesign (web + mobile, iter61 GREEN) + fixes
+
+- **CRITICAL FIX:** `WebOnboarding.jsx` referenced an undefined `<AnantaTrident/>` → ReferenceError crash
+  (blank screen) on fresh owner login. Swapped to the imported `<AnantaLogo/>` (also aligns onboarding
+  with the in-app header logo). Verified: fresh login renders with 0 console errors.
+- **Strategy Center redesign (both platforms)** per user mockup/spec — consistent, action-oriented cards:
+  icon (top-left) · grade circle + status badge LIVE/PAPER/DISABLED/CATALOG (top-right) · name ·
+  "style · source" · one-line description · bottom action row = **Edit** (always visible, opens params) +
+  **Details** toggle (ROI/Health/Win/Sharpe/stars now hidden behind it) + a single primary button:
+  **MANAGE** (outlined) when active (LIVE/PAPER), else **DEPLOY** (teal). Reference-only (pairs-trading)
+  shows the note and no buttons. Status resolved from `strategy_meta` via `/api/strategy/metrics`.
+  * Mobile `strategy.tsx`: new `StrategyCard` + `CARD_ICON` map; removed the old `DeployCardButton`.
+  * Web `StrategyCenter.jsx` `LibraryCard`: metrics moved into an expandable Details panel; added Edit row.
+- **Leaderboard cleaned up (both):** compact — a **Sort** dropdown (AI Health Score default), **top 2 rows**,
+  and a **Show more (N)** toggle (mobile got a new dropdown modal replacing the horizontal sort chips).
+  Web leaderboard testIDs renamed to `leaderboard-sort` / `leaderboard-showmore` for cross-platform parity.
+- **AI-timeout fix (Strategy Import):** the web API client capped ALL calls at 30s while the Claude
+  extraction (`/library/import/analyze`) often needs longer → raised that call's timeout to 120s.
+  (Full Strategy Import/Create UX overhaul still pending — see ROADMAP.)
+
+### Still pending (approved / proposed, not yet built)
+- Launch page + Welcome 4-step "Your Trading Workflow" redesign (both platforms, using the in-app logo).
+- Strategy Import/Create simplification: no-code guided form + templates + friendly errors + "Test in Lab".
+
 ## 2026-07-17 — BUGFIX: Research Lab backtests showed ZERO trades for all non-core strategies
 
 - **Root cause:** `lab/backtest.py::_scan_entry` only evaluated the 3 core strategies
