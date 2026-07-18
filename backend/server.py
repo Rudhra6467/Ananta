@@ -2285,6 +2285,20 @@ async def _compute_strategy_metrics() -> dict:
         total_pnl = round(sum((t.get("pnl") or 0) for t in ts), 2)
         win_rate = round(100 * wins / n, 1) if n else 0.0
         roi = round(100 * total_pnl / start_eq, 2) if start_eq else 0.0
+        # profit factor + max drawdown + recent form, derived from this strategy's trade ledger
+        gross_p = sum((t.get("pnl") or 0) for t in ts if (t.get("pnl") or 0) > 0)
+        gross_l = abs(sum((t.get("pnl") or 0) for t in ts if (t.get("pnl") or 0) < 0))
+        profit_factor = (round(gross_p / gross_l, 2) if gross_l > 0 else (999.0 if gross_p > 0 else None))
+        eq, peak, max_dd = start_eq, start_eq, 0.0
+        for t in ts:
+            eq += (t.get("pnl") or 0)
+            peak = max(peak, eq)
+            if peak > 0:
+                max_dd = max(max_dd, (peak - eq) / peak * 100.0)
+        max_drawdown_pct = round(max_dd, 2) if n else 0.0
+        recent = ts[-8:]
+        recent_form = ["W" if (t.get("pnl") or 0) > 0 else "L" for t in recent]
+        recent_form_pct = round(100 * sum(1 for f in recent_form if f == "W") / len(recent_form), 0) if recent_form else 0.0
         stars = stars_by.get(key, 0)
         last_ts = ts[-1]["timestamp"] if ts else None
         m = meta.get(key, {})
@@ -2296,6 +2310,8 @@ async def _compute_strategy_metrics() -> dict:
             "key": key, "name": schema.name, "category": (schema.dna or {}).get("family") if isinstance(schema.dna, dict) else None,
             "status": status, "enabled": m.get("enabled", True),
             "trades": n, "win_rate": win_rate, "roi": roi, "total_pnl": total_pnl,
+            "profit_factor": profit_factor, "max_drawdown_pct": max_drawdown_pct,
+            "recent_form": recent_form, "recent_form_pct": recent_form_pct,
             "stars": stars, "confidence": min(99, int(win_rate)) if n else 0,
             "health": health,
             "health_breakdown": breakdown,
@@ -2303,6 +2319,7 @@ async def _compute_strategy_metrics() -> dict:
             "last_trade": last_ts, "config_count": len(cfgs),
             "active_config_id": m.get("active_config_id"),
             "active_config_name": m.get("active_config_name"),
+            "deployed_at": m.get("deployed_at") or m.get("updated_at") or m.get("created_at"),
         }
     return out
 

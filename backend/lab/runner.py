@@ -19,6 +19,7 @@ import subprocess
 import time
 import uuid
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime, timezone
 
 from lab import backtest, data_store, optimize
@@ -224,12 +225,30 @@ class LabWorker:
         self._stop = asyncio.Event()
 
     def _reset_pool(self):
-        """Recycle the process pool (used after a timeout to kill a runaway worker)."""
+        """Recycle the process pool (after a timeout or an abrupt worker crash)."""
         try:
             self._pool.shutdown(wait=False, cancel_futures=True)
         except Exception:
             pass
         self._pool = ProcessPoolExecutor(max_workers=1)
+
+    async def _run_cell(self, fn, arg, budget):
+        """Run one picklable job in the worker process with timeout + crash recovery.
+        A dead worker (BrokenProcessPool) is recycled and the cell retried ONCE, so a single
+        crash never poisons the rest of a multi-strategy sweep. Returns {"error": ...} on failure."""
+        for attempt in (1, 2):
+            loop = asyncio.get_event_loop()
+            try:
+                return await asyncio.wait_for(loop.run_in_executor(self._pool, fn, arg), timeout=budget)
+            except asyncio.TimeoutError:
+                self._reset_pool()
+                return {"error": "timed_out"}
+            except BrokenProcessPool as e:
+                self._reset_pool()  # worker died — rebuild the pool and retry once
+                if attempt == 2:
+                    return {"error": f"worker_crashed: {e}"}
+            except Exception as e:  # noqa: BLE001
+                return {"error": str(e)}
 
     def start(self):
         self._stop.clear()
@@ -323,6 +342,9 @@ class LabWorker:
         await self._set_progress(rid, 2)
         try:
             await loop.run_in_executor(self._pool, ensure_history, symbols, timeframes, run.get("period", "3m"))
+        except BrokenProcessPool as e:
+            logger.warning("ensure_history worker crashed for run %s: %s — recycling pool", rid, e)
+            self._reset_pool()
         except Exception as e:  # noqa: BLE001
             logger.warning("ensure_history failed for run %s: %s", rid, e)
         # Re-anchor the window now that data is present (create_run may have seen no data).
@@ -339,15 +361,9 @@ class LabWorker:
         for sym in symbols:
             for tf in timeframes:
                 kwargs = {"symbol": sym, "start_ms": start, "end_ms": end, "timeframe": tf, **overrides}
-                try:
-                    r = await asyncio.wait_for(
-                        loop.run_in_executor(self._pool, _run_backtest_one, kwargs),
-                        timeout=self.BACKTEST_BUDGET_S)
-                except (asyncio.TimeoutError, Exception) as e:  # noqa: BLE001
-                    r = {"error": "timed_out" if isinstance(e, asyncio.TimeoutError) else str(e), "symbol": sym}
-                    if isinstance(e, asyncio.TimeoutError):
-                        self._reset_pool()
-                        loop = asyncio.get_event_loop()
+                r = await self._run_cell(_run_backtest_one, kwargs, self.BACKTEST_BUDGET_S)
+                if "error" in r:
+                    r["symbol"] = sym
                 tf_results[f"{sym}|{tf}"] = r
                 if tf == base_tf:
                     out[sym] = r
@@ -356,15 +372,9 @@ class LabWorker:
 
                 # Exit-engine comparison: 5 fixed configs replayed on the SAME entries.
                 cmp_kwargs = {"symbol": sym, "start_ms": start, "end_ms": end, "timeframe": tf, **cmp_overrides}
-                try:
-                    cr = await asyncio.wait_for(
-                        loop.run_in_executor(self._pool, _run_multi_exit_one, cmp_kwargs),
-                        timeout=self.EXIT_COMPARISON_BUDGET_S)
-                except (asyncio.TimeoutError, Exception) as e:  # noqa: BLE001
-                    cr = {"error": "timed_out" if isinstance(e, asyncio.TimeoutError) else str(e), "symbol": sym}
-                    if isinstance(e, asyncio.TimeoutError):
-                        self._reset_pool()
-                        loop = asyncio.get_event_loop()
+                cr = await self._run_cell(_run_multi_exit_one, cmp_kwargs, self.EXIT_COMPARISON_BUDGET_S)
+                if "error" in cr:
+                    cr["symbol"] = sym
                 exit_cmp.setdefault(sym, {})[tf] = cr
                 step += 1
                 await self._set_progress(rid, step / total * 100)
@@ -406,34 +416,68 @@ class LabWorker:
         return await fut
 
     async def _run_health_sweep(self, run: dict) -> dict:
-        """Strategy Health precompute: replay each selected strategy IN ISOLATION across all
-        sweep symbols + timeframes (compare_timeframes on), then aggregate each into a compact
-        health card. Runs one strategy at a time so progress is accurate and the API stays live."""
+        """Strategy Health precompute — LIGHTWEIGHT & reliable.
+
+        Per strategy (in isolation): one fast backtest per symbol×timeframe (for the multi-TF
+        comparison + regime/capture from the 1h base), plus ONE exit-engine comparison on the
+        primary symbol's 1h (for 'best exit'). No per-cell A/B/C sweep, so it completes quickly
+        and never stalls. Progress is driven directly here (monotonic 0→100)."""
         from lab.health_sweep import SWEEP_SYMBOLS, aggregate_strategy, strategy_name
 
         rid = run["id"]
         strategies = run.get("strategies") or []
         symbols = run.get("symbols") or SWEEP_SYMBOLS
         period = run.get("period", "3m")
-        total = max(1, len(strategies))
+        tfs = ["1h"] + COMPARE_TIMEFRAMES
+        loop = asyncio.get_event_loop()
+
+        await self._set_progress(rid, 1)
+        try:
+            await loop.run_in_executor(self._pool, ensure_history, symbols, tfs, period)
+        except BrokenProcessPool:
+            self._reset_pool()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("health sweep ensure_history failed: %s", e)
+
+        start, end = resolve_window(symbols, period, None, None)
+        cells_per_strat = len(symbols) * len(tfs) + 1  # backtests + 1 exit comparison
+        total_cells = max(1, len(strategies) * cells_per_strat)
+        done = 0
         cards: list[dict] = []
-        for idx, sk in enumerate(strategies):
-            sub = {
-                "id": rid, "kind": "backtest", "symbols": symbols, "period": period,
-                "start_ms": None, "end_ms": None,
-                "strategies": [sk], "timeframe": "1h", "compare_timeframes": True,
-                "exit_method": "native", "target_profit": 5.0, "target_loss": 4.0,
-                "setting_overrides": None, "profile_overrides": None, "atr_params": None,
-            }
+
+        for sk in strategies:
+            per_symbol, multi_tf, exit_cmp = {}, {}, {}
+            base = {"strategies": [sk], "exit_method": "native", "target_profit": 5.0, "target_loss": 4.0}
+            for sym in symbols:
+                by_tf = {}
+                for tf in tfs:
+                    r = await self._run_cell(_run_backtest_one,
+                                             {"symbol": sym, "start_ms": start, "end_ms": end, "timeframe": tf, **base},
+                                             self.BACKTEST_BUDGET_S)
+                    if "error" in r:
+                        r["symbol"] = sym
+                    by_tf[tf] = _tf_metrics(r)
+                    if tf == "1h":
+                        per_symbol[sym] = r
+                    done += 1
+                    await self._set_progress(rid, min(99.0, done / total_cells * 100.0))
+                multi_tf[sym] = {"by_tf": by_tf, "verdict": _tf_verdict(by_tf)}
+            # one exit-engine comparison on the primary symbol / 1h → "best exit"
+            psym = symbols[0]
+            cr = await self._run_cell(_run_multi_exit_one,
+                                      {"symbol": psym, "start_ms": start, "end_ms": end, "timeframe": "1h", "strategies": [sk]},
+                                      self.EXIT_COMPARISON_BUDGET_S)
+            if "error" not in cr:
+                exit_cmp[psym] = {"1h": cr}
+            done += 1
+            await self._set_progress(rid, min(99.0, done / total_cells * 100.0))
             try:
-                res = await self._run_backtest(sub)
-                cards.append(aggregate_strategy(sk, res))
+                cards.append(aggregate_strategy(sk, {"per_symbol": per_symbol, "multi_timeframe": multi_tf, "exit_comparison": exit_cmp}))
             except Exception as e:  # noqa: BLE001 — one bad strategy must not kill the sweep
-                logger.warning("health sweep strategy %s failed: %s", sk, e)
+                logger.warning("health sweep aggregate %s failed: %s", sk, e)
                 cards.append({"strategy": sk, "name": strategy_name(sk), "error": str(e),
                               "recommendation": {"badge": "Not Recommended Currently", "tone": "negative",
-                                                 "reason": "Backtest failed for this strategy."}})
-            await self._set_progress(rid, (idx + 1) / total * 100.0)
+                                                 "reason": "Aggregation failed for this strategy."}})
         return {
             "mode": run.get("label") or "manual",
             "period": period, "symbols": symbols,

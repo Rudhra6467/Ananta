@@ -1,19 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
-    Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Store, Code, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload,
+    Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Sparkles,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LabModal from "@/components/lab/LabModal";
 import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
-import StrategyValidationPanel from "@/components/StrategyValidationPanel";
-import HelpHint from "@/components/lab/HelpHint";
 import StrategyArchitect from "@/pages/StrategyArchitect";
 import ImportStrategyModal from "@/components/ImportStrategyModal";
 import { useAuth } from "@/context/AuthContext";
@@ -103,18 +100,10 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [filters, setFilters] = useState({});   // {field: [values]}
     const [favOnly, setFavOnly] = useState(false);
     const [showFilter, setShowFilter] = useState(false);
-    const [addMenu, setAddMenu] = useState(false);
+    const [addChooser, setAddChooser] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
-    const [scTab, setScTab] = useState("deployed");
 
     const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
-
-    // Header title / tab-home returns to the Deployed sub-tab.
-    useEffect(() => {
-        const onHome = (e) => { if (e.detail?.id === "strategies") setScTab("deployed"); };
-        window.addEventListener("ananta:tab-home", onHome);
-        return () => window.removeEventListener("ananta:tab-home", onHome);
-    }, []);
 
     const load = () => {
         const params = {};
@@ -140,82 +129,32 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] tracking-wide border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
                     <Search className="w-3.5 h-3.5" /> Search
                 </button>
-                <div className="relative">
-                    <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddMenu((v) => !v)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
-                        <Plus className={`w-3.5 h-3.5 transition-transform ${addMenu ? "rotate-45" : ""}`} /> Add
-                    </button>
-                    {addMenu && (
-                        <div className="absolute right-0 mt-2 w-56 panel border-atlas-border rounded-xl p-1 z-50" data-testid="add-menu">
-                            <button data-testid="add-menu-import" onClick={() => { setAddMenu(false); onImport(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                <Upload className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Import Strategy</span>
-                            </button>
-                            <button data-testid="add-menu-manual" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                <Boxes className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Write Strategy</span>
-                            </button>
-                            <button data-testid="add-menu-ai" onClick={() => { setAddMenu(false); onBuild(); }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-atlas-panelHover">
-                                <Sparkles className="w-4 h-4 text-atlas-cyan" /><span className="font-mono text-[12px] text-atlas-text">Describe &amp; Build (AI)</span>
-                            </button>
-                        </div>
-                    )}
-                </div>
+                <button data-testid="strategy-add-btn" aria-label="Add Strategy" title="Add Strategy" onClick={() => setAddChooser(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] tracking-wide border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan hover:bg-atlas-cyan/20 transition-all">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                </button>
             </HeaderActionPortal>
 
-            <Tabs value={scTab} onValueChange={setScTab} className="atlas-tabs">
-                <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
-                    <SCTab value="deployed" label="DEPLOYED" icon={Power} />
-                    <SCTab value="edit" label="EDIT" icon={Pencil} />
-                </TabsList>
+            {!lib ? (
+                <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING LIBRARY</div>
+            ) : lib.length === 0 ? (
+                <div className="panel p-10 text-center" data-testid="library-empty">
+                    <div className="font-mono text-sm text-atlas-textSecondary">No strategies match these filters.</div>
+                    <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
+                    {lib.map((s) => (
+                        <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
+                            onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
+                            onFav={() => api.libraryFavorite(s.id).then(load)} onDeploy={load} />
+                    ))}
+                </div>
+            )}
 
-                <TabsContent value="deployed" className="m-0 space-y-5">
-                    <StrategyLeaderboard onOpen={(r) => (r.internal ? onOpenInternal(r.key) : onOpenCatalog(r.key))} />
-
-                    {!lib ? (
-                        <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2" data-testid="strategy-center-loading"><Loader2 className="w-4 h-4 animate-spin" /> LOADING LIBRARY</div>
-                    ) : lib.length === 0 ? (
-                        <div className="panel p-10 text-center" data-testid="library-empty">
-                            <div className="font-mono text-sm text-atlas-textSecondary">No strategies match these filters.</div>
-                            <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
-                            {lib.map((s) => (
-                                <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
-                                    onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
-                                    onFav={() => api.libraryFavorite(s.id).then(load)} onDeploy={load} />
-                            ))}
-                        </div>
-                    )}
-                </TabsContent>
-
-                <TabsContent value="edit" className="m-0 space-y-4">
-                    <div className="panel border-atlas-border rounded-xl p-4 space-y-3" data-testid="edit-existing-panel">
-                        <div>
-                            <div className="label-tag mb-1">EDIT AN EXISTING STRATEGY</div>
-                            <div className="font-mono text-[11px] text-atlas-textSecondary">Pick a strategy to open its details — tweak parameters, then test it.</div>
-                        </div>
-                        <Select value="" onValueChange={(v) => { const s = (lib || []).find((x) => String(x.id) === v); if (s) (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id)); }}>
-                            <SelectTrigger data-testid="edit-strategy-select" className="bg-atlas-panel border-atlas-border font-mono text-sm">
-                                <SelectValue placeholder="Select a strategy to edit…" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-atlas-panel border-atlas-border max-h-72">
-                                {(lib || []).map((s) => (
-                                    <SelectItem key={s.id} value={String(s.id)} data-testid={`edit-strategy-option-${s.id}`}>
-                                        {s.name}{s.internal ? " · Live engine" : ""}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">Or create a new strategy — import from another platform, write your own, or design one conversationally with AI. New strategies land in <span className="text-atlas-text">Deployed</span> once saved.</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" data-testid="strategy-edit-grid">
-                        <EditToolCard testid="edit-tool-import" icon={Upload} tone="cyan" title="Import Strategy" desc="Pine · Freqtrade · Jesse · JSON" onClick={onImport} />
-                        <EditToolCard testid="edit-tool-write" icon={Code} tone="cyan" title="Write Strategy" desc="Author rules manually in the builder" onClick={onBuild} />
-                        <EditToolCard testid="edit-tool-ai" icon={Sparkles} tone="violet" title="Describe & Build (AI)" desc="Design a strategy conversationally" onClick={onBuild} />
-                    </div>
-                </TabsContent>
-            </Tabs>
+            <AddStrategyChooser open={addChooser} onOpenChange={setAddChooser}
+                onImport={() => { setAddChooser(false); onImport(); }}
+                onCreate={() => { setAddChooser(false); onBuild(); }} />
 
             {showFilter && (
                 <FilterDrawer facets={facets} filters={filters} favOnly={favOnly} activeCount={activeCount}
@@ -232,29 +171,36 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     );
 }
 
-/* Deployed / Edit sub-tab trigger */
-function SCTab({ value, label, icon: Icon }) {
+/* Add-strategy chooser — clean, guided options (AI demoted to a secondary link). */
+function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
     return (
-        <TabsTrigger value={value} data-testid={`strategy-subtab-${value}`}
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-atlas-cyan data-[state=active]:bg-transparent data-[state=active]:text-white text-atlas-textSecondary font-mono text-[11px] tracking-[0.2em] uppercase font-bold px-5 py-3 transition-colors duration-150 hover:text-white flex items-center gap-2">
-            <Icon className="w-4 h-4" strokeWidth={2} /> {label}
-        </TabsTrigger>
-    );
-}
-
-/* Create-strategy tool card (Edit sub-tab) */
-function EditToolCard({ testid, icon: Icon, title, desc, tone, onClick }) {
-    const accent = tone === "violet" ? "hover:border-violet-500/60 group-hover:text-violet-400 group-hover:border-violet-500/50 group-hover:bg-violet-500/10"
-        : "hover:border-atlas-cyan/60 group-hover:text-atlas-cyan group-hover:border-atlas-cyan/50 group-hover:bg-atlas-cyan/10";
-    return (
-        <button data-testid={testid} onClick={onClick}
-            className={`group rounded-2xl border-2 border-dashed border-atlas-border bg-atlas-panel/30 min-h-[160px] flex flex-col items-center justify-center gap-2 p-4 text-center transition-all hover:bg-atlas-panelHover ${accent}`}>
-            <div className={`w-11 h-11 rounded-xl grid place-items-center border border-atlas-border transition-colors ${accent}`}>
-                <Icon className="w-5 h-5 text-atlas-textTertiary" />
+        <LabModal open={open} onOpenChange={onOpenChange} icon={Plus} title="Add a strategy"
+            subtitle="Pick how you want to start — you can refine everything afterwards." testid="add-strategy-chooser">
+            <div className="space-y-3 p-1">
+                <button data-testid="add-option-create" onClick={onCreate}
+                    className="group w-full text-left rounded-xl border border-atlas-cyan/40 bg-atlas-cyan/5 px-4 py-4 flex items-center gap-3.5 hover:bg-atlas-cyan/10 transition-colors">
+                    <span className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-cyan/40 bg-atlas-cyan/10 shrink-0"><Boxes className="w-5 h-5 text-atlas-cyan" /></span>
+                    <span className="min-w-0">
+                        <span className="block font-heading text-sm text-atlas-text">Create New Strategy</span>
+                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-0.5">Build rules step-by-step in the guided builder.</span>
+                    </span>
+                    <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-cyan transition-colors" />
+                </button>
+                <button data-testid="add-option-import" onClick={onImport}
+                    className="group w-full text-left rounded-xl border border-atlas-border px-4 py-4 flex items-center gap-3.5 hover:bg-atlas-panelHover transition-colors">
+                    <span className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border shrink-0"><FileJson className="w-5 h-5 text-atlas-cyan" /></span>
+                    <span className="min-w-0">
+                        <span className="block font-heading text-sm text-atlas-text">Import JSON</span>
+                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-0.5">Paste a strategy definition (JSON, Pine, Freqtrade…) to convert.</span>
+                    </span>
+                    <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-text transition-colors" />
+                </button>
+                <button data-testid="add-option-ai" onClick={onCreate}
+                    className="w-full flex items-center justify-center gap-1.5 pt-1 font-mono text-[11px] text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                    <Sparkles className="w-3.5 h-3.5" /> Prefer to describe it in words? Build with AI
+                </button>
             </div>
-            <span className="font-mono text-xs text-atlas-textSecondary group-hover:text-atlas-text">{title}</span>
-            <span className="font-mono text-[9px] text-atlas-textTertiary">{desc}</span>
-        </button>
+        </LabModal>
     );
 }
 
@@ -286,56 +232,6 @@ function SearchScreen({ lib, query, setQuery, activeCount, onOpenFilters, onOpen
                     </button>
                 ))}
             </div>
-        </div>
-    );
-}
-
-const LB_LABELS = {
-    net_pnl: "Net P&L", roi: "ROI", win_rate: "Win Rate", ai_health_score: "AI Health Score",
-    sharpe: "Sharpe Ratio", sortino: "Sortino Ratio", profit_factor: "Profit Factor",
-    max_drawdown: "Max Drawdown", avg_trade: "Avg Trade", trades: "Total Trades", rating: "Rating",
-};
-
-export function StrategyLeaderboard({ onOpen }) {
-    const [sort, setSort] = useState("ai_health_score");
-    const [data, setData] = useState(null);
-    const [showAll, setShowAll] = useState(false);
-    useEffect(() => { api.analyticsLeaderboard(sort).then(setData).catch(() => {}); }, [sort]);
-    const opts = data?.sort_options || Object.keys(LB_LABELS);
-    const all = (data?.leaderboard || []).slice(0, 8);
-    const rows = showAll ? all : all.slice(0, 2);
-    const fmt = (k, v) => (k === "net_pnl" ? `$${(v || 0).toLocaleString()}` : ["roi", "win_rate", "max_drawdown"].includes(k) ? `${v}%` : v);
-    return (
-        <div className="panel p-4" data-testid="strategy-leaderboard">
-            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                <div className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">STRATEGY LEADERBOARD</span></div>
-                <Select value={sort} onValueChange={setSort}>
-                    <SelectTrigger data-testid="leaderboard-sort"
-                        className="w-auto bg-atlas-panel border-atlas-border rounded px-2.5 py-1.5 font-mono text-[11px] text-atlas-text focus:border-atlas-cyan h-auto gap-1.5">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[11px]">
-                        {opts.map((o) => <SelectItem key={o} value={o} className="font-mono text-[11px]">{`Sort: ${LB_LABELS[o] || o}`}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-1">
-                {rows.map((r) => (
-                    <button key={r.key} data-testid={`leaderboard-row-${r.key}`} onClick={() => onOpen && onOpen(r)}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-atlas-panelHover/40 border border-atlas-border hover:border-atlas-cyan/40 transition-colors text-left">
-                        <span className="font-mono text-[11px] text-atlas-textTertiary w-5">#{r.rank}</span>
-                        <span className="font-heading text-sm text-atlas-text flex-1 truncate">{r.name}</span>
-                        <span className={`font-mono text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${GRADE_CLS[r.ai_grade] || GRADE_CLS.C}`}>{r.ai_grade}</span>
-                        <span className="font-mono text-sm font-bold tabular-nums text-atlas-cyan w-24 text-right">{fmt(sort, r[sort])}</span>
-                    </button>
-                ))}
-            </div>
-            {all.length > 2 && (
-                <button data-testid="leaderboard-showmore" onClick={() => setShowAll((v) => !v)}
-                    className="mt-2 w-full rounded-lg border border-atlas-border py-2 font-mono text-[11px] text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
-                    {showAll ? "Show less" : `Show more (${all.length - 2})`}
-                </button>
-            )}
         </div>
     );
 }
@@ -379,6 +275,15 @@ function FilterDrawer({ facets, filters, favOnly, activeCount, onToggle, onFav, 
 }
 
 
+function timeAgo(ts) {
+    if (!ts) return null;
+    const d = (Date.now() - new Date(ts).getTime()) / 1000;
+    if (isNaN(d)) return null;
+    if (d < 3600) return `${Math.max(1, Math.floor(d / 60))}m ago`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+    return `${Math.floor(d / 86400)}d ago`;
+}
+
 function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
     const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
     const wired = !!(s.internal || (s.wireable && s.engine_key));
@@ -399,6 +304,12 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
         finally { setDeploying(false); }
     };
 
+    // One consistent activity line for every card.
+    const last = metric?.last_trade ? timeAgo(metric.last_trade) : null;
+    const activity = wired
+        ? (metric?.trades ? `${metric.trades} trade${metric.trades === 1 ? "" : "s"}${last ? ` · last ${last}` : ""}` : "No trades yet")
+        : `${s.style || s.category || "Catalog"}`;
+
     return (
         <div data-testid={`library-card-${s.id}`}
             className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
@@ -407,22 +318,22 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
                 <div className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5">
                     <Icon className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
                 </div>
-                <div className="flex items-center gap-1.5 pointer-events-auto">
-                    <span className={`font-mono text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`} data-testid={`card-grade-${s.id}`}>Grade {s.ai_grade}</span>
+                <div className="flex items-center gap-2 pointer-events-auto">
                     {isOwner && (
                         <button data-testid={`card-fav-${s.id}`} onClick={onFav} className="text-atlas-textTertiary hover:text-atlas-cyan">
                             <Heart className={`w-3.5 h-3.5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
                         </button>
                     )}
+                    <span data-testid={`card-status-${s.id}`}
+                        className={`flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border bg-atlas-panel"}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" /> {status}
+                    </span>
                 </div>
             </div>
             <div className="relative z-10 pointer-events-none">
                 <div className="font-heading font-medium text-base md:text-lg text-atlas-text leading-tight truncate">{s.name}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono text-[9px] text-atlas-textTertiary truncate">{s.style} · {s.source}</span>
-                    <span className={`ml-auto shrink-0 font-mono text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border"}`}>{status}</span>
-                </div>
-                <div className="font-body text-xs text-atlas-textSecondary mt-1.5 leading-relaxed truncate">{s.description || s.ideal_market || "—"}</div>
+                <div className="font-body text-xs text-atlas-textSecondary mt-1 leading-relaxed line-clamp-1 truncate">{s.description || s.ideal_market || "—"}</div>
+                <div className="font-mono text-[9px] text-atlas-textTertiary mt-1.5 truncate">{activity}</div>
             </div>
             {!wired && s.reference_only ? (
                 <div data-testid={`card-reference-note-${s.id}`}
@@ -438,7 +349,7 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
                     {wired && (
                         <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
                             className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 font-mono text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${
-                                deployed ? "border border-atlas-cyan/40 text-atlas-cyan hover:bg-atlas-cyan/10"
+                                deployed ? "border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"
                                     : "bg-atlas-cyan text-atlas-bg border border-atlas-cyan hover:brightness-110"}`}>
                             {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
                             {deployed ? "MANAGE" : "DEPLOY"}
@@ -465,16 +376,19 @@ function Kv({ label, value, cls = "text-atlas-text" }) {
 }
 
 /* ---------------- Detail view ---------------- */
-const TABS = ["Overview", "Parameters", "AI", "History"];
+const fmtPf = (x) => (x == null ? "—" : (x >= 999 ? "∞" : Number(x).toFixed(2)));
 
 function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
-    const [tab, setTab] = useState("Overview");
     const [status, setStatus] = useState(metric?.status || "PAPER");
-    const [analyseOpen, setAnalyseOpen] = useState(false);
-    const [analyseMode, setAnalyseMode] = useState("choice"); // choice | run
+    const [showMore, setShowMore] = useState(false);
+    const [showParams, setShowParams] = useState(false);
+    const [showManage, setShowManage] = useState(false);
+    const [deploying, setDeploying] = useState(false);
+    const paramsRef = useRef(null);
     const Icon = ICONS[sKey] || Boxes;
     const grade = schema?.ai_grade || metric?.grade;
     const stars = metric?.stars ?? Math.round((metric?.health ?? 0) / 20);
+    const deployed = status === "PAPER" || status === "LIVE";
 
     const setState = async (patch) => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -486,20 +400,40 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
         } catch (e) { toast.error("Update failed", { description: String(e?.response?.data?.detail || e?.message) }); }
     };
 
-    const openEdit = () => { setTab("Parameters"); window.scrollTo({ top: 0, behavior: "smooth" }); };
-    const openAnalyse = () => { setAnalyseMode("choice"); setAnalyseOpen(true); };
+    const deployToPaper = async () => {
+        if (!isOwner) { toast.error("Owner login required to deploy"); return; }
+        setDeploying(true);
+        try {
+            const r = await api.strategySetState(sKey, { enabled: true });
+            if (r.status) setStatus(r.status);
+            toast.success("Deployed to paper engine", { description: `${schema?.name || sKey} → ${r.status || "PAPER"}` });
+            onChanged?.();
+        } catch (e) { toast.error("Deploy failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+        finally { setDeploying(false); }
+    };
 
-    // "Test this strategy" → jump into the Research Lab Validate wizard with THIS strategy
-    // pre-selected, landing on the dataset step (dataset → period → timeframe → exit).
+    // "Test in Research Lab" → jump into the Validate wizard with THIS strategy pre-selected.
     const testStrategy = () => {
         useResearchStore.setState({ strat: [sKey], step: 1, phase: "idle", runs: [], progress: 0 });
         localStorage.setItem("ananta_research_sub", "validate");
         window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
     };
+    const openParams = () => { setShowParams(true); setTimeout(() => paramsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 90); };
+
+    // "Best used in" — best-effort extraction from the strategy DNA.
+    const dna = schema?.dna && typeof schema.dna === "object" ? schema.dna : {};
+    const pick = (...keys) => { for (const k of keys) { const v = dna[k]; if (v && typeof v !== "object") return String(v); } return null; };
+    const dnaItems = [
+        ["Purpose", pick("purpose", "edge", "thesis", "objective")],
+        ["Works best", pick("works_best", "ideal_market", "ideal", "best_in", "regime") || schema?.ideal_market],
+        ["Avoid", pick("avoid", "avoid_conditions", "weakness", "worst_in")],
+    ].filter(([, v]) => v);
+    const dnaRows = Object.entries(dna).filter(([, v]) => typeof v !== "object");
+    const recent = metric?.recent_form || [];
 
     return (
-        <div className="space-y-5" data-testid={`strategy-detail-${sKey}`}>
-            {/* header */}
+        <div className="space-y-4" data-testid={`strategy-detail-${sKey}`}>
+            {/* top: identity + status/grade */}
             <div className="panel border-atlas-border rounded-2xl p-5">
                 <button data-testid="detail-back-btn" onClick={onBack} className="flex items-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-text mb-3">
                     <ArrowLeft className="w-3.5 h-3.5" /> ALL STRATEGIES
@@ -511,161 +445,144 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                         </div>
                         <div className="min-w-0">
                             <div className="font-heading font-medium text-xl md:text-2xl text-atlas-text leading-tight truncate">{schema?.name || sKey}</div>
-                            <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">v{schema?.version || "1.0.0"} · {metric?.trades ?? 0} trades · {metric?.config_count ?? 0} configs</div>
+                            <div className="font-body text-xs text-atlas-textSecondary mt-0.5 line-clamp-1">{schema?.ideal_market || (schema?.description || "").split(". ")[0] || `v${schema?.version || "1.0.0"}`}</div>
                         </div>
                     </div>
-                    {/* Grade + love/rating pinned top-right next to the name */}
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <div className="flex items-center gap-2 shrink-0">
                         {grade && <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${GRADE_CLS[grade] || GRADE_CLS.C}`} data-testid="detail-grade">Grade {grade}</span>}
-                        <span className="flex items-center gap-0.5" data-testid="detail-rating">
-                            {[1, 2, 3, 4, 5].map((n) => <Star key={n} className={`w-3.5 h-3.5 ${n <= stars ? "text-atlas-warning fill-atlas-warning" : "text-atlas-textTertiary"}`} />)}
+                        <span className={`flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${STATUS[status]}`} data-testid="detail-status">
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" /> {status}
                         </span>
-                        <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${STATUS[status]}`} data-testid="detail-status">{status}</span>
                     </div>
                 </div>
-                {/* headline metrics */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                    <Stat label="ROI" value={`${(metric?.roi ?? 0) > 0 ? "+" : ""}${metric?.roi ?? 0}%`} cls={(metric?.roi ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative"} />
-                    <Stat label="Win Rate" value={`${metric?.win_rate ?? 0}%`} />
-                    <Stat label="Health" value={metric?.health ?? "—"} />
-                    <Stat label="Confidence" value={`${metric?.confidence ?? 0}%`} />
-                </div>
-                {/* top action row: Edit + Analyse */}
-                <div className="flex items-center gap-2 mt-4">
-                    <button data-testid="detail-edit-strategy" onClick={openEdit}
-                        className="flex items-center gap-2 rounded-lg border border-atlas-border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-cyan/50 transition-colors">
-                        <Pencil className="w-3.5 h-3.5" /> EDIT STRATEGY
-                    </button>
-                    <button data-testid="detail-analyse-strategy-top" onClick={openAnalyse}
-                        className="flex items-center gap-2 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest text-atlas-cyan hover:bg-atlas-cyan/20 transition-colors">
-                        <BarChart3 className="w-3.5 h-3.5" /> ANALYSE STRATEGY
-                    </button>
-                    <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
-                        <SelectTrigger data-testid="detail-status-select"
-                            className="ml-auto w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-2.5 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
-                            {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
             </div>
 
-            {/* tabs */}
-            <div className="flex items-center gap-1 overflow-x-auto atlas-scroll border-b border-atlas-border" data-testid="detail-tabs">
-                {TABS.map((t) => (
-                    <button key={t} data-testid={`tab-${t.toLowerCase()}`} onClick={() => setTab(t)}
-                        className={`px-3.5 py-2.5 font-mono text-[11px] tracking-wide whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                            tab === t ? "border-atlas-cyan text-atlas-cyan" : "border-transparent text-atlas-textTertiary hover:text-atlas-text"
-                        }`}>{t}</button>
-                ))}
-            </div>
-
-            {/* tab body */}
-            <div data-testid={`tab-body-${tab.toLowerCase()}`}>
-                {tab === "Overview" && <Overview schema={schema} metric={metric} />}
-                {tab === "Parameters" && <SavedConfigsPanel isOwner={isOwner} only={sKey} />}
-                {tab === "AI" && <AIAnalystTerminal isOwner={isOwner} strategy={sKey} />}
-                {tab === "History" && <History metric={metric} />}
-            </div>
-
-            {/* full-width Analyse this Strategy */}
-            <button data-testid="detail-analyse-strategy-bottom" onClick={openAnalyse}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-black font-mono text-sm font-bold tracking-wide py-3.5 hover:brightness-110 active:scale-[0.99] transition-all">
-                <BarChart3 className="w-4 h-4" /> ANALYSE THIS STRATEGY
-            </button>
-
-            {/* Test this strategy → Research Lab Validate wizard, pre-loaded for this strategy */}
-            <button data-testid="detail-test-strategy" onClick={testStrategy}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan font-mono text-sm font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/20 active:scale-[0.99] transition-all">
-                <ShieldCheck className="w-4 h-4" /> TEST THIS STRATEGY
-                <span className="font-mono text-[10px] font-normal text-atlas-textSecondary hidden sm:inline">· dataset → period → timeframe → exit</span>
-            </button>
-
-            {/* analyse flow */}
-            <LabModal open={analyseOpen} onOpenChange={setAnalyseOpen} icon={BarChart3} title={`Analyse · ${schema?.name || sKey}`}
-                subtitle="Backtest & validate — asset · timeframe · exit" testid="analyse-modal">
-                {analyseMode === "choice" ? (
-                    <div className="space-y-3 p-1">
-                        <button data-testid="analyse-current-params" onClick={() => setAnalyseMode("run")}
-                            className="w-full text-left rounded-xl border border-atlas-cyan/40 bg-atlas-cyan/5 px-4 py-4 hover:bg-atlas-cyan/10 transition-colors">
-                            <div className="font-heading text-sm text-atlas-text">Analyse with current parameters</div>
-                            <div className="font-mono text-[11px] text-atlas-textTertiary mt-1">Use the strategy&apos;s saved defaults — pick asset, timeframe &amp; exit next.</div>
-                        </button>
-                        <button data-testid="analyse-edit-params" onClick={() => { setAnalyseOpen(false); openEdit(); }}
-                            className="w-full text-left rounded-xl border border-atlas-border px-4 py-4 hover:bg-atlas-panelHover transition-colors">
-                            <div className="font-heading text-sm text-atlas-text">Edit parameters &amp; analyse</div>
-                            <div className="font-mono text-[11px] text-atlas-textTertiary mt-1">Tune entry/exit settings in the engine first, then analyse.</div>
-                        </button>
+            {/* 5 key metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3" data-testid="detail-metrics">
+                <Stat label="Win Rate" value={`${metric?.win_rate ?? 0}%`} />
+                <Stat label="Total P&L" value={`${(metric?.total_pnl ?? 0) >= 0 ? "+" : "-"}$${Math.abs(metric?.total_pnl ?? 0)}`} cls={(metric?.total_pnl ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative"} />
+                <Stat label="Max Drawdown" value={`${metric?.max_drawdown_pct ?? 0}%`} cls="text-atlas-negative" />
+                <Stat label="Profit Factor" value={fmtPf(metric?.profit_factor)} />
+                <div className="rounded-lg border border-atlas-border bg-atlas-panel px-3 py-2.5" data-testid="detail-recent-form">
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">Recent Form</div>
+                    <div className="flex items-center gap-1 mt-1.5">
+                        {recent.length ? recent.slice(-6).map((f, i) => (
+                            <span key={i} className={`w-4 h-4 rounded grid place-items-center font-mono text-[8px] font-bold ${f === "W" ? "bg-atlas-positive/15 text-atlas-positive" : "bg-atlas-negative/15 text-atlas-negative"}`}>{f}</span>
+                        )) : <span className="font-heading font-bold text-lg text-atlas-textTertiary">—</span>}
                     </div>
-                ) : (
-                    <StrategyValidationPanel />
-                )}
-            </LabModal>
+                </div>
+            </div>
+
+            {/* how it works */}
+            <div className="panel border-atlas-border rounded-xl p-5" data-testid="detail-how-it-works">
+                <div className="label-tag mb-2">HOW IT WORKS</div>
+                <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed">{schema?.description || "No description available for this strategy."}</p>
+            </div>
+
+            {/* best used in */}
+            {dnaItems.length > 0 && (
+                <div className="panel border-atlas-border rounded-xl p-5" data-testid="detail-best-used-in">
+                    <div className="label-tag mb-3">BEST USED IN</div>
+                    <div className="space-y-2.5">
+                        {dnaItems.map(([k, v]) => (
+                            <div key={k} className="flex gap-3 font-mono text-[11px]">
+                                <span className="text-atlas-textTertiary w-24 shrink-0 uppercase tracking-wide">{k}</span>
+                                <span className="text-atlas-text">{v}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* show more (secondary detail) */}
+            <button data-testid="detail-show-more" onClick={() => setShowMore((v) => !v)}
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-atlas-border py-2.5 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                {showMore ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                {showMore ? "SHOW LESS" : "SHOW MORE — health, live snapshot, AI analysis"}
+            </button>
+            {showMore && (
+                <div className="space-y-4" data-testid="detail-more">
+                    <HealthCard metric={metric} />
+                    <div className="panel border-atlas-border rounded-xl p-5">
+                        <div className="label-tag mb-3">LIVE SNAPSHOT</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <Stat label="Trades" value={metric?.trades ?? 0} />
+                            <Stat label="Confidence" value={`${metric?.confidence ?? 0}%`} />
+                            <Stat label="Rating" value={`${stars}★`} />
+                            <Stat label="Last Trade" value={metric?.last_trade ? new Date(metric.last_trade).toLocaleDateString() : "—"} />
+                        </div>
+                    </div>
+                    {dnaRows.length > 0 && (
+                        <div className="panel border-atlas-border rounded-xl p-5">
+                            <div className="label-tag mb-3">STRATEGY DNA</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                                {dnaRows.map(([k, v]) => (
+                                    <div key={k} className="flex items-center justify-between gap-3 font-mono text-[11px] border-b border-atlas-border/40 py-1">
+                                        <span className="text-atlas-textTertiary capitalize">{k.replace(/_/g, " ")}</span>
+                                        <span className="text-atlas-text font-bold text-right">{String(v)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <TimelinePanel metric={metric} />
+                    <AIAnalystTerminal isOwner={isOwner} strategy={sKey} />
+                </div>
+            )}
+
+            {/* parameters (revealed by Edit Parameters) */}
+            {showParams && (
+                <div ref={paramsRef} data-testid="detail-params">
+                    <SavedConfigsPanel isOwner={isOwner} only={sKey} />
+                </div>
+            )}
+
+            {/* manage (revealed by Manage) */}
+            {showManage && deployed && (
+                <div className="panel border-atlas-cyan/30 bg-atlas-cyan/5 rounded-xl p-4 space-y-2" data-testid="detail-manage">
+                    <div className="label-tag">MANAGE DEPLOYMENT</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[11px] text-atlas-textSecondary">Engine state</span>
+                        <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
+                            <SelectTrigger data-testid="detail-status-select" className="w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-2 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
+                                {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">PAPER = simulated · LIVE = real capital · DISABLED = stops taking new entries.</div>
+                </div>
+            )}
+
+            {/* bottom actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1" data-testid="detail-actions">
+                <button data-testid="detail-test-strategy" onClick={testStrategy}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan font-mono text-[12px] font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/20 active:scale-[0.99] transition-all">
+                    <ShieldCheck className="w-4 h-4" /> TEST IN RESEARCH LAB
+                </button>
+                <button data-testid="detail-deploy-manage" onClick={() => (deployed ? setShowManage((v) => !v) : deployToPaper())} disabled={deploying}
+                    className={`flex items-center justify-center gap-2 rounded-xl font-mono text-[12px] font-bold tracking-wide py-3.5 active:scale-[0.99] transition-all disabled:opacity-50 ${
+                        deployed ? "border border-atlas-border text-atlas-text hover:border-atlas-textTertiary" : "bg-atlas-cyan text-atlas-bg hover:brightness-110"}`}>
+                    {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" strokeWidth={2.5} />}
+                    {deployed ? "MANAGE IN PAPER" : "DEPLOY TO PAPER"}
+                </button>
+                <button data-testid="detail-edit-parameters" onClick={openParams}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
+                    <Pencil className="w-4 h-4" /> EDIT PARAMETERS
+                </button>
+            </div>
         </div>
     );
 }
 
-function FlaskIcon() { return <Layers className="w-4 h-4 text-atlas-cyan" />; }
 
 function Stat({ label, value, cls = "text-atlas-text" }) {
     return (
         <div className="rounded-lg border border-atlas-border bg-atlas-panel px-3 py-2.5">
             <div className="font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">{label}</div>
             <div className={`font-heading font-bold text-lg md:text-xl tabular-nums mt-0.5 ${cls}`}>{value}</div>
-        </div>
-    );
-}
-
-function Overview({ schema, metric }) {
-    const dna = schema?.dna && typeof schema.dna === "object" ? schema.dna : {};
-    const dnaRows = Object.entries(dna).filter(([, v]) => typeof v !== "object");
-    return (
-        <div className="space-y-4">
-            <HealthCard metric={metric} />
-            <div className="panel border-atlas-border rounded-xl p-5">
-                <div className="label-tag mb-2">HOW IT WORKS</div>
-                <p className="font-mono text-[12px] text-atlas-textSecondary leading-relaxed">{schema?.description || "No description available for this strategy."}</p>
-            </div>
-            {dnaRows.length > 0 && (
-                <div className="panel border-atlas-border rounded-xl p-5">
-                    <div className="label-tag mb-3">STRATEGY DNA</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                        {dnaRows.map(([k, v]) => (
-                            <div key={k} className="flex items-center justify-between gap-3 font-mono text-[11px] border-b border-atlas-border/40 py-1">
-                                <span className="text-atlas-textTertiary capitalize">{k.replace(/_/g, " ")}</span>
-                                <span className="text-atlas-text font-bold text-right">{String(v)}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-            <div className="panel border-atlas-border rounded-xl p-5">
-                <div className="label-tag mb-3">LIVE SNAPSHOT</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Stat label="Total P&L" value={`$${metric?.total_pnl ?? 0}`} cls={(metric?.total_pnl ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative"} />
-                    <Stat label="Trades" value={metric?.trades ?? 0} />
-                    <Stat label="Rating" value={`${metric?.stars ?? 0}★`} />
-                    <Stat label="Last Trade" value={metric?.last_trade ? new Date(metric.last_trade).toLocaleDateString() : "—"} />
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function History({ metric }) {
-    return (
-        <div className="panel border-atlas-border rounded-xl p-5">
-            <div className="label-tag mb-3">HISTORICAL RUNS</div>
-            <p className="font-mono text-[11px] text-atlas-textSecondary leading-relaxed">
-                Backtests, walk-forward and optimization runs launched from the Validation / Research tabs
-                are recorded in the Research Lab timeline. This strategy has {metric?.trades ?? 0} closed live trades so far.
-            </p>
-            <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-atlas-textTertiary">
-                <HelpHint text="Per-strategy run history with version tagging & compare is on the roadmap. Runs currently live in the Research Lab." title="Run History" side="bottom" />
-                Version-tagged run history coming with the optimization engine.
-            </div>
         </div>
     );
 }
