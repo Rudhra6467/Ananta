@@ -21,7 +21,7 @@ export const useResearchStore = create((set, get) => ({
     showAllStrat: false,
     picked: [],
     period: "1m",
-    timeframe: "1h",
+    timeframes: ["1h"], // multi-select; 1h is the live-parity baseline
     runMC: true,
     exitMethods: ["atr"], // default ATR; user can add "fixed" (run both)
     phase: "idle", // idle | running | done | error
@@ -51,7 +51,14 @@ export const useResearchStore = create((set, get) => ({
     setStep: (v) => set((st) => ({ step: typeof v === "function" ? v(st.step) : v })),
     setShowAllStrat: (v) => set((st) => ({ showAllStrat: typeof v === "function" ? v(st.showAllStrat) : v })),
     setPeriod: (period) => set({ period }),
-    setTimeframe: (timeframe) => set({ timeframe }),
+    // Multi-timeframe: at least one must stay selected; kept in canonical 1h→30m→15m order.
+    toggleTimeframe: (tf) => set((st) => {
+        const has = st.timeframes.includes(tf);
+        let next = has ? st.timeframes.filter((x) => x !== tf) : [...st.timeframes, tf];
+        if (next.length === 0) next = ["1h"];
+        const order = ["1h", "30m", "15m"];
+        return { timeframes: order.filter((t) => next.includes(t)) };
+    }),
     setRunMC: (v) => set((st) => ({ runMC: typeof v === "function" ? v(st.runMC) : v })),
     toggleAsset: (s) => set((st) => ({ picked: st.picked.includes(s) ? st.picked.filter((x) => x !== s) : [...st.picked, s] })),
     toggleStrat: (k) => set((st) => ({ strat: st.strat.includes(k) ? st.strat.filter((x) => x !== k) : [...st.strat, k] })),
@@ -87,24 +94,29 @@ export const useResearchStore = create((set, get) => ({
     },
 
     run: async () => {
-        const { picked, period, timeframe, strat, runMC, exitMethods } = get();
+        const { picked, period, timeframes, strat, runMC, exitMethods } = get();
         const methods = exitMethods.length ? exitMethods : ["atr"];
+        const tfs = timeframes.length ? timeframes : ["1h"];
+        // 1h is the parity baseline the backend always runs; extra TFs turn on the comparison.
+        const primaryTf = tfs.includes("1h") ? "1h" : tfs[0];
+        const compareTf = tfs.length > 1;
+        const tfLabel = tfs.join(" · ");
         set({ phase: "running", progress: 3, runs: [], step: 5 });
         const collected = [];
         try {
             for (let mi = 0; mi < methods.length; mi++) {
                 const method = methods[mi];
                 set({ _progressBase: (mi / methods.length) * 100, _progressSpan: (1 / methods.length) * 90 });
-                const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe, strategies: strat, exit_method: method });
+                const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe: primaryTf, compare_timeframes: compareTf, strategies: strat, exit_method: method });
                 const result = await get()._pollRun(id);
                 if (get().phase !== "running") return;
                 let mc = null;
                 if (runMC) {
                     try { const m = await api.labMonteCarlo({ source: "run", run_id: id, iterations: 1500, ruin_threshold_pct: 25 }); if (m?.ok) mc = m; } catch { /* noop */ }
                 }
-                collected.push({ method, label: EXIT_LABELS[method] || method, result, mc, id, url: `${API}/lab/runs/${id}/pdf` });
+                collected.push({ method, label: EXIT_LABELS[method] || method, result, mc, id, selectedTfs: tfs, url: `${API}/lab/runs/${id}/pdf` });
                 set({ runs: [...collected] });
-                registerPdf({ title: `Research · ${strat.join(" + ")} · ${timeframe} · ${EXIT_LABELS[method] || method}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
+                registerPdf({ title: `Research · ${strat.join(" + ")} · ${tfLabel} · ${EXIT_LABELS[method] || method}`, type: "lab", url: `${API}/lab/runs/${id}/pdf` });
             }
             set({ progress: 100, phase: "done" });
             toast.success("Research PDF ready", { description: "Check Workspace › AI Analytics · Ananta PDFs" });

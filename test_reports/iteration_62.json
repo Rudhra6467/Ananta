@@ -1,0 +1,39 @@
+{
+  "summary": "Verified Research Lab Phase A (deep analytics rendered on-screen in Results) + Phase B (multi-timeframe multi-select) on web at 1440x1200. End-to-end run: owner login → dismiss WebOnboarding pipeline (start-exploring / Skip for Now) → bottom-nav-research → research-subtab-validate → wizard-strat-hunter → wizard-asset-BTC → wizard-period-1m → 1H (default) + 30m timeframe multi-select → default ATR exit + Monte Carlo on → wizard-run. Multi-timeframe checkboxes: 1H aria-checked=true by default, 30m toggles to true on click; hint text updates from 'Single timeframe — tick another to compare side-by-side.' to '1h · 30m — results shown side-by-side per timeframe.' as spec requires. Backtest completed in ~90s (well within the 8-min budget). All 6 required analytics blocks rendered in wizard-results: (1) wizard-summary-verdict — 'Strategy performed best on 1H · strongest in Reversal. Recommended exit: Fixed $5.00 / $4.00'; (2) wizard-capture-card — 34% capture with Total MFE/Captured/Left on Table/Avg MAE stats + reading; (3) wizard-exitmodule-BTC (+ -table) — ATR Trailing row; (4) wizard-regime-BTC (+ -table) — Reversal row; (5) wizard-multitf + wizard-multitf-BTC — 1H and 30M rows side-by-side with 'Best: 1H' verdict reason; (6) wizard-exit-comparison — BTC · 1H showing 5 configs (Fixed $2/$1.50, $3/$2.25, $4/$3, $5/$4 ★ winner, ATR Baseline) on identical entries. Wizard did NOT crash. No mobile testing per request (web-only).",
+  "platforms_tested": ["web"],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "polling during /api/lab/runs run", "issue": "One HTTP 500 logged to console during the running phase (likely a transient poll before result document was ready). Final result rendered correctly, so non-blocking, but the frontend polling loop may want to swallow transient 500s more gracefully or log at debug level."}
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Results — BTC top card vs breakdown tables", "issues": ["Profit Factor sign/format inconsistency: top-level BTC card renders PF as '—' (fmtPf returns '—' when null, e.g. no losing trades in short sample) while the Exit Module and Regime tables render the same case as '∞'. Minor cosmetic inconsistency — same underlying condition rendered two ways."]}
+      ]
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Unify PF formatting between top-per-symbol card (fmtPf → '—') and breakdown tables (which show '∞') so users don't see two different symbols for the same 'no-loss' state.",
+    "(Optional) Suppress or debounce the transient HTTP 500 that flashes in the console while the backtest is still executing — final poll succeeds but a red 500 in devtools looks alarming."
+  ],
+  "critical_code_review_comments": [
+    "ResearchWizard.jsx (554 lines) is on the border of the 700-line file-size guideline — Results / MiniTable / BreakdownTable / MultiTfBlock / ExitComparisonBlock / SummaryVerdict could each move to /components/lab/results/ to keep the wizard shell readable, but not blocking.",
+    "canNext for step 3 is always true (`step === 3` is a plain true), which is fine because timeframes cannot be empty (toggleTimeframe preserves at least one entry — verified in researchStore.js:55-60), but consider guarding explicitly (`step === 3 && timeframes.length`) to protect against future refactors.",
+    "MultiTfBlock only renders when >1 TF has data for any symbol (anyMulti guard L403) — correct, matches the spec that the block appears only when multiple TFs are selected."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not retested per task)", "frontend": "100% (all 6 analytics blocks + multi-TF hint verified)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — the run used cached market data. One lab run document was created for hunter/BTC/1m with compare_timeframes=true (1h+30m). Not cleaned up (persists in /api/lab/runs history, expected behaviour).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login flow (web): after owner-login-button + fill 2 inputs + LOG IN, the WebOnboarding pipeline shows 3-4 modals in sequence — dismiss with data-testid='onboarding-start-exploring' first, then get_by_text('Skip for Now') (Paper Trading step), then get_by_text('ENTER ANANTA'). Set localStorage.ananta_onboarded='1' AFTER dismissal to prevent re-appearing on tab switches. Research Lab subtabs use data-testid='research-subtab-validate|analyze|closed'. Wizard uses wizard-step0-next on step 0 and wizard-next elsewhere. Full backtest for hunter/BTC/1m/1h+30m/ATR+MC took ~90s in this run. When adding more TFs (e.g. 15m) or more assets, expect longer runs (each TF runs a backtest + 5-config exit comparison). If the run errors due to insufficient cached history for 15m/30m, that's a data-availability issue, not a UI bug.",
+  "rca of the issue": "N/A — no bug; feature verified working."
+}

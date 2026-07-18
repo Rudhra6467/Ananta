@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
     Brain, Database, CalendarRange, ShieldCheck, Rocket, Loader2, Check,
     TrendingUp, ChevronRight, ChevronLeft, Dices, RotateCcw, Clock, Download,
+    Award, Layers, Gauge, DoorOpen,
 } from "lucide-react";
 import { useResearchStore } from "@/lib/researchStore";
 import { downloadPdf } from "@/lib/pdfRegistry";
@@ -17,9 +18,9 @@ const STEPS = [
 /** Guided, visual backtest+validation flow — Strategy → Dataset → Period → Validation → Run → Results. */
 export default function ResearchWizard() {
     const {
-        step, strategies, assets, strat, showAllStrat, picked, period, timeframe, runMC, exitMethods,
+        step, strategies, assets, strat, showAllStrat, picked, period, timeframes, runMC, exitMethods,
         phase, progress, runs, metrics,
-        init, setStep, setShowAllStrat, setPeriod, setTimeframe, setRunMC, toggleExitMethod,
+        init, setStep, setShowAllStrat, setPeriod, toggleTimeframe, setRunMC, toggleExitMethod,
         toggleAsset, toggleStrat, run, reset,
     } = useResearchStore();
 
@@ -119,15 +120,23 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 3 && (
-                        <StepShell title="Choose a timeframe" hint="Candle size the engine replays on. 1H is the live default; 30m/15m react faster.">
+                        <StepShell title="Choose timeframe(s)" hint="Tick one or more candle sizes. 1H is the live default; add 30m/15m to compare the edge side-by-side across timeframes.">
                             <div className="grid grid-cols-3 gap-3" data-testid="wizard-timeframes">
-                                {TIMEFRAMES.map((tf) => (
-                                    <button key={tf.k} data-testid={`wizard-timeframe-${tf.k}`} onClick={() => setTimeframe(tf.k)}
-                                        className={`panel border rounded-xl p-4 text-center transition-colors ${timeframe === tf.k ? "border-atlas-cyan bg-atlas-cyan/5 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
-                                        <Clock className="w-5 h-5 mx-auto mb-2" /><div className="font-heading text-sm">{tf.l}</div>
-                                        {tf.k === "1h" && <div className="font-mono text-[9px] text-atlas-textTertiary mt-1">DEFAULT</div>}
-                                    </button>
-                                ))}
+                                {TIMEFRAMES.map((tf) => {
+                                    const on = timeframes.includes(tf.k);
+                                    return (
+                                        <button key={tf.k} data-testid={`wizard-timeframe-${tf.k}`} onClick={() => toggleTimeframe(tf.k)}
+                                            role="checkbox" aria-checked={on}
+                                            className={`panel border rounded-xl p-4 text-center transition-colors relative ${on ? "border-atlas-cyan bg-atlas-cyan/5 text-atlas-cyan" : "border-atlas-border text-atlas-textSecondary hover:text-atlas-text"}`}>
+                                            <span className={`absolute top-2 right-2 w-4 h-4 rounded grid place-items-center border ${on ? "bg-atlas-cyan border-atlas-cyan text-atlas-bg" : "border-atlas-textTertiary"}`}>{on && <Check className="w-3 h-3" />}</span>
+                                            <Clock className="w-5 h-5 mx-auto mb-2" /><div className="font-heading text-sm">{tf.l}</div>
+                                            {tf.k === "1h" && <div className="font-mono text-[9px] text-atlas-textTertiary mt-1">DEFAULT</div>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="font-mono text-[9px] text-atlas-textTertiary mt-1.5" data-testid="wizard-timeframe-hint">
+                                {timeframes.length > 1 ? `${timeframes.join(" · ")} — results shown side-by-side per timeframe.` : "Single timeframe — tick another to compare side-by-side."}
                             </div>
                         </StepShell>
                     )}
@@ -174,7 +183,7 @@ export default function ResearchWizard() {
                     <div className="w-full max-w-md h-2 rounded-full bg-atlas-panel overflow-hidden">
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframe} · {exitMethods.map((m) => m.toUpperCase()).join(" + ")} exit</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframes.join(" · ")} · {exitMethods.map((m) => m.toUpperCase()).join(" + ")} exit</div>
                     <button data-testid="wizard-new-run" onClick={reset}
                         className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
                         <RotateCcw className="w-3.5 h-3.5" /> NEW RUN
@@ -254,13 +263,239 @@ function DownloadPdfButton({ runItem }) {
     );
 }
 
+const REGIME_LABELS = {
+    TREND_UP: "Trend Up", TREND_DOWN: "Trend Down", REVERSAL: "Reversal",
+    COMPRESSION: "Compression", RANGE: "Range", NEUTRAL: "Neutral", "—": "Unclassified",
+};
+const EXIT_MODULE_LABELS = {
+    ATR: "ATR Trailing", FIXED_TP: "Fixed Target (TP)", FIXED_SL: "Fixed Stop (SL)",
+    A: "Structural / Hard Stop", B: "Momentum Exhaustion", C: "ATR Trail (Universal)",
+    D: "EMA / Trend Break", E: "Time Stop", F: "Profit Protection", S: "Breakeven / Structure",
+    KILL: "Kill-Switch", EOD: "End of Window", DECL: "Strategy Exit", "—": "Unclassified",
+};
+const TF_ORDER = ["1h", "30m", "15m"];
+
+const fmtPct = (x, d = 1) => { const n = Number(x); return isFinite(n) ? `${n >= 0 ? "+" : ""}${n.toFixed(d)}%` : "—"; };
+const fmtPf = (x) => (x == null ? "—" : (x >= 999 ? "∞" : Number(x).toFixed(2)));
+const posCls = (x) => (Number(x) >= 0 ? "text-atlas-positive" : "text-atlas-negative");
+
+/** Synthesize a one-glance verdict from the (already-computed) backend analytics. */
+function buildVerdict(result) {
+    const per = result?.per_symbol || {};
+    const syms = Object.entries(per).filter(([, m]) => !m.error);
+    const regAgg = {};
+    syms.forEach(([, m]) => Object.entries(m.regime_breakdown || {}).forEach(([r, val]) => {
+        if (r === "—") return;
+        (regAgg[r] || (regAgg[r] = { net: 0 })).net += val.net_pnl || 0;
+    }));
+    const regRows = Object.entries(regAgg);
+    let bestRegime = null, weakRegime = null;
+    if (regRows.length) {
+        const sorted = [...regRows].sort((a, b) => b[1].net - a[1].net);
+        bestRegime = sorted[0][0];
+        if (sorted.length > 1) weakRegime = sorted[sorted.length - 1][0];
+    }
+    const firstMtf = Object.values(result?.multi_timeframe || {})[0];
+    const bestTf = firstMtf?.verdict?.best_tf || null;
+    const firstEc = Object.values(result?.exit_comparison || {})[0];
+    let recExit = null;
+    if (firstEc) {
+        const b = firstEc["1h"] || Object.values(firstEc)[0];
+        const wk = b?.winner_key;
+        if (wk) recExit = b.rows?.[wk]?.label || wk;
+    }
+    return { bestTf, bestRegime, weakRegime, recExit };
+}
+
+/** Generic compact metrics table. Cells are strings or {v, cls}. */
+function MiniTable({ head, rows, testid }) {
+    if (!rows.length) return null;
+    return (
+        <div className="overflow-x-auto atlas-scroll" data-testid={testid}>
+            <table className="w-full text-left font-mono text-[11px]">
+                <thead>
+                    <tr className="text-atlas-textTertiary">
+                        {head.map((h, i) => (
+                            <th key={i} className={`py-1.5 pr-3 font-normal uppercase tracking-widest text-[9px] ${i > 0 ? "text-right" : ""}`}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((r, ri) => (
+                        <tr key={ri} className="border-t border-atlas-border/60">
+                            {r.map((c, ci) => {
+                                const cell = c && typeof c === "object" ? c : { v: c };
+                                return (
+                                    <td key={ci} className={`py-1.5 pr-3 ${ci > 0 ? "text-right tabular-nums" : "text-atlas-text"} ${cell.cls || (ci > 0 ? "text-atlas-textSecondary" : "")}`}>
+                                        {cell.v ?? "—"}
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function AnalyticsSection({ icon: Icon, title, hint, children, testid }) {
+    return (
+        <div className="panel border-atlas-border rounded-xl p-4 space-y-2" data-testid={testid}>
+            <div className="flex items-center gap-2"><Icon className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">{title}</span></div>
+            {hint && <div className="font-mono text-[9px] text-atlas-textTertiary leading-relaxed">{hint}</div>}
+            {children}
+        </div>
+    );
+}
+
+function CaptureCard({ cap }) {
+    const cr = cap?.capture_rate_pct;
+    if (!cap || cr == null) return null;
+    const read = cr >= 60 ? "Exits are banking most of the available move."
+        : cr < 40 ? "Exits give back a lot of open profit — try a wider trail or structural exit."
+            : "Capture is moderate — test tighter/looser trails to compare.";
+    return (
+        <AnalyticsSection icon={Gauge} title="MFE / MAE CAPTURE" testid="wizard-capture-card"
+            hint="How much of the maximum favourable move the exits actually banked vs. left on the table.">
+            <div className="flex items-end gap-3 flex-wrap">
+                <div><div className="text-atlas-textTertiary text-[9px] uppercase tracking-widest">Capture Rate</div>
+                    <div className={`font-bold text-2xl tabular-nums ${cr >= 60 ? "text-atlas-positive" : cr < 40 ? "text-atlas-negative" : "text-atlas-warning"}`}>{cr.toFixed(0)}%</div></div>
+                <div className="h-2 flex-1 min-w-[120px] rounded-full bg-atlas-panel overflow-hidden mb-2">
+                    <div className={`h-full rounded-full ${cr >= 60 ? "bg-atlas-positive" : cr < 40 ? "bg-atlas-negative" : "bg-atlas-warning"}`} style={{ width: `${Math.min(100, cr)}%` }} />
+                </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] pt-1">
+                <Stat label="Total MFE" value={cap.total_mfe_usd != null ? `$${cap.total_mfe_usd}` : "—"} />
+                <Stat label="Captured" value={cap.total_captured_usd != null ? `$${cap.total_captured_usd}` : "—"} cls="text-atlas-positive" />
+                <Stat label="Left on Table" value={cap.total_profit_left_usd != null ? `$${cap.total_profit_left_usd}` : "—"} cls="text-atlas-warning" />
+                <Stat label="Avg MAE" value={fmtPct(cap.avg_mae_pct)} cls="text-atlas-negative" />
+            </div>
+            <div className="font-mono text-[9px] text-atlas-textTertiary pt-1">{read}</div>
+        </AnalyticsSection>
+    );
+}
+
+function BreakdownTable({ icon, title, hint, keyLabel, data, labelMap, testid }) {
+    const entries = Object.entries(data || {}).filter(([k]) => k !== "—" || Object.keys(data).length === 1);
+    if (!entries.length) return null;
+    const rows = entries
+        .sort((a, b) => (b[1].net_pnl || 0) - (a[1].net_pnl || 0))
+        .map(([k, v]) => [
+            (labelMap?.[k] || k),
+            String(v.n),
+            `${Number(v.win_pct ?? 0).toFixed(0)}%`,
+            fmtPf(v.profit_factor),
+            { v: fmtPct(v.avg_return_pct), cls: posCls(v.avg_return_pct) },
+            { v: `$${Number(v.net_pnl ?? 0).toFixed(2)}`, cls: posCls(v.net_pnl) },
+        ]);
+    return (
+        <AnalyticsSection icon={icon} title={title} hint={hint} testid={testid}>
+            <MiniTable head={[keyLabel, "N", "Win%", "PF", "Avg Ret", "Net P&L"]} rows={rows} testid={`${testid}-table`} />
+        </AnalyticsSection>
+    );
+}
+
+function MultiTfBlock({ mtf, selectedTfs }) {
+    const rowsBySym = Object.entries(mtf || {});
+    if (!rowsBySym.length) return null;
+    // only render when there is more than one timeframe to compare
+    const anyMulti = rowsBySym.some(([, e]) => Object.keys(e.by_tf || {}).length > 1);
+    if (!anyMulti) return null;
+    const wanted = TF_ORDER.filter((t) => !selectedTfs || selectedTfs.includes(t));
+    return (
+        <AnalyticsSection icon={Layers} title="MULTI-TIMEFRAME COMPARISON" testid="wizard-multitf"
+            hint="Identical window, settings and exit rules replayed per candle size. Compare trade frequency vs. return/drawdown to see which timeframe the edge favours.">
+            {rowsBySym.map(([sym, entry]) => {
+                const byTf = entry.by_tf || {};
+                const tfs = wanted.filter((t) => byTf[t]);
+                const rows = tfs.map((tf) => {
+                    const m = byTf[tf] || {};
+                    if (m.error) return [tf.toUpperCase(), "—", { v: m.error }, "—", "—", "—"];
+                    return [
+                        tf.toUpperCase(), String(m.trades ?? 0),
+                        { v: fmtPct(m.total_return_pct), cls: posCls(m.total_return_pct) },
+                        `${Number(m.win_rate_pct ?? 0).toFixed(0)}%`,
+                        { v: fmtPct(m.max_drawdown_pct), cls: "text-atlas-negative" },
+                        fmtPct(m.avg_mfe_pct),
+                    ];
+                });
+                return (
+                    <div key={sym} className="space-y-1.5" data-testid={`wizard-multitf-${sym.split("/")[0]}`}>
+                        <div className="font-heading text-[13px] text-atlas-text">{sym.split("/")[0]}</div>
+                        <MiniTable head={["TF", "Trades", "Return", "Win%", "Max DD", "Avg MFE"]} rows={rows} />
+                        {entry.verdict?.reason && (
+                            <div className="font-mono text-[9px] text-atlas-textSecondary">Best: <span className="text-atlas-cyan font-bold">{(entry.verdict.best_tf || "—").toUpperCase()}</span> — {entry.verdict.reason}</div>
+                        )}
+                    </div>
+                );
+            })}
+        </AnalyticsSection>
+    );
+}
+
+function ExitComparisonBlock({ exitCmp }) {
+    const bySym = Object.entries(exitCmp || {});
+    if (!bySym.length) return null;
+    return (
+        <AnalyticsSection icon={DoorOpen} title="EXIT ENGINE COMPARISON (WHAT-IF)" testid="wizard-exit-comparison"
+            hint="Every exit config is replayed on the EXACT same entry signals — a true A/B/C test. ★ = best by return-over-drawdown.">
+            {bySym.map(([sym, byTf]) => {
+                const tf = byTf["1h"] ? "1h" : Object.keys(byTf)[0];
+                const block = byTf[tf] || {};
+                if (block.error || !block.rows) return <div key={sym} className="font-mono text-[10px] text-atlas-textTertiary">{sym.split("/")[0]}: no comparison data.</div>;
+                const winner = block.winner_key;
+                const order = (block.configs || []).map((c) => c.key).filter((k) => block.rows[k]);
+                const rows = (order.length ? order : Object.keys(block.rows)).map((k) => {
+                    const m = block.rows[k] || {};
+                    const name = (m.label || k) + (winner === k ? "  ★" : "");
+                    if (m.error) return [{ v: name }, { v: m.error }, "—", "—", "—", "—"];
+                    return [
+                        { v: name, cls: winner === k ? "text-atlas-cyan font-bold" : "text-atlas-text" },
+                        fmtPf(m.profit_factor),
+                        `${Number(m.win_rate_pct ?? 0).toFixed(0)}%`,
+                        m.expectancy_usd != null ? `$${Number(m.expectancy_usd).toFixed(2)}` : "—",
+                        { v: fmtPct(m.total_return_pct), cls: posCls(m.total_return_pct) },
+                        { v: fmtPct(m.max_drawdown_pct), cls: "text-atlas-negative" },
+                    ];
+                });
+                return (
+                    <div key={sym} className="space-y-1.5" data-testid={`wizard-exitcmp-${sym.split("/")[0]}`}>
+                        <div className="font-heading text-[13px] text-atlas-text">{sym.split("/")[0]} · {tf.toUpperCase()} <span className="font-mono text-[9px] text-atlas-textTertiary">· {block.entries ?? "—"} identical entries</span></div>
+                        <MiniTable head={["Exit config", "PF", "Win%", "Expect.", "Return", "Max DD"]} rows={rows} />
+                    </div>
+                );
+            })}
+        </AnalyticsSection>
+    );
+}
+
+function SummaryVerdict({ v, verdict }) {
+    const parts = [];
+    if (v.bestTf) parts.push(`best on ${v.bestTf.toUpperCase()}`);
+    if (v.bestRegime) parts.push(`strongest in ${REGIME_LABELS[v.bestRegime] || v.bestRegime}`);
+    if (v.weakRegime && v.weakRegime !== v.bestRegime) parts.push(`weakest in ${REGIME_LABELS[v.weakRegime] || v.weakRegime}`);
+    const sentence = parts.length ? `Strategy performed ${parts.join(" · ")}.` : "Not enough data yet for a regime / timeframe read — widen the window or add assets.";
+    return (
+        <div className="panel border-atlas-cyan/40 bg-atlas-cyan/5 rounded-xl p-4" data-testid="wizard-summary-verdict">
+            <div className="flex items-center gap-2 mb-2">
+                <Award className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">SUMMARY VERDICT</span>
+                <span className={`font-mono text-[10px] font-bold tracking-widest ${verdict.cls}`}>{verdict.t}</span>
+            </div>
+            <div className="font-heading text-sm text-atlas-text leading-relaxed">{sentence}</div>
+            {v.recExit && <div className="font-mono text-[10px] text-atlas-textSecondary mt-1.5">Recommended exit: <span className="text-atlas-cyan font-bold">{v.recExit}</span></div>}
+        </div>
+    );
+}
+
 function Results({ runItem, showLabel }) {
-    const { result, mc, label } = runItem;
+    const { result, mc, label, selectedTfs } = runItem;
     const per = result?.per_symbol || {};
     const rows = Object.entries(per).filter(([, m]) => !m.error);
     const avg = (k) => rows.length ? rows.reduce((a, [, m]) => a + (Number(m[k]) || 0), 0) / rows.length : 0;
     const pf = avg("profit_factor"), ret = avg("total_return_pct");
     const verdict = pf >= 1.5 && ret > 0 ? { t: "ROBUST", cls: "text-atlas-positive" } : pf >= 1.0 ? { t: "MARGINAL", cls: "text-atlas-warning" } : { t: "WEAK", cls: "text-atlas-negative" };
+    const v = buildVerdict(result);
     return (
         <div className="space-y-4" data-testid={`wizard-result-block-${runItem.method}`}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -268,19 +503,40 @@ function Results({ runItem, showLabel }) {
                 <span className={`font-mono text-[11px] font-bold tracking-widest ${verdict.cls}`}>· {verdict.t}</span>
                 <DownloadPdfButton runItem={runItem} />
             </div>
+
+            <SummaryVerdict v={v} verdict={verdict} />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="wizard-result-cards">
                 {rows.map(([sym, m]) => (
                     <div key={sym} className="panel border-atlas-border rounded-xl p-4" data-testid={`wizard-result-${sym.split("/")[0]}`}>
                         <div className="font-heading text-sm text-atlas-text mb-2">{sym.split("/")[0]}</div>
                         <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                            <Stat label="Return" value={`${(m.total_return_pct ?? 0) >= 0 ? "+" : ""}${Number(m.total_return_pct ?? 0).toFixed(1)}%`} cls={(m.total_return_pct ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative"} />
+                            <Stat label="Return" value={fmtPct(m.total_return_pct)} cls={posCls(m.total_return_pct)} />
                             <Stat label="Win Rate" value={`${Number(m.win_rate_pct ?? 0).toFixed(0)}%`} />
-                            <Stat label="Profit Factor" value={Number(m.profit_factor ?? 0).toFixed(2)} />
+                            <Stat label="Profit Factor" value={fmtPf(m.profit_factor)} />
                             <Stat label="Max DD" value={`${Number(m.max_drawdown_pct ?? 0).toFixed(1)}%`} cls="text-atlas-negative" />
                         </div>
                     </div>
                 ))}
             </div>
+
+            {/* Deep analytics — computed backend-side, surfaced per symbol. */}
+            {rows.map(([sym, m]) => (
+                <div key={`ax-${sym}`} className="space-y-3" data-testid={`wizard-analytics-${sym.split("/")[0]}`}>
+                    {rows.length > 1 && <div className="label-tag text-atlas-textSecondary">{sym.split("/")[0]}</div>}
+                    <CaptureCard cap={m.capture_stats} />
+                    <BreakdownTable icon={DoorOpen} title="EXIT MODULE PERFORMANCE" keyLabel="Exit module"
+                        hint="Which exit actually closed each trade, and how each performed."
+                        data={m.exit_module_breakdown} labelMap={EXIT_MODULE_LABELS} testid={`wizard-exitmodule-${sym.split("/")[0]}`} />
+                    <BreakdownTable icon={Gauge} title="REGIME BREAKDOWN" keyLabel="Regime"
+                        hint="Performance split by the market regime at entry — exactly which conditions the strategy makes or loses money in."
+                        data={m.regime_breakdown} labelMap={REGIME_LABELS} testid={`wizard-regime-${sym.split("/")[0]}`} />
+                </div>
+            ))}
+
+            <MultiTfBlock mtf={result?.multi_timeframe} selectedTfs={selectedTfs} />
+            <ExitComparisonBlock exitCmp={result?.exit_comparison} />
+
             {mc && (
                 <div className="panel border-atlas-border rounded-xl p-4" data-testid="wizard-mc-result">
                     <div className="flex items-center gap-2 mb-2"><Dices className="w-4 h-4 text-atlas-cyan" /><span className="label-tag">MONTE CARLO</span>
