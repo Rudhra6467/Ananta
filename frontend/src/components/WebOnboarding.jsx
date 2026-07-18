@@ -62,7 +62,7 @@ export default function WebOnboarding({ onDone }) {
         <div className="fixed inset-0 z-[70] bg-atlas-bg/97 backdrop-blur-xl overflow-y-auto grid-bg" data-testid="web-onboarding">
             <div className="max-w-lg mx-auto px-5 py-8 min-h-full flex flex-col">
                 <div className="flex flex-col items-center text-center mb-6">
-                    <AnantaTrident size={56} />
+                    <AnantaLogo className="h-14 w-14" />
                     <span className="font-heading font-semibold tracking-tight text-atlas-text mt-2 text-lg">Ananta</span>
                 </div>
 
