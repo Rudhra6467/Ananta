@@ -97,10 +97,11 @@ research_resolver = ResearchResolverLoop(db, interval_seconds=600)
 shadow_watcher = ShadowWatcherLoop(db, interval_seconds=30)
 
 # Research Lab: async job queue worker (offline backtests / sweeps / walk-forward)
-from lab.runner import LabDataAppender, LabWorker, create_run  # noqa: E402
+from lab.runner import HealthSweepScheduler, LabDataAppender, LabWorker, create_run  # noqa: E402
 
 lab_worker = LabWorker(db)
 lab_appender = LabDataAppender(db)
+health_scheduler = HealthSweepScheduler(db)
 
 
 # ---------- request/response models ----------
@@ -2037,6 +2038,56 @@ async def lab_delete_run(run_id: str):
     return {"ok": True, "deleted": run_id}
 
 
+class HealthSweepRequest(BaseModel):
+    scope: str = "full"          # "full" = all strategies | "scoped" = core + enabled
+    period: str = "3m"           # 3m | 6m | 1y
+
+
+async def _active_health_sweep():
+    """The sweep to surface: a RUNNING one takes precedence over a QUEUED one."""
+    proj = {"_id": 0, "id": 1, "status": 1, "progress_pct": 1, "label": 1}
+    return (await db.lab_runs.find_one({"kind": "health_sweep", "status": "RUNNING"}, proj,
+                                       sort=[("created_at", -1)])
+            or await db.lab_runs.find_one({"kind": "health_sweep", "status": "QUEUED"}, proj,
+                                          sort=[("created_at", 1)]))
+
+
+@api_router.get("/lab/health")
+async def lab_health_latest():
+    """Latest pre-computed Strategy Health snapshot (fast read for the dashboard).
+    Read-only / public — returns {ready:false} until the first sweep completes."""
+    doc = await db.strategy_health.find_one({"id": "latest"}, {"_id": 0})
+    if not doc:
+        return {"ready": False, "active": await _active_health_sweep()}
+    return {"ready": True, "active": await _active_health_sweep(), **doc}
+
+
+@api_router.get("/lab/health/status")
+async def lab_health_status():
+    """Poll the in-flight sweep (if any) — {active|null}. Read-only."""
+    return {"active": await _active_health_sweep()}
+
+
+@api_router.post("/lab/health/run", dependencies=[Depends(require_owner)])
+async def lab_health_run(body: HealthSweepRequest):
+    """Manually trigger a full / scoped Strategy Health sweep (runs in the background)."""
+    from lab.runner import daily_scope_strategies, enqueue_health_sweep
+    from strategy.core import list_schemas
+    existing = await db.lab_runs.find_one(
+        {"kind": "health_sweep", "status": {"$in": ["QUEUED", "RUNNING"]}}, {"_id": 0, "id": 1})
+    if existing:
+        raise HTTPException(status_code=409, detail="a Strategy Health sweep is already running")
+    if body.period not in ("3m", "6m", "1y"):
+        raise HTTPException(status_code=400, detail="period must be 3m, 6m or 1y")
+    if body.scope == "scoped":
+        strategies = await daily_scope_strategies(db)
+    else:
+        strategies = [s.key for s in list_schemas()]
+    doc = await enqueue_health_sweep(db, strategies=strategies, period=body.period, mode="manual")
+    return {"id": doc["id"], "status": doc["status"], "strategy_count": len(strategies)}
+
+
+
 @api_router.get("/lab/runs/{run_id}/pdf", dependencies=[Depends(require_owner)])
 async def lab_run_pdf(run_id: str):
     run = await db.lab_runs.find_one({"id": run_id}, {"_id": 0})
@@ -3179,6 +3230,7 @@ async def _deferred_startup():
     shadow_watcher.start()
     lab_worker.start()
     lab_appender.start()
+    health_scheduler.start()
     # Heavy index builds + first cache compute run OFF the boot path so the backend
     # becomes healthy instantly even on a large production DB (avoids boot-probe timeouts).
     asyncio.create_task(_background_warmup())

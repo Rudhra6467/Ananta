@@ -25,7 +25,7 @@ from lab import backtest, data_store, optimize
 
 logger = logging.getLogger("ananta.lab.runner")
 
-VALID_KINDS = {"backtest", "grid_search", "sensitivity", "walk_forward"}
+VALID_KINDS = {"backtest", "grid_search", "sensitivity", "walk_forward", "health_sweep"}
 _PERIOD_MONTHS = {"1m": 1, "2m": 2, "3m": 3, "quarter": 3, "6m": 6, "1y": 12, "2y": 24}
 # Extra execution timeframes reported alongside the 1h live-parity baseline (Lab PDF).
 COMPARE_TIMEFRAMES = ["30m", "15m"]
@@ -274,6 +274,8 @@ class LabWorker:
         try:
             if run["kind"] == "backtest":
                 result = await self._run_backtest(run)
+            elif run["kind"] == "health_sweep":
+                result = await self._run_health_sweep(run)
             else:
                 result = await self._run_optimize(run)
             update = {"status": "DONE", "progress_pct": 100.0, "result": result, "finished_at": _now()}
@@ -283,6 +285,11 @@ class LabWorker:
             if hint:
                 update["exit_winner"] = hint
             await self.db.lab_runs.update_one({"id": rid}, {"$set": update})
+            # Strategy Health sweep: also upsert the fast-read "latest" doc for the dashboard.
+            if run["kind"] == "health_sweep":
+                await self.db.strategy_health.update_one(
+                    {"id": "latest"},
+                    {"$set": {"id": "latest", "run_id": rid, **result}}, upsert=True)
             logger.info("LabWorker DONE run=%s kind=%s", rid, run["kind"])
         except Exception as e:
             logger.exception("LabWorker run %s failed: %s", rid, e)
@@ -398,6 +405,43 @@ class LabWorker:
             await asyncio.sleep(2)
         return await fut
 
+    async def _run_health_sweep(self, run: dict) -> dict:
+        """Strategy Health precompute: replay each selected strategy IN ISOLATION across all
+        sweep symbols + timeframes (compare_timeframes on), then aggregate each into a compact
+        health card. Runs one strategy at a time so progress is accurate and the API stays live."""
+        from lab.health_sweep import SWEEP_SYMBOLS, aggregate_strategy, strategy_name
+
+        rid = run["id"]
+        strategies = run.get("strategies") or []
+        symbols = run.get("symbols") or SWEEP_SYMBOLS
+        period = run.get("period", "3m")
+        total = max(1, len(strategies))
+        cards: list[dict] = []
+        for idx, sk in enumerate(strategies):
+            sub = {
+                "id": rid, "kind": "backtest", "symbols": symbols, "period": period,
+                "start_ms": None, "end_ms": None,
+                "strategies": [sk], "timeframe": "1h", "compare_timeframes": True,
+                "exit_method": "native", "target_profit": 5.0, "target_loss": 4.0,
+                "setting_overrides": None, "profile_overrides": None, "atr_params": None,
+            }
+            try:
+                res = await self._run_backtest(sub)
+                cards.append(aggregate_strategy(sk, res))
+            except Exception as e:  # noqa: BLE001 — one bad strategy must not kill the sweep
+                logger.warning("health sweep strategy %s failed: %s", sk, e)
+                cards.append({"strategy": sk, "name": strategy_name(sk), "error": str(e),
+                              "recommendation": {"badge": "Not Recommended Currently", "tone": "negative",
+                                                 "reason": "Backtest failed for this strategy."}})
+            await self._set_progress(rid, (idx + 1) / total * 100.0)
+        return {
+            "mode": run.get("label") or "manual",
+            "period": period, "symbols": symbols,
+            "strategies": cards,
+            "generated_at": _now(),
+            "strategy_count": len(cards),
+        }
+
 
 
 
@@ -453,3 +497,85 @@ class LabDataAppender:
             except Exception as e:
                 logger.exception("LabDataAppender error: %s", e)
             await asyncio.sleep(self.interval)
+
+
+
+async def daily_scope_strategies(db) -> list[str]:
+    """Daily-sweep strategy set = 3 core + every catalog strategy the owner has ENABLED."""
+    from lab.health_sweep import CORE_STRATEGIES
+    keys = list(CORE_STRATEGIES)
+    try:
+        metas = await db.strategy_meta.find({"enabled": True}, {"_id": 0, "key": 1}).to_list(500)
+        for m in metas:
+            k = m.get("key")
+            if k and k not in keys:
+                keys.append(k)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("daily_scope_strategies failed: %s", e)
+    return keys
+
+
+async def enqueue_health_sweep(db, *, strategies: list[str], symbols: list[str] | None = None,
+                               period: str = "3m", mode: str = "manual") -> dict:
+    """Queue a Strategy Health sweep as a lab_run (kind=health_sweep). Reuses the LabWorker
+    queue so it runs one-at-a-time off the request path, with progress + cancel for free."""
+    from lab.health_sweep import SWEEP_SYMBOLS
+    return await create_run(db, {
+        "kind": "health_sweep",
+        "symbols": symbols or SWEEP_SYMBOLS,
+        "period": period,
+        "strategies": strategies,
+        "compare_timeframes": True,
+        "label": mode,
+    })
+
+
+class HealthSweepScheduler:
+    """Runs the scoped Strategy Health sweep once per day (core + enabled strategies, 3m window).
+    Enqueues a health_sweep lab_run that the LabWorker executes in the background."""
+
+    def __init__(self, db, interval_hours: int = 24):
+        self.db = db
+        self.interval = interval_hours * 3600
+        self._task: asyncio.Task | None = None
+        self._stop = asyncio.Event()
+
+    def start(self):
+        self._stop.clear()
+        self._task = asyncio.create_task(self._loop())
+        logger.info("HealthSweepScheduler started (every %sh)", self.interval // 3600)
+
+    async def stop(self):
+        self._stop.set()
+        if self._task:
+            self._task.cancel()
+            with __import__("contextlib").suppress(asyncio.CancelledError):
+                await self._task
+
+    async def _ran_today(self) -> bool:
+        """True if ANY health sweep (daily or manual) was created today, or one is active —
+        avoids piling a scheduled daily on top of a manual run the user already triggered."""
+        today = datetime.now(timezone.utc).date().isoformat()
+        doc = await self.db.lab_runs.find_one({
+            "kind": "health_sweep",
+            "$or": [
+                {"created_at": {"$regex": f"^{today}"}},
+                {"status": {"$in": ["QUEUED", "RUNNING"]}},
+            ],
+        }, {"_id": 1})
+        return doc is not None
+
+    async def _loop(self):
+        await asyncio.sleep(150)  # let boot + data appender settle
+        while not self._stop.is_set():
+            try:
+                if not await self._ran_today():
+                    strategies = await daily_scope_strategies(self.db)
+                    await enqueue_health_sweep(self.db, strategies=strategies, period="3m", mode="daily")
+                    logger.info("HealthSweepScheduler queued daily sweep (%d strategies)", len(strategies))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.exception("HealthSweepScheduler error: %s", e)
+            with __import__("contextlib").suppress(TimeoutError):
+                await asyncio.wait_for(self._stop.wait(), timeout=self.interval)

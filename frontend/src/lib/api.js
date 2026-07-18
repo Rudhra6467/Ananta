@@ -168,6 +168,10 @@ export const api = {
     labApplyProposal: (pid) => client.post(`/lab/proposals/${pid}/apply`).then((r) => r.data),
     labRejectProposal: (pid) => client.post(`/lab/proposals/${pid}/reject`).then((r) => r.data),
     labMonteCarlo: (payload) => client.post("/lab/monte_carlo", payload).then((r) => r.data),
+    // --- Strategy Health (pre-computed daily/manual sweep) ---
+    labHealth: () => client.get("/lab/health", { silent: true }).then((r) => r.data),
+    labHealthStatus: () => client.get("/lab/health/status", { silent: true }).then((r) => r.data),
+    labHealthRun: (payload) => client.post("/lab/health/run", payload).then((r) => r.data),
     // --- Strategy Config Engine (schemas + configs) ---
     strategyRegistry: () => client.get("/strategy/registry").then((r) => r.data),
     strategyMetrics: () => client.get("/strategy/metrics").then((r) => r.data),

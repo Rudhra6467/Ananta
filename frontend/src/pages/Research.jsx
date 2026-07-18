@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Brain, ChevronDown, Rocket, Sparkles, CalendarRange, FileText } from "lucide-react";
+import { ShieldCheck, Brain, ChevronDown, Rocket, Sparkles, CalendarRange, FileText, Activity } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -9,6 +9,7 @@ import SavedConfigsPanel from "@/components/lab/SavedConfigsPanel";
 import MonteCarloPanel from "@/components/lab/MonteCarloPanel";
 import StrategyValidationPanel from "@/components/StrategyValidationPanel";
 import ResearchWizard from "@/components/lab/ResearchWizard";
+import StrategyHealthPanel from "@/components/lab/StrategyHealthPanel";
 import AIAnalystTerminal from "@/components/lab/AIAnalystTerminal";
 import TradingCoach from "@/components/lab/TradingCoach";
 import ClosedTradesAnalysis from "@/components/lab/ClosedTradesAnalysis";
@@ -79,6 +80,7 @@ export default function Research() {
             <Tabs value={sub} onValueChange={setSub} className="atlas-tabs">
                 <TabsList className="bg-transparent border-b border-atlas-border w-full justify-start gap-0 rounded-none h-auto p-0 mb-5">
                     <SubTab value="validate" label="VALIDATE" icon={ShieldCheck} />
+                    <SubTab value="health" label="HEALTH" icon={Activity} />
                     <SubTab value="analyze" label="AI ANALYSIS" icon={Brain} />
                     <SubTab value="closed" label="CLOSED TRADES" icon={ShieldCheck} />
                 </TabsList>
@@ -109,6 +111,10 @@ export default function Research() {
                             <StrategyValidationPanel />
                         </div>
                     )}
+                </TabsContent>
+
+                <TabsContent value="health" className="m-0 space-y-4">
+                    <StrategyHealthPanel isOwner={isOwner} />
                 </TabsContent>
 
                 <TabsContent value="analyze" className="m-0 space-y-6">

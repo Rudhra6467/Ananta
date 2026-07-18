@@ -296,11 +296,59 @@ def _exit_comparison_block(s, res: dict):
     return flow
 
 
+def _health_block(s, res: dict):
+    """Full Strategy Health sweep report — one section per strategy with its recommendation,
+    headline metrics, best timeframe/exit and regime performance."""
+    cards = res.get("strategies") or []
+    flow = [Paragraph("STRATEGY HEALTH — FULL ANALYSIS", s["h2"]),
+            Paragraph(f"Pre-computed sweep across {', '.join(res.get('symbols') or [])} on 1H · 30m · 15m "
+                      f"over the {res.get('period', '3m')} window. Each strategy is replayed in isolation; "
+                      f"generated {(res.get('generated_at') or '')[:19]} UTC.", s["subtitle"]),
+            Spacer(1, 8)]
+    # ranked: recommended first
+    order = {"Good for Paper Trading": 0, "Needs Improvement": 1, "Not Recommended Currently": 2}
+    cards = sorted(cards, key=lambda c: order.get((c.get("recommendation") or {}).get("badge"), 3))
+    for c in cards:
+        rec = c.get("recommendation") or {}
+        flow.append(Paragraph(f'{c.get("name", c.get("strategy"))} — <b>{rec.get("badge", "—")}</b>', s["h3"]))
+        if c.get("error"):
+            flow += [Paragraph(f"Error: {c['error']}", s["italic"]), Spacer(1, 8)]
+            continue
+        h = c.get("headline") or {}
+        rows = [
+            ["Recommendation", rec.get("badge", "—")],
+            ["Why", rec.get("reason", "—")],
+            ["Best timeframe", (c.get("best_timeframe") or "—")],
+            ["Best exit", (c.get("best_exit") or "—")],
+            ["Best regime", (c.get("best_regime") or "—")],
+            ["Weakest regime", (c.get("weak_regime") or "—")],
+            ["Total return", _fmt(h.get("total_return_pct"), "%")],
+            ["Win rate", _fmt(h.get("win_rate_pct"), "%")],
+            ["Profit factor", _pf(h.get("profit_factor"))],
+            ["Max drawdown", _fmt(h.get("max_drawdown_pct"), "%")],
+            ["Trades", str(h.get("trades", 0))],
+            ["MFE capture", (f"{c['capture_rate_pct']:g}%" if c.get("capture_rate_pct") is not None else "—")],
+            ["Profit left on table", (f"${c['profit_left_usd']:g}" if c.get("profit_left_usd") is not None else "—")],
+        ]
+        flow.append(_kv_table(s, ["Field", "Value"], rows, [1.9 * inch, 4.3 * inch]))
+        rb = c.get("regime_breakdown") or {}
+        if rb:
+            rr = [[k, v["n"], f'{v["win_pct"]}%', _fmt(v.get("avg_return_pct"), "%"), round(v["net_pnl"], 2)]
+                  for k, v in sorted(rb.items(), key=lambda kv: kv[1]["net_pnl"], reverse=True)]
+            flow += [Spacer(1, 4), _kv_table(s, ["Regime", "N", "Win%", "Avg Ret", "Net P&L"], rr,
+                                             [1.6 * inch, 0.7 * inch, 0.9 * inch, 1.0 * inch, 1.1 * inch])]
+        flow.append(Spacer(1, 12))
+    return flow
+
+
 def _result_block(s, run: dict):
     kind = run.get("kind")
     res = run.get("result") or {}
     if run.get("status") != "DONE" or not res:
         return [Paragraph("No results — run status: %s" % run.get("status"), s["italic"])]
+
+    if kind == "health_sweep":
+        return _health_block(s, res)
 
     if kind == "backtest":
         flow = [Paragraph("BACKTEST RESULTS", s["h2"]),
