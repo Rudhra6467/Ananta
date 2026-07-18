@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronRight, Sparkles, Plus, Search, X, Loader2 } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Boxes, ChevronDown, ChevronRight, Sparkles, Plus, Search, TrendingUp, X, Zap, Loader2 } from "lucide-react";
 import {
     Cell as RCell,
     Pie,
@@ -64,6 +64,7 @@ export default function Dashboard() {
                     <Sparkles className="w-4 h-4" /> WEEKLY AI REVIEW
                 </button>
             </div>
+            <StrategyHealthToday />
             {/* Watchlist (80%) + Charts (20%) on one row */}
             <div className="flex gap-3 items-stretch">
                 <div className="flex-[4] min-w-0">
@@ -115,6 +116,91 @@ function WeeklyReviewModal({ open, onClose }) {
 }
 
 /* ---------------- AI Coach headline banner (credit-free) ---------------- */
+const STRAT_ICON = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
+const REC_TONE = {
+    positive: "text-atlas-positive border-atlas-positive/40 bg-atlas-positive/10",
+    warning: "text-atlas-warning border-atlas-warning/40 bg-atlas-warning/10",
+    negative: "text-atlas-negative border-atlas-negative/40 bg-atlas-negative/10",
+};
+
+/* Strategy Health Today — top recommended strategies from the daily health sweep. */
+function StrategyHealthToday() {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let alive = true;
+        api.labHealth()
+            .then((d) => { if (alive) setData(d?.ready ? d : null); })
+            .catch(() => { if (alive) setData(null); })
+            .finally(() => { if (alive) setLoading(false); });
+        return () => { alive = false; };
+    }, []);
+
+    const viewDashboard = () => {
+        localStorage.setItem("ananta_research_sub", "health");
+        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
+    };
+
+    const recommended = (data?.strategies || [])
+        .filter((s) => s.recommendation?.tone === "positive")
+        .sort((a, b) => (b.headline?.net_pnl ?? 0) - (a.headline?.net_pnl ?? 0))
+        .slice(0, 2);
+
+    return (
+        <div className="panel border-atlas-border rounded-2xl p-4 space-y-3" data-testid="strategy-health-today">
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-heading text-lg text-atlas-text leading-none">Strategy Health Today</div>
+                <button data-testid="cockpit-view-health-dashboard" onClick={viewDashboard}
+                    className="flex items-center gap-1.5 rounded-full border border-atlas-cyan/40 text-atlas-cyan font-mono text-[10px] font-bold tracking-wide px-3 py-1.5 hover:bg-atlas-cyan/10 active:scale-95 transition-all">
+                    View Health Dashboard <ArrowRight className="w-3 h-3" />
+                </button>
+            </div>
+
+            {loading ? (
+                <div className="py-6 grid place-items-center text-atlas-textTertiary" data-testid="health-today-loading">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                </div>
+            ) : recommended.length === 0 ? (
+                <div className="py-2 font-mono text-[11px] text-atlas-textTertiary" data-testid="health-today-empty">
+                    No strategies currently recommended for paper trading.
+                </div>
+            ) : (
+                <>
+                    <div className="font-mono text-[11px] text-atlas-textSecondary" data-testid="health-today-count">
+                        {recommended.length} {recommended.length === 1 ? "strategy" : "strategies"} recommended for paper trading.
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {recommended.map((s) => <HealthTodayCard key={s.strategy} card={s} />)}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+function HealthTodayCard({ card }) {
+    const Icon = STRAT_ICON[card.strategy] || Boxes;
+    const rec = card.recommendation || {};
+    const pnl = Number(card.headline?.net_pnl ?? 0);
+    const pnlCls = pnl >= 0 ? "text-atlas-positive" : "text-atlas-negative";
+    return (
+        <div className="rounded-xl border border-atlas-border bg-atlas-bg/40 p-3.5 space-y-2.5" data-testid={`health-today-card-${card.strategy}`}>
+            <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg grid place-items-center border border-atlas-border bg-atlas-cyan/5 shrink-0"><Icon className="w-4 h-4 text-atlas-cyan" /></span>
+                <div className="font-heading text-base text-atlas-text truncate">{card.name}</div>
+            </div>
+            <span className={`inline-flex items-center font-mono text-[9px] font-bold tracking-wide uppercase px-2 py-1 rounded-full border ${REC_TONE[rec.tone] || REC_TONE.warning}`} data-testid={`health-today-badge-${card.strategy}`}>
+                {rec.badge || "Recommended"}
+            </span>
+            <div className="font-mono text-sm">
+                <span className={`font-bold tabular-nums ${pnlCls}`} data-testid={`health-today-pnl-${card.strategy}`}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}</span>
+                <span className="text-atlas-textTertiary text-[11px]"> P&amp;L</span>
+            </div>
+        </div>
+    );
+}
+
 /* Compact market-regime pill shown next to a section title (replaces the full Regime row). */
 function RegimeTag({ regime }) {
     const label = regime === "BULLISH" ? "Bull" : regime === "BEARISH" ? "Bear" : "Neutral";
