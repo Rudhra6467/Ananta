@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
 import api from "../src/api";
 import { deleteItem } from "../src/storage";
+import ComingSoonPromo from "../src/components/ComingSoonPromo";
 import { colors, spacing, type, radius } from "../src/theme";
 
 // Account overlay — opened by tapping the Ananta logo. Mirrors the layout in the
@@ -107,6 +108,9 @@ export default function AccountOverlay() {
         contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.xxl }}
         showsVerticalScrollIndicator={false}
       >
+        {/* promo banner — first 3 sessions, dismissible */}
+        <ComingSoonPromo variant="banner" />
+
         {/* profile header */}
         <Pressable testID="account-profile-header" style={({ pressed }) => [styles.profile, pressed && styles.rowPressed]}>
           <View style={styles.avatar}>
@@ -194,6 +198,9 @@ export default function AccountOverlay() {
           <View style={styles.divider} />
           <Row icon="shield-checkmark-outline" label="Security" pill="Soon" testID="account-setting-security" />
         </View>
+
+        {/* what's coming — permanent promotional content */}
+        <ComingSoonPromo variant="section" />
 
         {/* Log out */}
         <Pressable testID="account-logout-btn" onPress={onLogout} style={({ pressed }) => [styles.logout, pressed && styles.rowPressed]}>

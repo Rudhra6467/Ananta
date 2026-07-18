@@ -402,12 +402,27 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         out: dict[str, dict] = {}
         for t in trades:
             k = t.get(key) or "—"
-            g = out.setdefault(k, {"n": 0, "wins": 0, "net": 0.0})
+            g = out.setdefault(k, {"n": 0, "wins": 0, "net": 0.0, "gw": 0.0, "gl": 0.0,
+                                   "ret": 0.0, "mfe": 0.0, "cap": 0.0})
+            pnl = t["pnl"]
             g["n"] += 1
-            g["wins"] += 1 if t["pnl"] > 0 else 0
-            g["net"] += t["pnl"]
-        return {k: {"n": v["n"], "win_pct": round(v["wins"] / v["n"] * 100, 1),
-                    "net_pnl": round(v["net"], 4)} for k, v in out.items()}
+            g["wins"] += 1 if pnl > 0 else 0
+            g["net"] += pnl
+            g["gw"] += pnl if pnl > 0 else 0.0
+            g["gl"] += -pnl if pnl < 0 else 0.0
+            g["ret"] += t.get("return_pct") or 0.0
+            mu = t.get("mfe_usd") or 0.0
+            if mu > 0:
+                g["mfe"] += mu
+            g["cap"] += max(0.0, t.get("captured_pnl") or 0.0)
+        res = {}
+        for k, v in out.items():
+            pf = (round(v["gw"] / v["gl"], 2) if v["gl"] > 0 else (None if v["gw"] == 0 else 999.99))
+            cap = round(min(1.0, v["cap"] / v["mfe"]) * 100, 1) if v["mfe"] > 0 else None
+            res[k] = {"n": v["n"], "win_pct": round(v["wins"] / v["n"] * 100, 1),
+                      "net_pnl": round(v["net"], 4), "profit_factor": pf,
+                      "avg_return_pct": round(v["ret"] / v["n"], 3), "capture_pct": cap}
+        return res
 
     # Sharpe / Sortino computed on per-trade returns (annualisation-free, comparable
     # across timeframes since it's per-trade risk-adjusted return).
@@ -429,6 +444,21 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
     gross_loss = -sum(t["pnl"] for t in trades if t["pnl"] < 0)
     if gross_loss > 0:
         profit_factor = round(gross_win / gross_loss, 2)
+
+    # Exit efficiency — how much of the total favourable excursion (MFE) the exits actually
+    # captured vs. left on the table. capture_rate = realised gains / total MFE ($).
+    _tot_mfe = sum(t.get("mfe_usd", 0) or 0.0 for t in trades if (t.get("mfe_usd") or 0) > 0)
+    _tot_cap = sum(max(0.0, t.get("captured_pnl", 0) or 0.0) for t in trades)
+    _tot_left = sum(t.get("profit_left_usd", 0) or 0.0 for t in trades)
+    capture_stats = {
+        "capture_rate_pct": round(min(1.0, _tot_cap / _tot_mfe) * 100, 1) if _tot_mfe > 0 else None,
+        "total_mfe_usd": round(_tot_mfe, 2),
+        "total_captured_usd": round(_tot_cap, 2),
+        "total_profit_left_usd": round(_tot_left, 2),
+        "avg_mfe_pct": round(sum(mfes) / len(mfes), 3) if mfes else None,
+        "avg_mae_pct": round(sum(maes) / len(maes), 3) if maes else None,
+        "avg_profit_left_usd": round(_tot_left / n, 3) if n else None,
+    }
 
     return {
         "symbol": symbol, "start_ms": start_ms, "end_ms": end_ms,
@@ -464,6 +494,7 @@ def _summarize(symbol, start_ms, end_ms, s, trades, equity_curve, max_dd, timefr
         "exit_module_breakdown": _bucket("exit_module"),
         "regime_breakdown": _bucket("regime_at_entry"),
         "strategy_breakdown": _bucket("strategy"),
+        "capture_stats": capture_stats,
         "recommendation": _recommend(total_ret, win_rate, max_dd, sharpe, profit_factor, n),
         "trade_log": trades,
     }

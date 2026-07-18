@@ -222,6 +222,9 @@ export const api = {
         return client.get(`/research/log?${params}`).then((r) => r.data);
     },
     levels: (base) => cget(`/levels/${base}`, 60000),
+    // Promo — "Coming Soon to Ananta" banner
+    promoStatus: () => client.get("/promo/coming-soon").then((r) => r.data),
+    promoJoinWaitlist: (email) => client.post("/promo/coming-soon/waitlist", { email }).then((r) => r.data),
 };
 
 export default api;

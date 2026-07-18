@@ -1656,6 +1656,30 @@ async def set_environment(mode: str):
 
 
 
+class PromoWaitlistReq(BaseModel):
+    email: str | None = None
+    feature: str = "coming-soon"
+
+
+@api_router.get("/promo/coming-soon")
+async def promo_coming_soon_get():
+    """Promo state for the 'Coming Soon to Ananta' banner. View-count/dismiss are tracked
+    client-side (per-device UX nudge); the backend only persists the waitlist opt-in."""
+    doc = await db.promo_state.find_one({"key": "coming-soon"}, {"_id": 0}) or {}
+    return {"waitlist_joined": bool(doc.get("waitlist_joined")), "joined_at": doc.get("joined_at")}
+
+
+@api_router.post("/promo/coming-soon/waitlist")
+async def promo_coming_soon_waitlist(req: PromoWaitlistReq):
+    await db.promo_state.update_one(
+        {"key": "coming-soon"},
+        {"$set": {"key": "coming-soon", "waitlist_joined": True,
+                  "joined_at": datetime.now(UTC).isoformat(), "email": req.email}},
+        upsert=True)
+    logger.info("Promo waitlist opt-in recorded (coming-soon)")
+    return {"waitlist_joined": True}
+
+
 class BacktestRequest(BaseModel):
     symbols: list[str] = ["BTC/USDC", "ETH/USDC"]
     days: int = 14

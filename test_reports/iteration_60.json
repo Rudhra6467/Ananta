@@ -1,0 +1,51 @@
+{
+  "summary": "Verified new 'Coming Soon to Ananta' promo banner + permanent section on both web and mobile against the shared FastAPI backend. Backend GET/POST /api/promo/coming-soon endpoints work (4/4 pytest passed). Web + mobile UI both render banner (dismiss X, image, Join Waitlist, Learn More) and permanent WHAT'S COMING section; Learn More modal lists all 3 features (Weekly AI Trading Championship, Strategy Marketplace, Advanced AI Strategy Reports); Join Waitlist button switches to 'On the waitlist' (disabled) and persists on backend; web dismiss persists via localStorage across close+reopen while section still shows. Parity confirmed. NOTE: An UNRELATED critical bug was discovered on web — WebOnboarding.jsx uses <AnantaTrident/> but does not import it, so fresh owner login crashes the whole app via ErrorBoundary. I worked around it by pre-setting localStorage 'ananta_onboarded=1'; main agent MUST fix this import.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "WebOnboarding", "issue": "ReferenceError: AnantaTrident is not defined at WebOnboarding (bundle line ~145533). WebOnboarding.jsx uses <AnantaTrident size=56/> on line 65 but only imports AnantaLogo on line 5. This crashes the app for any owner without ananta_onboarded=1 in localStorage (fresh login → red 'Something went wrong' error boundary). BLOCKING for first-time owner UX. Reference: /app/frontend/src/components/WebOnboarding.jsx:65", "selector": "n/a (error boundary)", "priority": "CRITICAL"}
+      ],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Account overlay banner", "issues": ["Banner img reports naturalWidth=0 immediately after overlay open (loading=lazy artifact); renders correctly visually. Not blocking."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Account promo banner", "issues": ["Promo image (portrait 784x1168) is very tall on the 390px web preview and dominates the top of the Account screen; expected on the wide preview, fine on a real phone (per task note)."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter60_promo_coming_soon.py",
+    "/app/test_reports/pytest/iter60_promo.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix /app/frontend/src/components/WebOnboarding.jsx to add `import AnantaTrident from \"@/components/AnantaTrident\";` (or replace <AnantaTrident/> at L65 with <AnantaLogo/>). This currently crashes the entire app for owners who haven't completed onboarding.",
+    "Optional: Add fallback if promo image fails to load (currently no onError placeholder in ComingSoonPromo.jsx)."
+  ],
+  "critical_code_review_comments": [
+    "Backend /api/promo/coming-soon uses a single shared document (key='coming-soon') — global state, not per-user. That is fine for a single-owner app but will need per-user isolation before multi-user rollout.",
+    "POST /api/promo/coming-soon/waitlist accepts empty body and still marks waitlist_joined=true (email optional). Consider requiring email once multi-user.",
+    "ComingSoonPromo.jsx (web) and ComingSoonPromo.tsx (mobile) duplicate the FEATURES list — consider a shared source of truth to prevent drift."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter60_promo_coming_soon.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% for promo feature; blocked pre-existing WebOnboarding bug bypassed"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Cleared db.promo_state.coming-soon between tests to exercise waitlist_joined=false→true transition.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend endpoints GET /api/promo/coming-soon and POST /api/promo/coming-soon/waitlist are working. Web + mobile UI for the Coming Soon promo is functional end-to-end (banner+section+modal+join+dismiss+persistence). The WebOnboarding AnantaTrident missing-import bug is UNRELATED to this feature but MUST be fixed — after fix, retest fresh owner login (with localStorage cleared) to confirm the app doesn't crash. Backend regression: pytest /app/backend/tests/test_iter60_promo_coming_soon.py.",
+  "rca of the issue": "WebOnboarding.jsx bug RCA: file imports AnantaLogo (line 5) but references <AnantaTrident/> at line 65. Fix by either (a) adding `import AnantaTrident from '@/components/AnantaTrident';` at top, or (b) replacing <AnantaTrident/> with <AnantaLogo/>. Repro: clear localStorage, log in as owner — WebOnboarding renders → ReferenceError → ErrorBoundary shows 'Something went wrong'."
+}

@@ -151,6 +151,10 @@ export const api = {
   // push
   registerPushToken: (push_token: string, platform: string, prefs?: Record<string, boolean>) =>
     post<any>("/notifications/register", { push_token, platform, prefs }),
+
+  // Promo — "Coming Soon to Ananta" banner
+  promoStatus: () => get<any>("/promo/coming-soon"),
+  promoJoinWaitlist: (email?: string) => post<any>("/promo/coming-soon/waitlist", { email }),
 };
 
 export default api;

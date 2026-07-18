@@ -17,6 +17,24 @@ from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 
 from pdf_report import _fmt, _kv_table, _styles
 
+# Friendly names for the raw exit-module codes emitted by the replay engine / Universal Exit Engine.
+_EXIT_MODULE_LABELS = {
+    "ATR": "ATR Trailing Stop", "FIXED_TP": "Fixed Target (TP)", "FIXED_SL": "Fixed Stop (SL)",
+    "A": "Structural / Hard Stop", "B": "Momentum Exhaustion", "C": "ATR Trail (Universal)",
+    "D": "EMA / Trend Break", "E": "Time Stop", "F": "Profit Protection", "S": "Breakeven / Structure",
+    "KILL": "Kill-Switch", "EOD": "End of Window", "—": "Unclassified",
+}
+
+
+def _mod_label(code) -> str:
+    return _EXIT_MODULE_LABELS.get(code, str(code))
+
+
+def _pf(v) -> str:
+    if v is None:
+        return "—"
+    return "∞" if v >= 999 else f"{v:.2f}"
+
 
 def _date(ms) -> str:
     if not ms:
@@ -94,18 +112,58 @@ def _summary_metrics(s, title, summ: dict):
             _kv_table(s, ["Metric", "Value"], rows, [2.6 * inch, 2.0 * inch]), Spacer(1, 6)]
     if summ.get("recommendation"):
         flow += [Paragraph(f"<b>Recommendation:</b> {summ['recommendation']}", s["italic"]), Spacer(1, 8)]
+
+    # ---- Exit Efficiency — MFE / MAE capture ----
+    cap = summ.get("capture_stats") or {}
+    if cap:
+        cr = cap.get("capture_rate_pct")
+        cap_rows = [
+            ["MFE capture rate", (f"{cr:g}%" if cr is not None else "—")],
+            ["Total favourable move (MFE)", (f"${cap['total_mfe_usd']:g}" if cap.get("total_mfe_usd") is not None else "—")],
+            ["Captured by exits", (f"${cap['total_captured_usd']:g}" if cap.get("total_captured_usd") is not None else "—")],
+            ["Profit left on table", (f"${cap['total_profit_left_usd']:g}" if cap.get("total_profit_left_usd") is not None else "—")],
+            ["Avg MFE / trade", _fmt(cap.get("avg_mfe_pct"), "%")],
+            ["Avg MAE / trade", _fmt(cap.get("avg_mae_pct"), "%")],
+            ["Avg profit left / trade", (f"${cap['avg_profit_left_usd']:g}" if cap.get("avg_profit_left_usd") is not None else "—")],
+        ]
+        flow += [Paragraph("Exit Efficiency — MFE / MAE Capture", s["h3"]),
+                 Paragraph("How much of the maximum favourable move (MFE) the exits actually banked vs. "
+                           "left on the table. A low capture rate with high 'profit left' points at the "
+                           "<b>exit logic</b> as the bottleneck — not the entries.", s["subtitle"]),
+                 _kv_table(s, ["Exit efficiency", "Value"], cap_rows, [2.6 * inch, 2.0 * inch])]
+        if cr is not None:
+            verdict = ("exits are banking most of the available move." if cr >= 60
+                       else "exits are giving back a lot of open profit — try a wider trail or a structural exit."
+                       if cr < 40 else "exit capture is moderate; test tighter/looser trails to compare.")
+            flow.append(Paragraph(f"<b>Read:</b> {cr:g}% capture — {verdict}", s["italic"]))
+        flow.append(Spacer(1, 8))
+
+    # ---- Exit Module Performance ----
     emb = summ.get("exit_module_breakdown") or {}
     if emb:
-        er = [[k, v["n"], f'{v["win_pct"]}%', round(v["net_pnl"], 2)] for k, v in sorted(emb.items())]
-        flow += [Paragraph("Exit modules (A-F)", s["h3"]),
-                 _kv_table(s, ["Module", "N", "Win%", "Net P&L"], er,
-                           [1.6 * inch, 0.9 * inch, 1.0 * inch, 1.2 * inch]), Spacer(1, 8)]
+        er = [[_mod_label(k), v["n"], f'{v["win_pct"]}%', _pf(v.get("profit_factor")),
+               _fmt(v.get("avg_return_pct"), "%"), round(v["net_pnl"], 2)]
+              for k, v in sorted(emb.items(), key=lambda kv: kv[1]["net_pnl"], reverse=True)]
+        flow += [Paragraph("Exit Module Performance", s["h3"]),
+                 Paragraph("Which exit actually closed each trade, and how each performed. Use this to pick "
+                           "the exit method that is genuinely working for this strategy.", s["subtitle"]),
+                 _kv_table(s, ["Exit module", "N", "Win%", "PF", "Avg Ret", "Net P&L"], er,
+                           [1.9 * inch, 0.55 * inch, 0.75 * inch, 0.6 * inch, 0.8 * inch, 0.95 * inch]),
+                 Spacer(1, 8)]
+
+    # ---- Regime-wise Breakdown ----
     rb = summ.get("regime_breakdown") or {}
     if rb:
-        rr = [[k, v["n"], f'{v["win_pct"]}%', round(v["net_pnl"], 2)] for k, v in sorted(rb.items())]
-        flow += [Paragraph("Regime breakdown", s["h3"]),
-                 _kv_table(s, ["Regime", "N", "Win%", "Net P&L"], rr,
-                           [1.8 * inch, 0.9 * inch, 1.0 * inch, 1.2 * inch]), Spacer(1, 10)]
+        rr = [[k, v["n"], f'{v["win_pct"]}%', _pf(v.get("profit_factor")),
+               _fmt(v.get("avg_return_pct"), "%"), round(v["net_pnl"], 2)]
+              for k, v in sorted(rb.items(), key=lambda kv: kv[1]["net_pnl"], reverse=True)]
+        flow += [Paragraph("Regime-wise Breakdown", s["h3"]),
+                 Paragraph("Performance split by the market regime at entry (TREND_UP, REVERSAL, "
+                           "COMPRESSION, NEUTRAL). Shows exactly which conditions the strategy makes "
+                           "or loses money in.", s["subtitle"]),
+                 _kv_table(s, ["Regime", "N", "Win%", "PF", "Avg Ret", "Net P&L"], rr,
+                           [1.9 * inch, 0.55 * inch, 0.75 * inch, 0.6 * inch, 0.8 * inch, 0.95 * inch]),
+                 Spacer(1, 10)]
     return flow
 
 
@@ -131,7 +189,7 @@ def _trade_log_block(s, summ: dict):
             str(i), _t(t.get("entry_ts")), _t(t.get("exit_ts")),
             _p(t.get("entry_price")), _p(t.get("exit_price")),
             f'{float(t.get("qty", 0)):.4g}', f'{float(t.get("pnl", 0)):+.2f}',
-            t.get("exit_module", "—"),
+            _mod_label(t.get("exit_module", "—")),
         ])
     return [Paragraph("Full trade log", s["h3"]),
             Paragraph("Timestamps (UTC), entry/exit fills, position size and net P&amp;L per trade.", s["subtitle"]),

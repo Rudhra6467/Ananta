@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LearningHub from "@/components/LearningHub";
+import ComingSoonPromo from "@/components/ComingSoonPromo";
 
 // Account overlay (web) — opened by the Ananta logo button. Mirrors the mobile Account
 // layout (Profile header · Features · Settings) and serves the in-app privacy info.
@@ -80,6 +81,9 @@ export default function AccountOverlay({ open, onOpenChange }) {
                 </DialogHeader>
 
                 <div className="max-h-[70vh] overflow-y-auto atlas-scroll px-5 py-4 space-y-5">
+                    {/* promo banner — first 3 sessions, dismissible */}
+                    <ComingSoonPromo variant="banner" />
+
                     {/* profile header */}
                     <div className="flex items-center gap-3 p-3 rounded-lg border border-atlas-border bg-atlas-bg" data-testid="account-profile-header">
                         <div className="w-12 h-12 rounded-full bg-atlas-panelHover border border-atlas-border flex items-center justify-center shrink-0">
@@ -140,6 +144,9 @@ export default function AccountOverlay({ open, onOpenChange }) {
 
                     {/* learning hub (migrated from Workspace) */}
                     <LearningHub onClose={() => onOpenChange(false)} />
+
+                    {/* what's coming — permanent promotional content */}
+                    <ComingSoonPromo variant="section" />
 
                     {/* system health (moved from Workspace › Engine & Risk) */}
                     <div data-testid="account-system-health">
