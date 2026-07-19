@@ -266,6 +266,8 @@ function ContextInfo({ active, portfolio }) {
                     <Metric label="INVESTED" value={invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} big />
                     <Metric label="CURRENT" value={current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
                     <Metric label="P&L" value={`${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`} sub={`${pnl >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} cls={cls} />
+                    {/* per-tab primary action(s) portal here (Stop Ananta) */}
+                    <div id="header-action-slot" data-testid="header-action-slot" className="ml-auto shrink-0 self-center flex items-center gap-2" />
                 </div>
             </div>
         );

@@ -1158,3 +1158,12 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Card tap opens detail: internal engine -> /strategy/{engine_key}, catalog/user-added -> /library/{id}. Optimistic status flip on deploy.
 - Clone (Copy Existing) / Rename / Delete / Test-in-Lab were already implemented on mobile (Phase 2) and re-verified working after the grid rewrite.
 - Verified by testing_agent (iteration_67): 16-card 2-col grid, no segmented/leaderboard, search+filter (38 facets), Add>Copy Existing clone (16->17 + refresh), clone detail COPY badge + rename + delete + Test-in-Lab navigation, core engine deep links (hunter/squeeze/continuation) render without crash. No regressions. Cleaned up the leftover test clone via DELETE /api/library/{id}.
+
+### 2026-06-19 — WEB UI cleanups + 4-step onboarding (web+mobile parity)
+- WEB Trade tab (frontend/src/pages/Trade.jsx): removed FRESH START button + freshStart() + RotateCcw import; toolbar now only PDF + REFRESH. Moved STOP ANANTA into the shared top-header slot via HeaderActionPortal as a compact red pill (label toggles STOP ANANTA <-> RESUME).
+- WEB AppShell.jsx: fixed missing #header-action-slot on the Trade tab (ContextInfo trade branch returned early) so the STOP ANANTA portal mounts. Verified via screenshot (owner).
+- WEB Strategy Center cards (StrategyCenter.jsx LibraryCard): removed the two-button EDIT+DEPLOY footer -> single bottom action (DEPLOY/MANAGE/VIEW); moved EDIT to a small pencil icon top-right next to the status pill (data-testid card-edit-<id>). Reference-only cards keep the dashed note.
+- WEB onboarding provisioning (OnboardingPipeline.jsx): collapsed 9 steps -> 4 (Account & Exchange / Portfolio & Strategy / Validate & AI Review / Go Live), each with 2 sub-lines.
+- MOBILE: new src/components/ProvisioningPipeline.tsx — animated 4-step provisioning overlay mirroring web, wired into onboarding.tsx (shown on startPaper success -> ENTER ANANTA navigates to tabs).
+- Verified by testing_agent iteration_68 (web+mobile): all items PASS after the header-slot fix. No console errors.
+- OPEN: marketing promo image /promo/coming-soon.jpg is a baked AI-generated JPG with text artifacts ("Verification Badlys", garbled background phone text) — cannot be fixed in code; needs image regeneration or an HTML/CSS rebuild.
