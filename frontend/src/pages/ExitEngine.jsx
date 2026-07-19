@@ -5,10 +5,10 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useAppData } from "@/context/AppDataContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import SettingsPage from "@/pages/Settings";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 import AnantaPdfs from "@/components/AnantaPdfs";
 import ExitEngineWorkflow from "@/components/ExitEngineWorkflow";
+import RiskMonitorPanel from "@/components/RiskMonitorPanel";
 
 export default function ExitEngine() {
     const { isOwner } = useAuth();
@@ -57,7 +57,7 @@ export default function ExitEngine() {
                 </TabsContent>
 
                 <TabsContent value="risk" className="m-0">
-                    <SettingsPage onGotoExitEngine={() => { setTab("engine"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                    <RiskMonitorPanel />
                 </TabsContent>
 
                 <TabsContent value="ai" className="m-0 space-y-6">

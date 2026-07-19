@@ -96,7 +96,7 @@ export default function ExitEngine() {
 
         {view === "ai" && (<><BackHeader onBack={() => setView("home")} /><AiAnalysis isOwner={isOwner} trades={trades} /></>)}
 
-        {view === "risk" && (<><BackHeader onBack={() => setView("home")} /><RiskMonitor isOwner={isOwner} settings={settings} setSettings={setSettings} onGotoEngine={backHome} /></>)}
+        {view === "risk" && (<><BackHeader onBack={() => setView("home")} /><RiskMonitor isOwner={isOwner} settings={settings} setSettings={setSettings} /></>)}
       </ScrollView>
 
       <AskAnanta tab="workspace" routeName="workspace" />
@@ -446,7 +446,7 @@ function AiAnalysis({ isOwner, trades }: { isOwner: boolean; trades: any[] }) {
   );
 }
 
-function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner: boolean; settings: any; setSettings: (s: any) => void; onGotoEngine: () => void }) {
+function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; settings: any; setSettings: (s: any) => void }) {
   const [risk, setRisk] = useState<any>(null);
   useEffect(() => {
     api.riskStatus().then(setRisk).catch(() => {});
@@ -457,6 +457,10 @@ function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner
   const save = async (k: string, v: string) => {
     if (!isOwner) return Alert.alert("Owner login required");
     try { const s = await api.updateSettings({ [k]: parseFloat(v) }); setSettings(s); } catch (e: any) { Alert.alert("Save failed", e?.message); }
+  };
+  const saveBool = async (k: string, v: boolean) => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    try { const s = await api.updateSettings({ [k]: v }); setSettings(s); } catch (e: any) { Alert.alert("Save failed", e?.message); }
   };
   const toggleKill = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
@@ -473,16 +477,25 @@ function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner
 
   return (
     <View>
-      <Card testID="rm-engine-summary" style={{ marginBottom: spacing.md }}>
-        <View style={styles.rowBetween}>
-          <SectionLabel>ENTRY & EXIT ENGINE</SectionLabel>
-          <Pressable testID="rm-goto-engine" onPress={onGotoEngine} style={styles.linkBtn}>
-            <Text style={styles.linkTxt}>Configure in Exit Engine</Text>
-            <Ionicons name="arrow-forward" size={13} color={colors.teal} />
-          </Pressable>
-        </View>
+      {/* ENTRY SETUP — rules that decide WHEN Ananta opens a new position */}
+      <Card testID="rm-entry-setup" style={{ marginBottom: spacing.md }}>
+        <SectionLabel>ENTRY SETUP</SectionLabel>
+        <Text style={[type.small, { marginTop: 4, marginBottom: spacing.sm, lineHeight: 17 }]}>
+          Rules that decide when Ananta opens a new position.
+        </Text>
+        <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={save} />
+        <ToggleRow label="HTF Trend Filter" desc="Require price > 4h EMA50 > EMA200" k="htf_trend_enabled" value={settings.htf_trend_enabled} isOwner={isOwner} onSave={saveBool} />
+        <ToggleRow label="Support / Level Entry" desc="Only enter at clean historical support zones" k="level_entry_enabled" value={settings.level_entry_enabled} isOwner={isOwner} onSave={saveBool} />
+        <ToggleRow label="Adaptive Sizing" desc="Size the lot by setup strength" k="adaptive_sizing_enabled" value={settings.adaptive_sizing_enabled} isOwner={isOwner} onSave={saveBool} />
+        <NumRow label="Breakout Min Confidence" k="breakout_min_confidence" value={settings.breakout_min_confidence} isOwner={isOwner} onSave={save} />
+        <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={save} />
+      </Card>
+
+      {/* ACTIVE EXIT ENGINE — read-only summary (configured in the Exit Engine flow) */}
+      <Card testID="rm-active-exit" style={{ marginBottom: spacing.md }}>
+        <SectionLabel>ACTIVE EXIT ENGINE</SectionLabel>
         <View style={styles.rmStatusRow}>
-          <Text style={styles.rmStatusLabel}>ACTIVE EXIT ENGINE</Text>
+          <Text style={styles.rmStatusLabel}>STATUS</Text>
           <Text style={[styles.rmStatusVal, { color: colors.teal }]}>{engineName} ●</Text>
         </View>
         <SummaryRow label="Trail Multiplier" value={`${trailMult}x`} />
@@ -490,6 +503,7 @@ function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner
         <SummaryRow label="Hard Stop-Loss" value={`${settings.stop_loss_pct}%`} />
       </Card>
 
+      {/* SAFEGUARDS — account-level protection */}
       <Card testID="rm-safeguards">
         <View style={styles.rowBetween}>
           <SectionLabel>RISK MONITOR · SAFEGUARDS</SectionLabel>
@@ -502,10 +516,8 @@ function RiskMonitor({ isOwner, settings, setSettings, onGotoEngine }: { isOwner
           <Text style={styles.rmStatusLabel}>RISK STATUS</Text>
           <Text style={[styles.rmStatusVal, { color: safe ? colors.teal : colors.red }]}>{safe ? "Protected ●" : "Alert ●"}</Text>
         </View>
-        <NumRow label="Min Confidence" k="min_confidence" value={settings.min_confidence} isOwner={isOwner} onSave={save} />
         <NumRow label="Daily Loss Cap %" k="max_daily_loss_pct" value={settings.max_daily_loss_pct} isOwner={isOwner} onSave={save} />
         <NumRow label="Max Spread %" k="max_spread_pct" value={settings.max_spread_pct} isOwner={isOwner} onSave={save} />
-        <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={save} />
         <NumRow label="Normal Lot (USD)" k="normal_lot_usd" value={settings.normal_lot_usd} isOwner={isOwner} onSave={save} />
       </Card>
     </View>
@@ -550,6 +562,22 @@ function NumRow({ label, k, value, isOwner, onSave }: any) {
   );
 }
 
+function ToggleRow({ label, desc, k, value, isOwner, onSave }: any) {
+  const on = !!value;
+  return (
+    <View style={styles.toggleRow}>
+      <View style={{ flex: 1, paddingRight: spacing.sm }}>
+        <Text style={[type.body]}>{label}</Text>
+        {!!desc && <Text style={[type.small, { marginTop: 2, lineHeight: 16 }]}>{desc}</Text>}
+      </View>
+      <Pressable testID={`rm-toggle-${k}`} disabled={!isOwner} onPress={() => onSave(k, !on)}
+        style={[styles.switch, on && styles.switchOn, !isOwner && { opacity: 0.5 }]}>
+        <View style={[styles.knob, on && styles.knobOn]} />
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.lg },
@@ -580,8 +608,6 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   advBtn: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
   advTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.5 },
-  linkBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  linkTxt: { color: colors.teal, fontWeight: "800", fontSize: 11, letterSpacing: 0.3 },
   rmStatusRow: { paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder, marginTop: 4 },
   rmStatusLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
   rmStatusVal: { fontSize: 18, fontWeight: "800", marginTop: 4 },
@@ -609,6 +635,11 @@ const styles = StyleSheet.create({
   chipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11 },
   note: { color: colors.gold, fontSize: 11, marginTop: spacing.sm, marginBottom: spacing.xs },
   numRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
+  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
+  switch: { width: 46, height: 28, borderRadius: 999, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, padding: 3, justifyContent: "center" },
+  switchOn: { backgroundColor: colors.tealGlow, borderColor: colors.teal },
+  knob: { width: 20, height: 20, borderRadius: 999, backgroundColor: colors.textFaint, alignSelf: "flex-start" },
+  knobOn: { backgroundColor: colors.teal, alignSelf: "flex-end" },
   input: { width: 96, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, paddingHorizontal: spacing.sm, paddingVertical: 6, textAlign: "right", fontWeight: "700" },
   btn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.sm },
   btnPrimary: { backgroundColor: colors.teal },

@@ -1,0 +1,44 @@
+{
+  "summary": "Frontend-only review of Risk Monitor UI restructure on web + mobile Exit Engine. Verified via code inspection that the redundant loop-back 'Configure in Exit Engine' card (rm-engine-summary / rm-goto-engine) is fully removed from both platforms, the new 3-card layout (rm-entry-setup, rm-active-exit, rm-safeguards) is implemented with identical field sets on web (RiskMonitorPanel.jsx) and mobile (workspace.tsx), and all required data-testid / testID selectors are present. Live web interaction verification of owner-authenticated persistence was BLOCKED by an unrelated first-login onboarding wizard modal (Welcome -> Provisioning -> Allocate Capital -> ...) that intercepts every reload for the owner account and cannot be bypassed via localStorage alone; per loop-prevention rules I stopped after 3 attempts on that same modal chain. Main agent already smoke-verified the panel renders on web; the underlying api.updateSettings + PUT /api/settings path is unchanged (previously verified).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Owner first-login onboarding wizard blocks automated E2E in preview", "issue": "After owner login the Welcome -> Provisioning -> Paper-trade wizard (capital/allocation/strategies/summary) hijacks the DOM. localStorage flags (ananta_onboarded etc.) do not silence it, and reload always resurfaces the Welcome step. This blocked automated verification of rm-set-min_confidence edit + rm-toggle-htf_trend_enabled toggle persistence via PUT /api/settings. NOT introduced by this change — pre-existing owner onboarding behavior.", "affected_selectors": ["ananta-onboarding-*"]}
+      ],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "code_review_findings": {
+    "risk_monitor_panel_web": "RiskMonitorPanel.jsx renders 3 cards with correct test IDs and disabled={!isOwner} on all NumField/ToggleField/Stop-Ananta controls — public read-only enforced correctly. Entry Setup exposes min_confidence, htf_trend_enabled, level_entry_enabled, adaptive_sizing_enabled, breakout_min_confidence, max_concurrent_positions. Active Exit shows engine name + Trail Multiplier + Breakeven Arm + Hard Stop-Loss (read-only). Safeguards has Daily Loss Cap %, Max Spread %, Normal Lot USD + kill switch.",
+    "exit_engine_page_web": "ExitEngine.jsx risk sub-tab renders <RiskMonitorPanel /> (no embedded Settings page, no loop-back CTA). Redundant loop-back references removed from live sources; only remnants are in babel-loader cache for /app/frontend/src/pages/Settings.jsx (a separate quadrant CTA on the Settings page — unrelated).",
+    "workspace_mobile": "workspace.tsx lines 480-524 render the same 3 cards with matching testIDs. NumRow uses editable={isOwner} and ToggleRow uses disabled={!isOwner}. rm-engine-summary / rm-goto-engine removed. Entry field parity with web is complete (all 6 controls).",
+    "parity": "Web and mobile expose identical entry controls and identical read-only Active Exit display (Trail Multiplier / Breakeven Arm / Hard Stop-Loss)."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: expose a URL query / testing hook to bypass the owner onboarding wizard in the preview (e.g. ?bypass_onboarding=1) so future E2E can reach protected pages without completing 4-step wizard.",
+    "Main agent should self-verify owner persistence interactively by logging in as owner, completing the onboarding wizard ONCE (Welcome -> Enter Ananta -> $25,000 -> Continue x3 -> Enter Ananta), then editing rm-set-min_confidence + toggling rm-toggle-htf_trend_enabled and reloading to confirm PUT /api/settings persistence (previously verified backend path, minimal regression risk)."
+  ],
+  "critical_code_review_comments": [
+    "RiskMonitorPanel.jsx is 138 lines, single-purpose, DRY, uses env-based api client — clean.",
+    "Mobile controls correctly gate on isOwner; StopAnanta returns Alert.alert('Owner login required') for non-owner — good.",
+    "Suggestion (non-blocking): the STOP ANANTA button in RiskMonitorPanel calls save({...}) which will show 'Owner login required' toast for public users — consistent with rest of UI."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "Code review 100% pass; live UI persistence not verified due to owner-onboarding wizard blocker"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Owner login on preview triggers a multi-step onboarding wizard (Welcome -> Provisioning -> Allocate Capital -> Continue x3) that reappears on every hard reload and intercepts the DOM. localStorage keys tried (ananta_onboarded, ananta_provisioned, ananta_wizard_done, ananta_seen_welcome) did not silence it. To E2E-test any owner-only feature: complete the wizard interactively in the same session, or extend the app with a bypass flag. RiskMonitorPanel.jsx + workspace.tsx (lines 480-524) both reviewed — all requested testIDs present, redundant rm-goto-engine/rm-engine-summary card fully removed, mobile/web parity confirmed by code inspection.",
+  "rca of the issue": "N/A — no bug found. UI restructure implemented per spec on both platforms."
+}
