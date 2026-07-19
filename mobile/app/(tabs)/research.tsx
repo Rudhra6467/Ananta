@@ -88,12 +88,33 @@ export default function Research() {
 
 const EXIT_LABELS: Record<string, string> = { atr: "ATR Trailing", fixed: "Fixed Target" };
 
+const CORE_KEYS = ["hunter", "squeeze", "continuation"];
+
+function isLive(m: any) { return !!m?.enabled && m?.status !== "DISABLED" && m?.status !== "ERROR"; }
+
+function StratCard({ s, on, live, onPress }: { s: any; on: boolean; live: boolean; onPress: () => void }) {
+  return (
+    <Pressable testID={`wiz-strat-${s.key}`} onPress={onPress} style={[styles.stratCard, on && styles.stratCardOn]}>
+      <View style={[styles.check, on && styles.checkOn]}>{on && <Ionicons name="checkmark" size={13} color={colors.bg} />}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.stratName, on && { color: colors.text }]} numberOfLines={2}>{s.name}</Text>
+        {live && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.teal }} />
+            <Text style={{ color: colors.teal, fontSize: 9, fontWeight: "700" }}>LIVE</Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 function Validate({ isOwner }: { isOwner: boolean }) {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<Record<string, any>>({});
-  const [strat, setStrat] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
   const [period, setPeriod] = useState("1m");
-  const [exitMethods, setExitMethods] = useState<string[]>(["atr"]);
+  const [exit, setExit] = useState("atr");
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [runs, setRuns] = useState<{ method: string; label: string; result: any }[]>([]);
 
@@ -102,17 +123,13 @@ function Validate({ isOwner }: { isOwner: boolean }) {
     api.strategyMetrics().then((d: any) => setMetrics(d?.metrics || {})).catch(() => {});
   }, []);
 
-  // Pre-select a strategy when arriving from a strategy detail's "Test this strategy".
+  // Pre-select a strategy when arriving from a strategy detail's "Test in Lab".
   const params = useLocalSearchParams<{ strat?: string }>();
-  useEffect(() => { if (params?.strat) setStrat(String(params.strat)); }, [params?.strat]);
-  const selMetric = metrics[strat];
-  const selOn = !!selMetric?.enabled && selMetric?.status !== "DISABLED" && selMetric?.status !== "ERROR";
+  useEffect(() => { if (params?.strat) setSelected((prev) => (prev.includes(String(params.strat)) ? prev : [...prev, String(params.strat)])); }, [params?.strat]);
 
-  // At least one exit method must stay selected; default falls back to ATR.
-  const toggleExit = (m: string) => setExitMethods((prev) => {
-    const next = prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m];
-    return next.length === 0 ? ["atr"] : next;
-  });
+  const core = strategies.filter((s) => CORE_KEYS.includes(s.key));
+  const other = strategies.filter((s) => !CORE_KEYS.includes(s.key));
+  const toggleStrat = (key: string) => setSelected((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
 
   const pollRun = async (id: string) => {
     for (let i = 0; i < 200; i++) {
@@ -126,65 +143,46 @@ function Validate({ isOwner }: { isOwner: boolean }) {
 
   const run = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
-    if (!strat) {
+    if (selected.length === 0) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      return Alert.alert("Select a strategy", "Pick an engine to research.");
+      return Alert.alert("Select a strategy", "Pick at least one strategy to validate.");
     }
-    const methods = exitMethods.length ? exitMethods : ["atr"];
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setPhase("running"); setRuns([]);
     try {
-      const collected: { method: string; label: string; result: any }[] = [];
-      for (const method of methods) {
-        const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: [strat], exit_method: method });
-        const result = await pollRun(id);
-        collected.push({ method, label: EXIT_LABELS[method] || method, result });
-        setRuns([...collected]);
-      }
+      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: selected, exit_method: exit });
+      const result = await pollRun(id);
+      setRuns([{ method: exit, label: EXIT_LABELS[exit] || exit, result }]);
       setPhase("done");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Alert.alert("Research complete", "Your validation results are ready below.");
     } catch (e: any) { setPhase("error"); Alert.alert("Backtest failed", e?.message); }
   };
 
   return (
     <View>
       <Card style={{ marginBottom: spacing.md }} testID="research-wizard">
-        <SectionLabel>1 · STRATEGY</SectionLabel>
-        <View style={styles.chipWrap} testID="wiz-strat-grid">
-          {strategies.map((s) => {
-            const on = strat === s.key;
-            return (
-              <Pressable key={s.key} testID={`wiz-strat-${s.key}`} onPress={() => setStrat(s.key)}
-                style={[styles.chip, on && styles.chipOn]}>
-                <Text style={[styles.chipTxt, on && styles.chipTxtOn]} numberOfLines={1}>{s.name}</Text>
-              </Pressable>
-            );
-          })}
+        <Text style={styles.groupLabel}>Core Strategies</Text>
+        <View style={styles.stratGrid} testID="wiz-core-grid">
+          {core.length === 0 ? <Text style={type.small}>Loading…</Text> : core.map((s) => (
+            <StratCard key={s.key} s={s} on={selected.includes(s.key)} live={isLive(metrics[s.key])} onPress={() => toggleStrat(s.key)} />
+          ))}
         </View>
-        <View style={styles.statusLine} testID="research-strat-status">
-          <View style={[styles.statusDot, { backgroundColor: selOn ? colors.teal : colors.textFaint }]} />
-          <Text style={type.small}>Bot Status: <Text style={{ color: selOn ? colors.teal : colors.textMuted, fontWeight: "700" }}>{selOn ? "ON · live on engine" : "OFF"}</Text></Text>
+
+        <Text style={[styles.groupLabel, { marginTop: spacing.md }]}>Other Strategies</Text>
+        <View style={styles.stratGrid} testID="wiz-other-grid">
+          {other.length === 0 ? <Text style={type.small}>None yet — create or copy one.</Text> : other.map((s) => (
+            <StratCard key={s.key} s={s} on={selected.includes(s.key)} live={isLive(metrics[s.key])} onPress={() => toggleStrat(s.key)} />
+          ))}
         </View>
-        <SectionLabel style={{ marginTop: spacing.md }}>2 · PERIOD (dataset: BTC)</SectionLabel>
+
+        <Text style={[styles.groupLabel, { marginTop: spacing.lg }]}>Exit Strategy</Text>
+        <Segmented testIDPrefix="wiz-exit" options={[{ key: "atr", label: "ATR Trailing" }, { key: "fixed", label: "Fixed Target" }]} value={exit} onChange={setExit} />
+
+        <Text style={[styles.groupLabel, { marginTop: spacing.md }]}>Test Window · BTC</Text>
         <Segmented testIDPrefix="wiz-period" options={PERIODS} value={period} onChange={setPeriod} />
-        <SectionLabel style={{ marginTop: spacing.md }}>3 · EXIT STRATEGY</SectionLabel>
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          {[{ k: "atr", t: "ATR Trailing", d: "Volatility-adaptive (default)" }, { k: "fixed", t: "Fixed Target", d: "Fixed $ target / stop" }].map((em) => {
-            const on = exitMethods.includes(em.k);
-            return (
-              <Pressable key={em.k} testID={`wiz-exit-${em.k}`} onPress={() => toggleExit(em.k)}
-                style={[styles.exitCard, on && styles.exitCardOn]}>
-                <View style={[styles.check, on && styles.checkOn]}>{on && <Ionicons name="checkmark" size={12} color={colors.bg} />}</View>
-                <Text style={[type.body, { fontWeight: "700", fontSize: 13 }]}>{em.t}</Text>
-                <Text style={[type.small, { fontSize: 10, marginTop: 2 }]}>{em.d}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={[type.small, { fontSize: 10, marginTop: 6 }]}>{exitMethods.length === 2 ? "Both selected — each exit is run & reported separately." : "Tick both to compare exits side-by-side."}</Text>
-        <Pressable testID="wizard-run" onPress={run} disabled={phase === "running"} style={styles.runBtn}>
-          {phase === "running" ? <ActivityIndicator color={colors.bg} /> : <><Ionicons name="rocket" size={16} color={colors.bg} /><Text style={styles.runTxt}>RUN VALIDATION</Text></>}
+
+        <Pressable testID="wizard-run" onPress={run} disabled={phase === "running" || selected.length === 0} style={[styles.runBtn, { marginTop: spacing.lg }, selected.length === 0 && { opacity: 0.5 }]}>
+          {phase === "running" ? <ActivityIndicator color={colors.bg} /> : <><Ionicons name="rocket" size={16} color={colors.bg} /><Text style={styles.runTxt}>RUN VALIDATION{selected.length > 1 ? ` · ${selected.length}` : ""}</Text></>}
         </Pressable>
       </Card>
       {phase === "running" && <Card style={{ alignItems: "center", paddingVertical: spacing.lg }}><ActivityIndicator color={colors.teal} /><Text style={[type.bodyMuted, { marginTop: spacing.sm }]}>Running backtest…</Text></Card>}
@@ -562,4 +560,9 @@ const styles = StyleSheet.create({
   healthMeta: { flex: 1, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm },
   reportRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.cardBorder },
   iconBtn: { width: 34, height: 34, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
+  groupLabel: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: spacing.sm },
+  stratGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  stratCard: { width: "47.8%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm + 2, backgroundColor: colors.bgElevated },
+  stratCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  stratName: { color: colors.textMuted, fontSize: 13, fontWeight: "700" },
 });
