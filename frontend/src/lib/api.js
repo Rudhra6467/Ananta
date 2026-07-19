@@ -198,6 +198,7 @@ export const api = {
         client.post(`/library/${id}/backtest`, null, { params: { symbol, days } }).then((r) => r.data),
     libraryFacets: () => client.get("/library/facets").then((r) => r.data),
     libraryFavorite: (id) => client.post(`/library/${id}/favorite`).then((r) => r.data),
+    libraryClone: (id, name) => client.post(`/library/${id}/clone`, { name: name || null }).then((r) => r.data),
     libraryAiGrade: (id) => client.post(`/library/${id}/ai-grade`).then((r) => r.data),
     // Strategy Import Pipeline (P2)
     importFormats: () => client.get("/library/import/formats").then((r) => r.data),

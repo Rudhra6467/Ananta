@@ -3168,6 +3168,73 @@ async def library_favorite(strategy_id: str):
     return {"id": strategy_id, "favorite": fav}
 
 
+class CloneRequest(BaseModel):
+    name: str | None = None
+
+
+@api_router.post("/library/{strategy_id}/clone", dependencies=[Depends(require_owner)])
+async def library_clone(strategy_id: str, body: CloneRequest = CloneRequest()):
+    """Copy an existing RULE-BASED (declarative) strategy into a new, independently-editable
+    library entry. Core engine strategies (Hunter/Squeeze/Continuation) use hardcoded logic and
+    cannot be cloned. The copy is wired via the declarative engine exactly like an import, so it
+    survives restarts (rehydrated on startup) and can be tuned without affecting the original."""
+    from strategy.declarative_defs import get_declarative_spec, register_imported  # noqa: PLC0415
+    from strategy_runtime import resolve_full_params  # noqa: PLC0415
+
+    src = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="strategy not found")
+
+    ekey = src.get("engine_key")
+    spec = src.get("declarative_spec") or (get_declarative_spec(ekey) if ekey else None)
+    if not (spec and spec.get("entry")):
+        raise HTTPException(status_code=400, detail=(
+            "Only rule-based strategies can be copied. Core engine strategies "
+            "(Hunter, Squeeze, Continuation) use built-in logic — create a new strategy instead."))
+
+    params = dict(src.get("engine_params") or {})
+    if not params and ekey:
+        try:
+            params = await resolve_full_params(db, ekey)
+        except Exception:  # noqa: BLE001
+            params = {}
+
+    base_name = ((body.name or "").strip() or f"{src.get('name', 'Strategy')} (Copy)")[:80]
+    new_key = f"clone-{uuid.uuid4().hex[:8]}"
+    desc = src.get("description") or ""
+    register_imported(new_key, base_name, desc, spec, params)
+
+    now = _strat_now_iso()
+    new_doc = {**src}
+    new_doc.pop("_id", None)
+    new_doc.update({
+        "id": new_key,
+        "name": base_name,
+        "engine_key": new_key,
+        "wireable": True,
+        "internal": False,
+        "imported": True,
+        "declarative_spec": spec,
+        "engine_params": params,
+        "origin": "clone",
+        "cloned_from": strategy_id,
+        "cloned_from_name": src.get("name"),
+        "favorite": False,
+        "active_config_id": None,
+        "enabled": False,
+        "reference_only": False,
+        "historical_results": None,
+        "backtested": False,
+        "backtest_meta": None,
+        "created_at": now,
+        "updated_at": now,
+    })
+    await db.strategy_library.insert_one({**new_doc})
+    new_doc.pop("_id", None)
+    return {"cloned": True, "id": new_key, "strategy": new_doc}
+
+
+
 @api_router.post("/library/{strategy_id}/ai-grade", dependencies=[Depends(require_owner)])
 async def library_ai_grade(strategy_id: str):
     """Re-grade a library strategy with the AI (Claude) over its logic + seeded results.

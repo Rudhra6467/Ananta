@@ -1,0 +1,33 @@
+{
+  "summary": "Iter65 — 'Copy Existing' (Clone) end-to-end verified on web. Backend 5/5 pytest cases pass: POST /api/library/{id}/clone on rule-based sources returns 200 with a new clone-* id (new engine_key, wireable=true, origin='clone', cloned_from set, name '<Name> (Copy)', declarative_spec+engine_params present); POST on core (hunter/squeeze/continuation) -> 400 with clear 'Only rule-based strategies can be copied' message; missing strategy -> 404; unauthenticated -> 401; custom name honoured. Cloned strategy appears in GET /api/library AND is wired in /api/strategy/registry with the new engine_key (independently editable). Frontend: on Strategy Center, Add (data-testid strategy-add-btn) opens chooser with all 3 options (add-option-create, add-option-clone, add-option-import). Clicking add-option-clone opens clone-strategy-picker listing 12 cloneable rule-based strategies; hunter/squeeze/continuation correctly excluded. Tapping clone-option-ema-cross calls the clone API and the strategy-grid grew from 16 -> 17 cards with a new '(Copy)' card visible. Toast fires from code (toast.success in doClone) — probe was empty at t+4.5s due to sonner auto-dismiss, not a bug. Cleanup: db.strategy_library.delete_many({'origin':'clone'}) removed remaining clone rows post-run.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter65_library_clone.py",
+    "/app/test_reports/pytest/iter65_clone.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CloneStrategyPicker uses `disabled={busy}` (truthy string id) on ALL clone buttons — behaviourally correct (prevents double-submit while any clone is in flight) but semantically the intent looks like 'disable only the row being cloned'. Consider `disabled={busy === s.id}` if you want other rows still tappable, or leave as-is if the single-in-flight guard is the desired UX. Not a bug.",
+    "server.py library_clone (~L3208): new_doc = {**src} is fine because src was queried with {'_id': 0}. insert_one is called with {**new_doc} so pymongo mutation cannot leak into the returned object. No ObjectId in the response. Good.",
+    "server.py library_clone: engine_params fallback uses resolve_full_params which can raise; the try/except swallows all exceptions and returns {}. If the source's params really can't be resolved this silently produces a clone with an empty params dict. Consider logging the exception at debug level so future issues are traceable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter65_library_clone.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None persistent. Backend tests created 3 clone rows via API (module-scoped fixture teardown deleted them); UI test created 1 clone (ema-cross copy) which was cleaned via db.strategy_library.delete_many({'origin':'clone'}) post-run. Library is back to its pre-test state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend uvicorn runs with --reload and watches /app/backend/tests/. If POSTs start timing out with 30s ReadTimeout after touching a test file, run `sudo supervisorctl restart backend` and sleep 25s before rerunning. conftest.py autouse fixture injects the owner Bearer token onto MUTATING requests only — for 401/403 unauthenticated assertions on POST use urllib directly (see _raw_post helper in test_iter65_library_clone.py). To reach Strategy Center in the web UI programmatically after login+onboarding, dispatch: window.dispatchEvent(new CustomEvent('ananta:navigate',{detail:{tabId:'strategies'}})) — tabs are index-based, not URL-routed.",
+  "rca of the issue": ""
+}

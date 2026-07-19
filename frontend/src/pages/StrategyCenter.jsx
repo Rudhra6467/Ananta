@@ -101,6 +101,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     const [favOnly, setFavOnly] = useState(false);
     const [showFilter, setShowFilter] = useState(false);
     const [addChooser, setAddChooser] = useState(false);
+    const [cloneOpen, setCloneOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
 
     const activeCount = Object.values(filters).reduce((n, v) => n + v.length, 0) + (favOnly ? 1 : 0);
@@ -154,7 +155,11 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
 
             <AddStrategyChooser open={addChooser} onOpenChange={setAddChooser}
                 onImport={() => { setAddChooser(false); onImport(); }}
-                onCreate={() => { setAddChooser(false); onBuild(); }} />
+                onCreate={() => { setAddChooser(false); onBuild(); }}
+                onClone={() => { setAddChooser(false); setCloneOpen(true); }} />
+
+            <CloneStrategyPicker open={cloneOpen} onOpenChange={setCloneOpen} lib={lib}
+                onCloned={() => { setCloneOpen(false); load(); }} />
 
             {showFilter && (
                 <FilterDrawer facets={facets} filters={filters} favOnly={favOnly} activeCount={activeCount}
@@ -172,7 +177,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
 }
 
 /* Add-strategy chooser — clean, guided options (AI demoted to a secondary link). */
-function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
+function AddStrategyChooser({ open, onOpenChange, onImport, onCreate, onClone }) {
     return (
         <LabModal open={open} onOpenChange={onOpenChange} icon={Plus} title="Add a strategy"
             subtitle="Pick how you want to start — you can refine everything afterwards." testid="add-strategy-chooser">
@@ -185,6 +190,15 @@ function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
                         <span className="block font-mono text-[11px] text-atlas-textTertiary mt-1 leading-relaxed">Build rules step-by-step in the guided builder.</span>
                     </span>
                     <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-cyan transition-colors" />
+                </button>
+                <button data-testid="add-option-clone" onClick={onClone}
+                    className="group w-full text-left rounded-xl border border-atlas-border px-4 py-5 flex items-center gap-3.5 hover:bg-atlas-panelHover transition-colors">
+                    <span className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border shrink-0"><Copy className="w-5 h-5 text-atlas-cyan" /></span>
+                    <span className="min-w-0">
+                        <span className="block font-heading text-sm text-atlas-text">Copy Existing</span>
+                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-1 leading-relaxed">Duplicate a rule-based strategy as a starting point, then tweak it.</span>
+                    </span>
+                    <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-text transition-colors" />
                 </button>
                 <button data-testid="add-option-import" onClick={onImport}
                     className="group w-full text-left rounded-xl border border-atlas-border px-4 py-5 flex items-center gap-3.5 hover:bg-atlas-panelHover transition-colors">
@@ -202,6 +216,53 @@ function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
                     </button>
                 </div>
             </div>
+        </LabModal>
+    );
+}
+
+/* Copy-existing picker — lists rule-based strategies that can be duplicated. */
+function CloneStrategyPicker({ open, onOpenChange, lib, onCloned }) {
+    const [busy, setBusy] = useState(null); // id being cloned
+    const cloneable = (lib || []).filter((s) => s.wireable && !s.internal && !s.reference_only);
+
+    const doClone = async (s) => {
+        setBusy(s.id);
+        try {
+            const res = await api.libraryClone(s.id);
+            toast.success(`Copied — "${res?.strategy?.name || s.name}" added to your library`);
+            onCloned();
+        } catch (e) {
+            toast.error(String(e?.response?.data?.detail || e?.message || "Couldn't copy that strategy"));
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    return (
+        <LabModal open={open} onOpenChange={onOpenChange} icon={Copy} title="Copy an existing strategy"
+            subtitle="Pick a rule-based strategy to duplicate. You'll get an editable copy you can tune freely." testid="clone-strategy-picker">
+            {cloneable.length === 0 ? (
+                <div className="py-8 text-center font-mono text-[11px] text-atlas-textTertiary" data-testid="clone-empty">
+                    No rule-based strategies available to copy yet. Core engine strategies (Hunter, Squeeze, Continuation) use built-in logic and can&apos;t be copied.
+                </div>
+            ) : (
+                <div className="space-y-2 max-h-[24rem] overflow-y-auto atlas-scroll p-1">
+                    {cloneable.map((s) => {
+                        const Icon = ICONS[s.engine_key] || Copy;
+                        return (
+                            <button key={s.id} data-testid={`clone-option-${s.id}`} onClick={() => doClone(s)} disabled={busy}
+                                className="group w-full text-left rounded-xl border border-atlas-border px-3.5 py-3 flex items-center gap-3 hover:border-atlas-cyan/40 hover:bg-atlas-panelHover transition-colors disabled:opacity-50">
+                                <span className="w-9 h-9 rounded-lg grid place-items-center border border-atlas-border bg-atlas-cyan/5 shrink-0"><Icon className="w-4 h-4 text-atlas-cyan" /></span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block font-heading text-sm text-atlas-text truncate">{s.name}</span>
+                                    <span className="block font-mono text-[10px] text-atlas-textTertiary truncate">{s.style || s.category || "Rule-based"}</span>
+                                </span>
+                                {busy === s.id ? <Loader2 className="w-4 h-4 animate-spin text-atlas-cyan shrink-0" /> : <Copy className="w-4 h-4 text-atlas-textTertiary group-hover:text-atlas-cyan shrink-0" />}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
         </LabModal>
     );
 }
