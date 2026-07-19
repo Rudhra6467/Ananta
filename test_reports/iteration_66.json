@@ -1,0 +1,34 @@
+{
+  "summary": "Mobile-only visual + functional verification of the redesigned Validate wizard (Research Lab) and the Cockpit Strategy Health card. Full onboarding flow completed with owner login. All six Research Lab sub-tabs render without crash. Validate tab correctly shows a bordered 'Core Strategies' group (Hunter / Volatility Squeeze / Continuation) with checkbox on the right (teal border + filled teal checkmark when selected) and an 'Other Strategies' group of compact, centered, checkbox-less cards that toggle to teal border + teal text. Exit Strategy segmented (ATR Trailing / Fixed Target) and Test Window segmented (1M/3M/6M/1Y) render with correct testIDs. RUN VALIDATION button is aria-disabled with nothing selected and shows a live count (e.g. 'RUN VALIDATION · 2') after selection. Cockpit Strategy Health card renders with correct title + 'View Health' pill button; tapping it navigates to Research > Health as intended. The recommended-state UI (teal icon + GREEN 'RECOMMENDED' badge + large P&L) could NOT be visually verified in this run because /api/lab/health currently returns 0 recommended strategies (all 15 strategies show 'NOT RECOMMENDED CURRENTLY'); the empty state 'No strategies currently recommended for paper trading' renders correctly per code. Code review of HealthMini confirms the icon uses colors.teal, badge uses colors.green (#2FA84F, solid), miniName is 20px/800, and pnl is 26px/800 — matching the mockup.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Research > Validate > Core Strategies", "issues": ["With three core strategies at width 47.8% + flexGrow 1, layout wraps to a 2 + 1 grid (Hunter/Squeeze on row 1, Continuation alone on row 2 taking full width). This still looks clean but diverges slightly from a pure 'side-by-side' presentation — main agent may want an explicit 3-column layout on wider viewports or to keep the 3rd card at the same 47.8% width without flexGrow to avoid the lone stretched card. Reference: /app/mobile/app/(tabs)/research.tsx:573"]},
+        {"screen": "Cockpit > Strategy Health card", "issues": ["Recommended-state (two teal-icon cards + green RECOMMENDED badge + large P&L) could not be observed with live data — every strategy in the current sweep is 'NOT RECOMMENDED CURRENTLY'. Empty-state copy 'No strategies currently recommended for paper trading' is rendered instead. Consider seeding at least one 'positive'-tone health entry, or provide a preview/skeleton variant so E1 can visually QA the recommended layout."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "Consider seeding /api/lab/health with at least one recommended strategy so the Cockpit Strategy Health card's recommended-state (teal icon + GREEN badge + large P&L) can be visually verified end-to-end.",
+    "Optional: adjust Core Strategies grid so an odd count (3) doesn't produce a full-width stretched 3rd card — either fix each core card at ~47.8% without flexGrow, or use a 3-column layout when >= 3 cores exist."
+  ],
+  "critical_code_review_comments": [
+    "research.tsx is now 583 lines and mixes 6 sub-screens (Validate/Health/Coach/ClosedTrades/Reports/Optimization) in one file. Split each screen into its own file under /app/mobile/src/components/research/ to stay under the 700-line rule and keep churn localised.",
+    "In Validate the strategy filter uses hardcoded CORE_KEYS = ['hunter','squeeze','continuation']. If the backend ever renames a core key this will silently drop the card into the Other grid; consider driving the grouping from a server-provided 'is_core' flag on /api/strategy/registry."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped per request)", "frontend": "100% for tested surfaces" },
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from review request)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Onboarding is 4-step: Welcome -> Start Paper Trading -> (3 sub-steps in Wizard) select at least one strategy (e.g. Hunter) -> Continue -> Review & Start -> Start Paper Trading. Expo web preview typically needs ~25-30s after login before authenticated route tree becomes interactive; then another ~10s after 'Start Paper Trading' before cockpit renders. Live sweep currently has 0 recommended strategies so Cockpit Strategy Health card renders empty-state only; if E1 wants to QA the recommended UI, either seed a positive-tone entry or force a sweep that produces one.",
+  "rca of the issue": "Not applicable — no bugs found. The only observable 'gap' (Cockpit Strategy Health shows empty state) is a data condition, not a code defect: /api/lab/health returns 15 strategies with tone != 'positive', and StrategyHealthCard correctly filters to positive-tone recommendations, so the empty state is shown by design."
+}

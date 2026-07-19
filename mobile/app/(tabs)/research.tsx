@@ -92,19 +92,27 @@ const CORE_KEYS = ["hunter", "squeeze", "continuation"];
 
 function isLive(m: any) { return !!m?.enabled && m?.status !== "DISABLED" && m?.status !== "ERROR"; }
 
-function StratCard({ s, on, live, onPress }: { s: any; on: boolean; live: boolean; onPress: () => void }) {
+function CoreStratCard({ s, on, live, onPress }: { s: any; on: boolean; live: boolean; onPress: () => void }) {
   return (
-    <Pressable testID={`wiz-strat-${s.key}`} onPress={onPress} style={[styles.stratCard, on && styles.stratCardOn]}>
-      <View style={[styles.check, on && styles.checkOn]}>{on && <Ionicons name="checkmark" size={13} color={colors.bg} />}</View>
+    <Pressable testID={`wiz-strat-${s.key}`} onPress={onPress} style={[styles.coreCard, on && styles.coreCardOn]}>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[styles.stratName, on && { color: colors.text }]} numberOfLines={2}>{s.name}</Text>
+        <Text style={styles.coreName} numberOfLines={2}>{s.name}</Text>
         {live && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.teal }} />
-            <Text style={{ color: colors.teal, fontSize: 9, fontWeight: "700" }}>LIVE</Text>
+          <View style={styles.liveRow}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveTxt}>LIVE</Text>
           </View>
         )}
       </View>
+      <View style={[styles.check, on && styles.checkOn]}>{on && <Ionicons name="checkmark" size={14} color={colors.bg} />}</View>
+    </Pressable>
+  );
+}
+
+function OtherStratCard({ s, on, onPress }: { s: any; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable testID={`wiz-strat-${s.key}`} onPress={onPress} style={[styles.otherCard, on && styles.otherCardOn]}>
+      <Text style={[styles.otherName, on && styles.otherNameOn]} numberOfLines={1}>{s.name}</Text>
     </Pressable>
   );
 }
@@ -164,14 +172,14 @@ function Validate({ isOwner }: { isOwner: boolean }) {
         <Text style={styles.groupLabel}>Core Strategies</Text>
         <View style={styles.stratGrid} testID="wiz-core-grid">
           {core.length === 0 ? <Text style={type.small}>Loading…</Text> : core.map((s) => (
-            <StratCard key={s.key} s={s} on={selected.includes(s.key)} live={isLive(metrics[s.key])} onPress={() => toggleStrat(s.key)} />
+            <CoreStratCard key={s.key} s={s} on={selected.includes(s.key)} live={isLive(metrics[s.key])} onPress={() => toggleStrat(s.key)} />
           ))}
         </View>
 
         <Text style={[styles.groupLabel, { marginTop: spacing.md }]}>Other Strategies</Text>
         <View style={styles.stratGrid} testID="wiz-other-grid">
           {other.length === 0 ? <Text style={type.small}>None yet — create or copy one.</Text> : other.map((s) => (
-            <StratCard key={s.key} s={s} on={selected.includes(s.key)} live={isLive(metrics[s.key])} onPress={() => toggleStrat(s.key)} />
+            <OtherStratCard key={s.key} s={s} on={selected.includes(s.key)} onPress={() => toggleStrat(s.key)} />
           ))}
         </View>
 
@@ -542,7 +550,7 @@ const styles = StyleSheet.create({
   chipTxtOn: { color: colors.teal },
   exitCard: { flex: 1, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.sm + 2 },
   exitCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
-  check: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: colors.textFaint, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  check: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: colors.textFaint, alignItems: "center", justifyContent: "center" },
   checkOn: { backgroundColor: colors.teal, borderColor: colors.teal },
   exitTag: { alignSelf: "flex-start", borderWidth: 1, borderColor: colors.tealDim, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: spacing.sm },
   exitTagTxt: { color: colors.teal, fontWeight: "800", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase" },
@@ -562,7 +570,14 @@ const styles = StyleSheet.create({
   iconBtn: { width: 34, height: 34, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
   groupLabel: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: spacing.sm },
   stratGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  stratCard: { width: "47.8%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm + 2, backgroundColor: colors.bgElevated },
-  stratCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
-  stratName: { color: colors.textMuted, fontSize: 13, fontWeight: "700" },
+  coreCard: { width: "47.8%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.bgElevated, minHeight: 58 },
+  coreCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  coreName: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  liveRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.teal },
+  liveTxt: { color: colors.teal, fontSize: 9, fontWeight: "700" },
+  otherCard: { width: "47.8%", flexGrow: 1, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, backgroundColor: colors.card, minHeight: 50 },
+  otherCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  otherName: { color: colors.textMuted, fontSize: 13, fontWeight: "700", textAlign: "center" },
+  otherNameOn: { color: colors.teal },
 });

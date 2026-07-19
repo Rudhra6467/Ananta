@@ -16,6 +16,9 @@ export const colors = {
   tealDim: "#0E9C8C",
   tealGlow: "rgba(20,224,201,0.12)",
 
+  green: "#2FA84F", // recommendation badge green
+  greenGlow: "rgba(47,168,79,0.15)",
+
   gold: "#E5B84B", // imperial gold — branding/logo ONLY
 
   red: "#FF5A6A", // losses / warnings
