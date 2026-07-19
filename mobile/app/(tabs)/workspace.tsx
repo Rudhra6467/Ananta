@@ -2,21 +2,19 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import api from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { Card, SectionLabel } from "../../src/components/Card";
-import { PageHeader } from "../../src/components/PageHeader";
-import { Segmented } from "../../src/components/Segmented";
 import { AskAnanta } from "../../src/components/AskAnanta";
-import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 
 const SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const CORE = ["hunter", "squeeze", "continuation"];
 const SCOPES = [
-  { id: "strategy", name: "Modify Exit for a Strategy", label: "Strategy", icon: "layers-outline", desc: "Apply this exit to one alpha model (Hunter / Squeeze / Continuation)." },
-  { id: "coin", name: "Modify Exit for a Specific Coin", label: "Specific Coin", icon: "logo-bitcoin", desc: "Override the exit for a single market, e.g. BTC/USD." },
-  { id: "global", name: "Modify Global Exit", label: "Global", icon: "globe-outline", desc: "The default exit for all strategies and coins." },
+  { id: "strategy", name: "Modify for a Strategy", label: "Strategy", icon: "layers-outline", desc: "Apply this exit to one alpha model (Hunter / Squeeze / Continuation)." },
+  { id: "coin", name: "Modify for a Specific Coin", label: "Specific Coin", icon: "logo-bitcoin", desc: "Override the exit for a single market, e.g. BTC/USD." },
+  { id: "global", name: "Modify Global Default", label: "Global", icon: "globe-outline", desc: "The default exit for all strategies and coins." },
 ];
 const METHODS = [
   { id: "fixed_pct", name: "Fixed % Target + Stop", desc: "Simple target and stop. Best for beginners.", icon: "flag-outline", engine: "fixed" },
@@ -51,31 +49,54 @@ const FIELDS: Record<string, { k: string; label: string }[]> = {
 
 export default function ExitEngine() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { isOwner } = useAuth();
-  const [sub, setSub] = useState("engine");
+  const [view, setView] = useState<"home" | "edit" | "strategy" | "coin" | "global" | "ai" | "risk">("home");
   const [settings, setSettings] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
 
+  const loadSettings = () => api.settings().then(setSettings).catch(() => {});
   useEffect(() => {
-    api.settings().then(setSettings).catch(() => {});
+    loadSettings();
     api.trades(60).then((t: any) => setTrades(Array.isArray(t) ? t : (t.items || t.trades || []))).catch(() => {});
   }, []);
+
+  const killed = !!settings?.manual_kill_switch;
+  const toggleKill = async () => {
+    if (!isOwner) return Alert.alert("Owner login required", "Log in as the owner to stop/resume Ananta.");
+    try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); }
+    catch (e: any) { Alert.alert("Failed", e?.message); }
+  };
+
+  const inWizard = view === "edit" || view === "strategy" || view === "coin" || view === "global";
+  const wizardScope = view === "strategy" ? "strategy" : view === "coin" ? "coin" : "global";
+  const backHome = () => { setView("home"); loadSettings(); };
 
   return (
     <View style={styles.fill}>
       <ScrollView style={styles.fill} contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
-        <PageHeader title="Exit Engine" question="Configure how your strategies exit trades" />
-        <FirstVisitTip tipKey="exit-engine" text="Build an exit in 4 steps: scope, method, configure, then Test on history or Deploy to paper." />
-
-        <View style={{ marginVertical: spacing.md }}>
-          <Segmented testIDPrefix="ee-subtab"
-            options={[{ key: "engine", label: "EXIT ENGINE" }, { key: "risk", label: "RISK MONITOR" }, { key: "ai", label: "AI ANALYSIS" }]}
-            value={sub} onChange={setSub} />
+        <View style={styles.headerRow}>
+          <Text style={styles.pageTitle}>Exit Engine</Text>
+          <Pressable testID="ee-stop-ananta" onPress={toggleKill} style={[styles.stopPill, killed && styles.stopPillOn]}>
+            <Ionicons name="power" size={13} color={killed ? colors.bg : "#fff"} />
+            <Text style={[styles.stopPillTxt, killed && { color: colors.bg }]}>{killed ? "Resume" : "Stop Ananta"}</Text>
+          </Pressable>
         </View>
 
-        {sub === "engine" && <ExitFlow isOwner={isOwner} />}
-        {sub === "risk" && <RiskMonitor isOwner={isOwner} settings={settings} setSettings={setSettings} onGotoEngine={() => setSub("engine")} />}
-        {sub === "ai" && <AiAnalysis isOwner={isOwner} trades={trades} />}
+        {view === "home" && (
+          <ExitHome settings={settings}
+            onEdit={() => setView("edit")} onScope={(s) => setView(s)}
+            onExplain={() => setView("ai")} onTest={() => router.push("/research")} onRisk={() => setView("risk")} />
+        )}
+
+        {inWizard && (<>
+          <BackHeader onBack={backHome} />
+          <ExitFlow isOwner={isOwner} initialScope={wizardScope} initialStep={view === "edit" || view === "global" ? 2 : 1} onExit={backHome} />
+        </>)}
+
+        {view === "ai" && (<><BackHeader onBack={() => setView("home")} /><AiAnalysis isOwner={isOwner} trades={trades} /></>)}
+
+        {view === "risk" && (<><BackHeader onBack={() => setView("home")} /><RiskMonitor isOwner={isOwner} settings={settings} setSettings={setSettings} onGotoEngine={backHome} /></>)}
       </ScrollView>
 
       <AskAnanta tab="workspace" routeName="workspace" />
@@ -83,9 +104,81 @@ export default function ExitEngine() {
   );
 }
 
-function ExitFlow({ isOwner }: { isOwner: boolean }) {
-  const [step, setStep] = useState(1);
-  const [scope, setScope] = useState<string | null>(null);
+function BackHeader({ onBack }: { onBack: () => void }) {
+  return (
+    <Pressable testID="ee-back-home" onPress={onBack} style={styles.backHeader} hitSlop={8}>
+      <Ionicons name="chevron-back" size={18} color={colors.teal} />
+      <Text style={styles.backTxt}>Exit Engine</Text>
+    </Pressable>
+  );
+}
+
+function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
+  { settings: any; onEdit: () => void; onScope: (s: "strategy" | "coin" | "global") => void; onExplain: () => void; onTest: () => void; onRisk: () => void }) {
+  if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.xl }} />;
+  const engineName = settings.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
+  const trailMult = settings.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
+  const params = [
+    { label: "Trail Multiplier", value: `${trailMult}x` },
+    { label: "Breakeven Arm", value: `${settings.trail_arm_pct ?? 0}%` },
+    { label: "Hard Stop-Loss", value: `${settings.stop_loss_pct ?? 0}%` },
+    { label: "Dynamic Trail", value: settings.dynamic_trail_enabled === false ? "Off" : "On" },
+  ];
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>Current Active Exit</Text>
+      <View style={styles.activeCard} testID="ee-active-exit">
+        <Text style={styles.activeName} testID="ee-active-name">{engineName}</Text>
+        <View style={styles.paramGrid}>
+          {params.map((p) => (
+            <View key={p.label} style={styles.paramCell} testID={`ee-param-${p.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}>
+              <Text style={styles.paramLabel}>{p.label}</Text>
+              <Text style={styles.paramValue}>{p.value}</Text>
+            </View>
+          ))}
+        </View>
+        <Pressable testID="ee-edit-current" onPress={onEdit} style={styles.editBtn}>
+          <Ionicons name="create-outline" size={16} color={colors.bg} />
+          <Text style={styles.editTxt}>Edit Current Exit</Text>
+        </Pressable>
+      </View>
+
+      <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Modify Exit Rules</Text>
+      {SCOPES.map((s) => (
+        <Pressable key={s.id} testID={`ee-modify-${s.id}`} onPress={() => onScope(s.id as any)} style={styles.modifyCard}>
+          <View style={styles.modifyIcon}><Ionicons name={s.icon as any} size={20} color={colors.teal} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modifyTitle}>{s.name}</Text>
+            <Text style={styles.modifyDesc} numberOfLines={2}>{s.desc}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
+      ))}
+
+      <View style={styles.bottomRow}>
+        <Pressable testID="ee-explain" onPress={onExplain} style={styles.bottomBtn}>
+          <Ionicons name="sparkles" size={14} color={colors.bg} />
+          <Text style={styles.bottomTxt}>Explain My Exits</Text>
+        </Pressable>
+        <Pressable testID="ee-test-performance" onPress={onTest} style={styles.bottomBtn}>
+          <Ionicons name="stats-chart" size={14} color={colors.bg} />
+          <Text style={styles.bottomTxt}>Test Strategy Performance</Text>
+        </Pressable>
+      </View>
+
+      <Pressable testID="ee-risk-monitor" onPress={onRisk} style={styles.riskLink}>
+        <Ionicons name="shield-checkmark-outline" size={14} color={colors.textMuted} />
+        <Text style={styles.riskLinkTxt}>Risk Monitor & Safeguards</Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
+      </Pressable>
+    </View>
+  );
+}
+
+function ExitFlow({ isOwner, initialScope = null, initialStep = 1, onExit }: { isOwner: boolean; initialScope?: string | null; initialStep?: number; onExit?: () => void }) {
+  const [step, setStep] = useState(initialStep);
+  const [scope, setScope] = useState<string | null>(initialScope);
   const [strategy, setStrategy] = useState("hunter");
   const [coin, setCoin] = useState("BTC/USD");
   const [method, setMethod] = useState<any>(null);
@@ -194,7 +287,7 @@ function ExitFlow({ isOwner }: { isOwner: boolean }) {
               <Ionicons name="chevron-forward" size={17} color={colors.textFaint} />
             </Pressable>
           ))}
-          <Pressable testID="ee-back-2" onPress={() => setStep(1)} style={[styles.btn, styles.btnGhost, styles.btnFull]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
+          <Pressable testID="ee-back-2" onPress={() => (initialStep === 2 ? onExit?.() : setStep(1))} style={[styles.btn, styles.btnGhost, styles.btnFull]}><Text style={styles.btnGhostTxt}>BACK</Text></Pressable>
         </View>
       )}
 
@@ -459,6 +552,31 @@ function NumRow({ label, k, value, isOwner, onSave }: any) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.lg },
+  pageTitle: { color: colors.text, fontSize: 26, fontWeight: "800" },
+  stopPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.red, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 9 },
+  stopPillOn: { backgroundColor: colors.teal },
+  stopPillTxt: { color: "#fff", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
+  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: spacing.sm },
+  activeCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.teal + "40", borderRadius: radius.lg, padding: spacing.md },
+  activeName: { color: colors.teal, fontSize: 20, fontWeight: "800", marginBottom: spacing.md },
+  paramGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  paramCell: { width: "47.8%", flexGrow: 1, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.md },
+  paramLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" },
+  paramValue: { color: colors.text, fontSize: 20, fontWeight: "800", marginTop: 4 },
+  editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, marginTop: spacing.md },
+  editTxt: { color: colors.bg, fontWeight: "800", fontSize: 14 },
+  modifyCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, backgroundColor: colors.card, marginBottom: spacing.sm },
+  modifyIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.tealGlow, alignItems: "center", justifyContent: "center" },
+  modifyTitle: { color: colors.text, fontWeight: "700", fontSize: 15 },
+  modifyDesc: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  bottomRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
+  bottomBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, paddingHorizontal: spacing.sm },
+  bottomTxt: { color: colors.bg, fontWeight: "800", fontSize: 12, textAlign: "center" },
+  riskLink: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", marginTop: spacing.md, paddingVertical: 12 },
+  riskLinkTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 13 },
+  backHeader: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: spacing.md, alignSelf: "flex-start" },
+  backTxt: { color: colors.teal, fontWeight: "800", fontSize: 14 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   advBtn: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
   advTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.5 },
