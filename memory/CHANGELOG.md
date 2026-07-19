@@ -1174,3 +1174,11 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Dashboard.jsx: mounts <ComingSoonPromo variant="sheet" isOwner={isOwner}/>. AccountOverlay.jsx: removed BOTH the promo banner and the permanent "What's Coming" section + import (promo no longer in Account). AuthContext.login: clears sessionStorage ananta_welcome_shown so the sheet re-shows each login.
 - Verified: welcome sheet renders on Cockpit for owner (screenshot); no typos/image/garbled text; waitlist endpoint stores email (curl); AccountOverlay lint clean (no promo refs). Reset polluted promo_state after test.
 - Scope: WEB only (this promo/feature does not exist on mobile).
+
+### 2026-06-19 — MOBILE parity: Coming Soon welcome sheet + Strategy card edit icon
+- Rebuilt mobile src/components/ComingSoonPromo.tsx as pure RN (removed static coming-soon.jpg image), fixed typo -> "Verified badges", 3 feature cards w/ bullets + "Stay Tuned" strip, email-capture Waitlist (promo-email-input + promo-join-waitlist -> POST /api/promo/coming-soon/waitlist).
+- New variant="sheet": first-login welcome MODAL on the Cockpit (index.tsx), mounted in loading/error/loaded branches so it shows even while cockpit data loads. Module-persisted open state (_sheetOpen) avoids remount flash. Show logic: owner every login (gate reset in auth.login via resetWelcomeGate), non-owner first 3 launches (AsyncStorage views, max 3).
+- Removed the promo banner + "What's Coming" section from mobile app/account.tsx (+ import).
+- Added pencil-edit icon (testID card-edit-<id>) top-right on mobile Strategy Center cards (strategy.tsx), omitted for reference-only; opens detail on tap. Single bottom action retained.
+- Verified by testing_agent iteration_69 (mobile): all PASS, no bugs. 16 cards / 15 edit icons (Pairs Trading reference-only omitted) / 15 deploy actions. Account has 0 promo occurrences. Reset promo_state after test.
+- Web equivalents were done + verified in the prior iteration (iteration_68). Web + mobile now in parity.
