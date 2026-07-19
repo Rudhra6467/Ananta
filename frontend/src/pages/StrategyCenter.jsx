@@ -147,7 +147,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     {lib.map((s) => (
                         <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
                             onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
-                            onFav={() => api.libraryFavorite(s.id).then(load)} onDeploy={load} />
+                            onDeploy={load} />
                     ))}
                 </div>
             )}
@@ -176,28 +176,28 @@ function AddStrategyChooser({ open, onOpenChange, onImport, onCreate }) {
     return (
         <LabModal open={open} onOpenChange={onOpenChange} icon={Plus} title="Add a strategy"
             subtitle="Pick how you want to start — you can refine everything afterwards." testid="add-strategy-chooser">
-            <div className="space-y-3 p-1">
+            <div className="space-y-4 p-1 py-2">
                 <button data-testid="add-option-create" onClick={onCreate}
-                    className="group w-full text-left rounded-xl border border-atlas-cyan/40 bg-atlas-cyan/5 px-4 py-4 flex items-center gap-3.5 hover:bg-atlas-cyan/10 transition-colors">
+                    className="group w-full text-left rounded-xl border border-atlas-cyan/40 bg-atlas-cyan/5 px-4 py-5 flex items-center gap-3.5 hover:bg-atlas-cyan/10 transition-colors">
                     <span className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-cyan/40 bg-atlas-cyan/10 shrink-0"><Boxes className="w-5 h-5 text-atlas-cyan" /></span>
                     <span className="min-w-0">
                         <span className="block font-heading text-sm text-atlas-text">Create New Strategy</span>
-                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-0.5">Build rules step-by-step in the guided builder.</span>
+                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-1 leading-relaxed">Build rules step-by-step in the guided builder.</span>
                     </span>
                     <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-cyan transition-colors" />
                 </button>
                 <button data-testid="add-option-import" onClick={onImport}
-                    className="group w-full text-left rounded-xl border border-atlas-border px-4 py-4 flex items-center gap-3.5 hover:bg-atlas-panelHover transition-colors">
+                    className="group w-full text-left rounded-xl border border-atlas-border px-4 py-5 flex items-center gap-3.5 hover:bg-atlas-panelHover transition-colors">
                     <span className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border shrink-0"><FileJson className="w-5 h-5 text-atlas-cyan" /></span>
                     <span className="min-w-0">
                         <span className="block font-heading text-sm text-atlas-text">Import JSON</span>
-                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-0.5">Paste a strategy definition (JSON, Pine, Freqtrade…) to convert.</span>
+                        <span className="block font-mono text-[11px] text-atlas-textTertiary mt-1 leading-relaxed">Paste a strategy definition (JSON, Pine, Freqtrade…) to convert.</span>
                     </span>
                     <ArrowLeft className="w-4 h-4 text-atlas-textTertiary rotate-180 ml-auto shrink-0 group-hover:text-atlas-text transition-colors" />
                 </button>
-                <div className="pt-2 mt-1 border-t border-atlas-border/60">
+                <div className="pt-3 mt-1 border-t border-atlas-border/60">
                     <button data-testid="add-option-ai" onClick={onCreate}
-                        className="w-full flex items-center justify-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-textSecondary transition-colors">
+                        className="w-full flex items-center justify-center gap-1.5 font-mono text-[10px] text-atlas-textTertiary hover:text-atlas-textSecondary transition-colors py-1">
                         <Sparkles className="w-3 h-3" /> Prefer to describe it in words? Build with AI (advanced)
                     </button>
                 </div>
@@ -286,7 +286,7 @@ function timeAgo(ts) {
     return `${Math.floor(d / 86400)}d ago`;
 }
 
-function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
+function LibraryCard({ s, metric, isOwner, onOpen, onDeploy }) {
     const Icon = ICONS[s.engine_key] || CATEGORY_ICON[s.category] || Boxes;
     const wired = !!(s.internal || (s.wireable && s.engine_key));
     const [localStatus, setLocalStatus] = useState(null);
@@ -316,18 +316,13 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
 
     return (
         <div data-testid={`library-card-${s.id}`}
-            className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-4 md:p-5 flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
+            className="group relative text-left rounded-2xl border border-atlas-border bg-atlas-panel/70 p-5 flex flex-col gap-3.5 transition-all hover:-translate-y-0.5 hover:bg-atlas-panelHover hover:shadow-[0_16px_50px_-20px_rgba(0,0,0,0.95)]">
             <button onClick={onOpen} className="absolute inset-0 z-0" aria-label={`Open ${s.name}`} data-testid={`library-open-${s.id}`} />
             <div className="flex items-start justify-between gap-2 relative z-10 pointer-events-none">
                 <div className="w-10 h-10 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5">
                     <Icon className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
                 </div>
                 <div className="flex items-center gap-2 pointer-events-auto">
-                    {isOwner && (
-                        <button data-testid={`card-fav-${s.id}`} onClick={onFav} className="text-atlas-textTertiary hover:text-atlas-cyan">
-                            <Heart className={`w-3.5 h-3.5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
-                        </button>
-                    )}
                     <span data-testid={`card-status-${s.id}`}
                         className={`flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border bg-atlas-panel"}`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current" /> {status}
@@ -336,8 +331,8 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
             </div>
             <div className="relative z-10 pointer-events-none">
                 <div className="font-heading font-medium text-base md:text-lg text-atlas-text leading-tight truncate">{s.name}</div>
-                <div className="font-body text-xs text-atlas-textSecondary mt-1 leading-relaxed line-clamp-1 truncate">{s.description || s.ideal_market || "—"}</div>
-                <div className="font-mono text-[9px] text-atlas-textTertiary mt-1.5 truncate">{activity}</div>
+                <div className="font-body text-xs text-atlas-textSecondary mt-1.5 leading-relaxed line-clamp-2 min-h-[2.25rem]">{s.description || s.ideal_market || "—"}</div>
+                <div className="font-mono text-[9px] text-atlas-textTertiary mt-2 truncate">{activity}</div>
             </div>
             {!wired && s.reference_only ? (
                 <div data-testid={`card-reference-note-${s.id}`}
@@ -345,16 +340,14 @@ function LibraryCard({ s, metric, isOwner, onOpen, onFav, onDeploy }) {
                     {s.reference_note || "Analysis only"}
                 </div>
             ) : (
-                <div className="relative z-10 pointer-events-auto flex items-center justify-between gap-2 mt-auto pt-3 border-t border-atlas-border">
+                <div className="relative z-10 pointer-events-auto flex items-center justify-between gap-2 mt-auto pt-3.5 border-t border-atlas-border">
                     <button data-testid={`card-edit-${s.id}`} onClick={(e) => { e.stopPropagation(); onOpen(); }}
-                        className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text transition-colors">
+                        className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
                         <Pencil className="w-3.5 h-3.5" /> EDIT
                     </button>
                     {wired && (
                         <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
-                            className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 font-mono text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${
-                                deployed ? "border border-atlas-border text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary"
-                                    : "bg-atlas-cyan text-atlas-bg border border-atlas-cyan hover:brightness-110"}`}>
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-cyan hover:bg-atlas-cyan/20 transition-all disabled:opacity-50">
                             {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
                             {deployed ? "MANAGE" : "DEPLOY"}
                         </button>
@@ -462,18 +455,23 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
             </div>
 
             {/* 5 key metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3" data-testid="detail-metrics">
-                <Stat label="Win Rate" value={`${metric?.win_rate ?? 0}%`} />
-                <Stat label="Total P&L" value={`${(metric?.total_pnl ?? 0) >= 0 ? "+" : "-"}$${Math.abs(metric?.total_pnl ?? 0)}`} cls={(metric?.total_pnl ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative"} />
-                <Stat label="Max Drawdown" value={`${metric?.max_drawdown_pct ?? 0}%`} cls="text-atlas-negative" />
-                <Stat label="Profit Factor" value={fmtPf(metric?.profit_factor)} />
-                <div className="rounded-lg border border-atlas-border bg-atlas-panel px-3 py-2.5" data-testid="detail-recent-form">
-                    <div className="font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">Recent Form</div>
-                    <div className="flex items-center gap-1 mt-1.5">
-                        {recent.length ? recent.slice(-6).map((f, i) => (
-                            <span key={i} className={`w-4 h-4 rounded grid place-items-center font-mono text-[8px] font-bold ${f === "W" ? "bg-atlas-positive/15 text-atlas-positive" : "bg-atlas-negative/15 text-atlas-negative"}`}>{f}</span>
-                        )) : <span className="font-heading font-bold text-lg text-atlas-textTertiary">—</span>}
+            <div data-testid="detail-metrics-wrap">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3" data-testid="detail-metrics">
+                    <Stat label="Win Rate" value={`${metric?.win_rate ?? 0}%`} />
+                    <Stat label="Total P&L" value={`${(metric?.total_pnl ?? 0) >= 0 ? "+" : "-"}$${Math.abs(metric?.total_pnl ?? 0)}`} cls={(metric?.total_pnl ?? 0) >= 0 ? "text-atlas-positive" : "text-atlas-negative/70"} />
+                    <Stat label="Max Drawdown" value={`${metric?.max_drawdown_pct ?? 0}%`} cls="text-atlas-negative/70" />
+                    <Stat label="Profit Factor" value={fmtPf(metric?.profit_factor)} />
+                    <div className="rounded-lg border border-atlas-border bg-atlas-panel px-3 py-2.5" data-testid="detail-recent-form">
+                        <div className="font-mono text-[9px] uppercase tracking-wider text-atlas-textTertiary">Recent Form</div>
+                        <div className="flex items-center gap-1 mt-1.5">
+                            {recent.length ? recent.slice(-6).map((f, i) => (
+                                <span key={i} className={`w-4 h-4 rounded grid place-items-center font-mono text-[8px] font-bold ${f === "W" ? "bg-atlas-positive/15 text-atlas-positive" : "bg-atlas-negative/15 text-atlas-negative"}`}>{f}</span>
+                            )) : <span className="font-heading font-bold text-lg text-atlas-textTertiary">—</span>}
+                        </div>
                     </div>
+                </div>
+                <div className="font-mono text-[9px] text-atlas-textTertiary mt-2" data-testid="detail-metrics-context">
+                    Based on the current backtest window — not a live-trading result.
                 </div>
             </div>
 
@@ -500,7 +498,7 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
 
             {/* show more (secondary detail) */}
             <button data-testid="detail-show-more" onClick={() => setShowMore((v) => !v)}
-                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-atlas-border py-2.5 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-atlas-border/50 py-2.5 font-mono text-[11px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-border transition-colors">
                 {showMore ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 {showMore ? "SHOW LESS" : "SHOW MORE — health, live snapshot, AI analysis"}
             </button>

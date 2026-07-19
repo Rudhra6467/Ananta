@@ -150,10 +150,10 @@ function StrategyHealthToday() {
     return (
         <div className="panel border-atlas-border rounded-2xl p-4 space-y-3" data-testid="strategy-health-today">
             <div className="flex items-center justify-between gap-2">
-                <div className="font-heading text-lg text-atlas-text leading-none">Strategy Health Today</div>
+                <div className="font-heading text-lg text-atlas-text leading-none">Strategy Health</div>
                 <button data-testid="cockpit-view-health-dashboard" onClick={viewDashboard}
                     className="flex items-center gap-1.5 rounded-full border border-atlas-cyan/40 text-atlas-cyan font-mono text-[10px] font-bold tracking-wide px-3 py-1.5 hover:bg-atlas-cyan/10 active:scale-95 transition-all">
-                    View Health Dashboard <ArrowRight className="w-3 h-3" />
+                    View Health <ArrowRight className="w-3 h-3" />
                 </button>
             </div>
 
@@ -170,7 +170,7 @@ function StrategyHealthToday() {
                     <div className="font-mono text-[11px] text-atlas-textSecondary" data-testid="health-today-count">
                         {recommended.length} {recommended.length === 1 ? "strategy" : "strategies"} recommended for paper trading.
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                         {recommended.map((s) => <HealthTodayCard key={s.strategy} card={s} />)}
                     </div>
                 </>
@@ -190,7 +190,7 @@ function HealthTodayCard({ card }) {
                 <span className="w-8 h-8 rounded-lg grid place-items-center border border-atlas-border bg-atlas-cyan/5 shrink-0"><Icon className="w-4 h-4 text-atlas-cyan" /></span>
                 <div className="font-heading text-base text-atlas-text truncate">{card.name}</div>
             </div>
-            <span className={`inline-flex items-center font-mono text-[9px] font-bold tracking-wide uppercase px-2 py-1 rounded-full border ${REC_TONE[rec.tone] || REC_TONE.warning}`} data-testid={`health-today-badge-${card.strategy}`}>
+            <span className={`flex w-full items-center justify-center text-center font-mono text-[8px] font-bold tracking-wide uppercase leading-tight px-2 py-1 rounded-full border ${REC_TONE[rec.tone] || REC_TONE.warning}`} data-testid={`health-today-badge-${card.strategy}`}>
                 {rec.badge || "Recommended"}
             </span>
             <div className="font-mono text-sm">
