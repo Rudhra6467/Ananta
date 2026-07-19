@@ -139,6 +139,17 @@ export default function Cockpit() {
         <View style={{ marginTop: spacing.md }}>
           <StrategyHealthCard />
         </View>
+
+        {/* Deep Analytics entry */}
+        <Pressable testID="cockpit-analytics-link" onPress={() => router.push("/analytics")}
+          style={styles.analyticsLink}>
+          <View style={styles.analyticsIcon}><Ionicons name="stats-chart" size={20} color={colors.teal} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.analyticsTitle}>Deep Analytics</Text>
+            <Text style={styles.analyticsSub}>Equity curve, per-strategy & multi-timeframe performance</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
       </View>
 
       {/* Active Watchlist rail */}
@@ -367,6 +378,10 @@ const styles = StyleSheet.create({
   heroPnl: { fontSize: 15, fontWeight: "700" },
   heroToday: { color: colors.textFaint, fontSize: 13 },
   sectionPad: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  analyticsLink: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, backgroundColor: colors.card },
+  analyticsIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.tealGlow, alignItems: "center", justifyContent: "center" },
+  analyticsTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  analyticsSub: { color: colors.textMuted, fontSize: 12, lineHeight: 16, marginTop: 2 },
   addBtn: { width: 30, height: 30, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
   addWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   addCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, paddingBottom: 30 },

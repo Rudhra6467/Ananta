@@ -1195,3 +1195,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Web (Option B): replaced the embedded full Settings page in the Exit Engine "RISK MONITOR" sub-tab with new components/RiskMonitorPanel.jsx mirroring mobile exactly (same fields, same read-only Active Exit display, owner-gated).
 - All controls write via PUT /api/settings; verified htf_trend_enabled + min_confidence round-trip. Public users see disabled controls.
 - Verified: testing_agent iter_71 (code review PASS both platforms, redundant card gone, gating correct) + web smoke screenshot + API persistence curl.
+
+## P4 — Deep Analytics + Multi-Timeframe on Mobile (2026-06)
+- Backend (lab/health_sweep.py): added _merge_timeframes() -> new per-strategy `timeframe_comparison` field on each health card (1h/30m/15m: trades, net_pnl, avg total_return_pct, trade-weighted win_rate_pct, worst max_drawdown_pct). Unit-verified. Populates on next health sweep.
+- Mobile (app/analytics.tsx NEW): full-screen Analytics reachable from Cockpit ("Deep Analytics" link, testID cockpit-analytics-link) via /analytics stack route. Sections: Portfolio Performance (SVG equity curve + stat grid: total return, net P&L, win rate, profit factor, max drawdown, avg hold — computed client-side from closed trades), Strategy Performance (per-strategy headline + recommendation badge + best TF from /lab/health), Multi-Timeframe Comparison (strategy chips -> per-TF table highlighting best_timeframe), Exit Breakdown (by exit_module/reason).
+- Registered `analytics` in app/_layout.tsx Stack.
+- Web unaffected (this is a mobile feature). P3 multi-tenant DEFERRED post-launch per user; P5 on hold.

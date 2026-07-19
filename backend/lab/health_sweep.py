@@ -99,6 +99,41 @@ def _best_tf(result: dict) -> str | None:
     return _mode(tfs)
 
 
+def _merge_timeframes(result: dict) -> list[dict]:
+    """Aggregate the per-symbol ``by_tf`` blocks into one row per timeframe so the
+    mobile Analytics screen can show a real 1h / 30m / 15m comparison. Returns is
+    averaged across contributing symbols; win-rate is trade-weighted; drawdown is
+    the worst across symbols."""
+    mtf = result.get("multi_timeframe") or {}
+    acc: dict = {}
+    for entry in mtf.values():
+        for tf, m in (entry.get("by_tf") or {}).items():
+            if not m or "error" in m:
+                continue
+            n = m.get("trades") or 0
+            g = acc.setdefault(tf, {"trades": 0, "net": 0.0, "ret_sum": 0.0, "syms": 0, "win_w": 0.0, "dd": 0.0})
+            g["trades"] += n
+            g["net"] += m.get("net_pnl") or 0.0
+            g["ret_sum"] += m.get("total_return_pct") or 0.0
+            g["syms"] += 1
+            g["win_w"] += (m.get("win_rate_pct") or 0.0) * n
+            g["dd"] = max(g["dd"], m.get("max_drawdown_pct") or 0.0)
+    rows = []
+    for tf in SWEEP_TIMEFRAMES:
+        g = acc.get(tf)
+        if not g:
+            continue
+        rows.append({
+            "timeframe": tf,
+            "trades": g["trades"],
+            "net_pnl": round(g["net"], 2),
+            "total_return_pct": round(g["ret_sum"] / (g["syms"] or 1), 3),
+            "win_rate_pct": round(g["win_w"] / (g["trades"] or 1), 1),
+            "max_drawdown_pct": round(g["dd"], 2),
+        })
+    return rows
+
+
 def aggregate_strategy(strategy_key: str, result: dict) -> dict:
     """Aggregate a full backtest result (all symbols/TFs) into one health card."""
     per = result.get("per_symbol") or {}
@@ -140,6 +175,7 @@ def aggregate_strategy(strategy_key: str, result: dict) -> dict:
     return {
         "strategy": strategy_key, "name": name,
         "best_timeframe": _best_tf(result),
+        "timeframe_comparison": _merge_timeframes(result),
         "best_exit": _best_exit(result),
         "regime_breakdown": regime,
         "best_regime": best_regime, "weak_regime": weak_regime,

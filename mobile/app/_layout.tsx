@@ -58,6 +58,7 @@ function RootNav() {
         <Stack.Screen name="login" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="analytics" options={{ presentation: "card", animation: "slide_from_right" }} />
         <Stack.Screen name="asset/[symbol]" options={{ presentation: "card", animation: "slide_from_right" }} />
         <Stack.Screen name="strategy/[id]" options={{ presentation: "card", animation: "slide_from_right" }} />
         <Stack.Screen name="account" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

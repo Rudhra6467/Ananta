@@ -1,0 +1,48 @@
+{
+  "summary": "Frontend-only mobile testing of the new Deep Analytics + Multi-Timeframe Comparison feature on the Expo web preview (viewport 390x844). Completed owner login (owner@ananta.ai) and full onboarding wizard (Welcome -> Research First -> capital $25,000 -> allocation -> pick 1 strategy -> summary -> Start Paper Trading -> Enter Ananta), dismissed the ComingSoonPromo welcome sheet, then tapped the 'Deep Analytics' entry on the Cockpit (below Strategy Health) which correctly navigates to /analytics. All required testIDs are present and populated (analytics-screen, analytics-back, an-performance + 6 stat cells, an-strategies with an-strat-hunter/squeeze/continuation, an-timeframes with all 3 chips, an-exits). Chip switching (an-tf-strat-hunter/squeeze/continuation) works. Back button returns to the Cockpit. Portfolio Performance and Exit Breakdown correctly show their empty-state messages because there are 0 closed trades in the paper account. Multi-Timeframe Comparison correctly shows the graceful 'No timeframe data yet' empty state — which is acceptable per the review request. NOTE: I probed /api/lab/health from the browser after the sweep completed (7 strategies returned, best_timeframe populated e.g. hunter=30m, squeeze=15m, continuation=1h) but every strategy's timeframe_comparison array came back empty ([]) so the mobile screen has no rows to render. Empty-state UX is correct, but flagging this as an observation for the main agent to sanity-check the backend _merge_timeframes() output on the live preview.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "verified_testids": {
+    "cockpit": ["cockpit-analytics-link (navigates to /analytics)"],
+    "analytics_screen": ["analytics-screen", "analytics-back"],
+    "portfolio_card": ["an-performance", "an-total-return (0.00%)", "an-net-pnl ($0.00)", "an-win-rate (0%)", "an-profit-factor (0.00)", "an-max-dd (0.0%)", "an-avg-hold (—)"],
+    "strategy_card": ["an-strategies", "an-strat-hunter", "an-strat-squeeze", "an-strat-continuation"],
+    "timeframe_card": ["an-timeframes", "an-tf-strat-hunter", "an-tf-strat-squeeze", "an-tf-strat-continuation"],
+    "exit_card": ["an-exits"]
+  },
+  "empty_states_observed_and_correct": [
+    "Portfolio Performance: 'Equity curve appears after trades close.' (0 closed trades — expected)",
+    "Multi-Timeframe Comparison: 'No timeframe data yet — run a Health sweep to populate.' (backend returned timeframe_comparison=[] for every strategy despite best_timeframe being populated)",
+    "Exit Breakdown: 'No closed trades yet.' (0 closed trades — expected)"
+  ],
+  "backend_observation": {
+    "endpoint": "/api/lab/health",
+    "note": "Called directly from the browser during test. Response has 7 strategies with best_timeframe correctly set (hunter=30m, squeeze=15m, continuation=1h, ema-cross=1h, supertrend=1h), but every strategy's timeframe_comparison array is []. Not a mobile bug (screen gracefully falls back to empty state as designed), but main agent may want to sanity-check that _merge_timeframes() is actually persisting rows into the returned payload on the preview environment. Review note said this was already unit-verified so it may still be a sweep timing issue."
+  },
+  "critical_code_review_comments": [
+    "analytics.tsx is 276 lines, single-purpose, DRY — clean.",
+    "Stat/EquityCurve extracted as small local components, StyleSheet.create used correctly, all text wrapped in <Text>, testIDs on every interactive/informational element — good.",
+    "Empty-state handling is done at three levels (curve, strategies, timeframes, exits) with clear user-facing copy — good UX.",
+    "computeStats() and exitBreakdown() are pure helpers memoized via useMemo — good.",
+    "Minor (non-blocking): profit_factor renders as '∞' (unicode) when there are only winning trades — correctly guarded."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Optional: sanity-check backend /api/lab/health on preview — timeframe_comparison arrays are empty for every strategy even though best_timeframe is populated. Mobile screen handles this gracefully with the intended empty-state message, so no mobile fix required. If the sweep timing note in the review request no longer applies (sweep already fully done), main agent may want to verify _merge_timeframes() is running/persisting."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100% for the requested mobile Analytics feature (all testIDs present, navigation + back + chip switching + empty states all working)"},
+  "seed_data_creation": "None (used the fresh paper account created by the owner onboarding wizard)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Owner onboarding wizard must be completed every browser session (session doesn't persist between fresh Playwright launches). Sequence: login -> onboarding-start-exploring -> onboarding-start-paper -> two 'onboarding-continue' clicks (capital, alloc) -> pick any strat-* item then onboarding-continue -> onboarding-finish -> click 'ENTER ANANTA' text -> dismiss welcome-sheet-continue. After that the Cockpit exposes cockpit-analytics-link which pushes /analytics. If timeframe_comparison arrays get populated, the an-tf-row-1h/30m/15m rows would render with a ★ next to the best_timeframe row (verified via code review: analytics.tsx L172-180)."
+}
