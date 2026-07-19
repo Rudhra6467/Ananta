@@ -123,6 +123,7 @@ function Validate({ isOwner }: { isOwner: boolean }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [period, setPeriod] = useState("1m");
   const [exit, setExit] = useState("atr");
+  const [useLive, setUseLive] = useState(true);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [runs, setRuns] = useState<{ method: string; label: string; result: any }[]>([]);
 
@@ -158,9 +159,9 @@ function Validate({ isOwner }: { isOwner: boolean }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setPhase("running"); setRuns([]);
     try {
-      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: selected, exit_method: exit });
+      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: selected, exit_method: exit, use_live_exit_settings: useLive });
       const result = await pollRun(id);
-      setRuns([{ method: exit, label: EXIT_LABELS[exit] || exit, result }]);
+      setRuns([{ method: useLive ? "engine" : exit, label: useLive ? "Live Exit Engine" : (EXIT_LABELS[exit] || exit), result }]);
       setPhase("done");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch (e: any) { setPhase("error"); Alert.alert("Backtest failed", e?.message); }
@@ -183,8 +184,23 @@ function Validate({ isOwner }: { isOwner: boolean }) {
           ))}
         </View>
 
-        <Text style={[styles.groupLabel, { marginTop: spacing.lg }]}>Exit Strategy</Text>
-        <Segmented testIDPrefix="wiz-exit" options={[{ key: "atr", label: "ATR Trailing" }, { key: "fixed", label: "Fixed Target" }]} value={exit} onChange={setExit} />
+        <View style={styles.liveToggleRow} testID="wiz-live-exit-row">
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={styles.liveToggleTitle}>Use my live Exit Engine settings</Text>
+            <Text style={styles.liveToggleDesc}>
+              {useLive
+                ? "Backtest runs with your deployed exit config (method + per-strategy & per-coin overrides) — results match paper/live."
+                : "Manual exit override — pick a method to A/B test different exit rules."}
+            </Text>
+          </View>
+          <Switch testID="wiz-use-live-exit" value={useLive} onValueChange={setUseLive}
+            trackColor={{ true: colors.teal, false: colors.cardBorder }} thumbColor="#fff" />
+        </View>
+
+        {!useLive && (<>
+          <Text style={[styles.groupLabel, { marginTop: spacing.md }]}>Exit Strategy</Text>
+          <Segmented testIDPrefix="wiz-exit" options={[{ key: "atr", label: "ATR Trailing" }, { key: "fixed", label: "Fixed Target" }]} value={exit} onChange={setExit} />
+        </>)}
 
         <Text style={[styles.groupLabel, { marginTop: spacing.md }]}>Test Window · BTC</Text>
         <Segmented testIDPrefix="wiz-period" options={PERIODS} value={period} onChange={setPeriod} />
@@ -569,6 +585,9 @@ const styles = StyleSheet.create({
   reportRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.cardBorder },
   iconBtn: { width: 34, height: 34, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
   groupLabel: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: spacing.sm },
+  liveToggleRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.lg, borderWidth: 1, borderColor: colors.teal + "40", backgroundColor: colors.tealGlow, borderRadius: radius.md, padding: spacing.md },
+  liveToggleTitle: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  liveToggleDesc: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3 },
   stratGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   coreCard: { width: "47.8%", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.bgElevated, minHeight: 58 },
   coreCardOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },

@@ -77,6 +77,9 @@ def _config_block(s, run: dict):
         ["Symbols", ", ".join(run.get("symbols") or [])],
         ["Period", f'{run.get("period","—")}  ({_date(run.get("start_ms"))} → {_date(run.get("end_ms"))})'],
         ["Exit method", _exit_label(run)],
+        ["Exit settings", "Live Exit Engine (deployed config)"
+            if ((run.get("result") or {}).get("exit_source") or run.get("exit_source")) == "live"
+            else "Manual override (selected for this run)"],
         *_exit_params_rows(run),
         ["Strategies", ", ".join(run.get("strategies") or ["hunter", "squeeze", "continuation"])],
         ["Metric", run.get("metric", "—")],

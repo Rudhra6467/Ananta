@@ -128,20 +128,39 @@ async def create_run(db, spec: dict) -> dict:
 
     start_ms, end_ms = resolve_window(symbols, spec.get("period", "3m"),
                                       spec.get("start_ms"), spec.get("end_ms"))
+
+    # "Use my live Exit Engine settings" — reproduce the DEPLOYED exits (method +
+    # per-strategy + per-coin overrides) by replaying through the SAME Universal Exit
+    # Engine the live executor uses, patched with the live RiskSettings document.
+    use_live = bool(spec.get("use_live_exit_settings"))
+    exit_source = "manual"
+    exit_method = spec.get("exit_method") or "fixed"
+    setting_overrides = spec.get("setting_overrides")
+    profile_overrides = spec.get("profile_overrides")
+    if use_live and kind == "backtest":
+        sdoc = await db.settings.find_one({"id": "singleton"}) or {}
+        sdoc = {k: v for k, v in sdoc.items() if k not in ("_id", "id")}
+        setting_overrides = {**sdoc, **(spec.get("setting_overrides") or {})}
+        profile_overrides = sdoc.get("profile_overrides") or spec.get("profile_overrides")
+        exit_method = "engine"
+        exit_source = "live"
+
     doc = {
         "id": str(uuid.uuid4()),
         "kind": kind, "symbols": symbols, "period": spec.get("period", "3m"),
         "start_ms": start_ms, "end_ms": end_ms,
         "metric": spec.get("metric", "return_over_dd"),
         "folds": int(spec.get("folds", 5)), "min_trades": int(spec.get("min_trades", 8)),
-        "grid": spec.get("grid"), "setting_overrides": spec.get("setting_overrides"),
-        "profile_overrides": spec.get("profile_overrides"),
+        "grid": spec.get("grid"), "setting_overrides": setting_overrides,
+        "profile_overrides": profile_overrides,
         "target": spec.get("target"), "values": spec.get("values"),
         "label": spec.get("label"),
         "strategies": spec.get("strategies") or None,
         "timeframe": spec.get("timeframe") or "1h",
         "compare_timeframes": bool(spec.get("compare_timeframes", False)),
-        "exit_method": spec.get("exit_method") or "fixed",
+        "exit_method": exit_method,
+        "exit_source": exit_source,
+        "use_live_exit_settings": use_live,
         "target_profit": float(spec.get("target_profit", 5.0)),
         "target_loss": float(spec.get("target_loss", 4.0)),
         "atr_params": spec.get("atr_params") or None,
@@ -393,11 +412,14 @@ class LabWorker:
                 ap["multiplier"], int(ap["period"]), ap["trail_activation_pct"], ap["trail_distance"])
         else:
             label = "Native Strategy Exit (Universal Engine)"
+        if run.get("exit_source") == "live":
+            label = "Live Exit Engine (deployed config)"
         return {
             "per_symbol": out, "multi_timeframe": multi_tf,
             "exit_comparison": exit_cmp,
             "exit_method": em,
             "exit_method_label": label,
+            "exit_source": run.get("exit_source", "manual"),
             "target_profit": tp, "target_loss": tl,
             "atr_params": (ap if em == "atr" else None),
         }

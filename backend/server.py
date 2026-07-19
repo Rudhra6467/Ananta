@@ -1969,6 +1969,7 @@ class LabRunCreate(BaseModel):
     target_profit: float = 5.0  # fixed-exit take-profit ($, net)
     target_loss: float = 4.0  # fixed-exit stop-loss ($, net)
     atr_params: dict | None = None  # atr-exit: {multiplier, period, trail_activation_pct, trail_distance}
+    use_live_exit_settings: bool = False  # replay via the deployed Exit Engine config (method + per-strategy/per-coin overrides)
 
 
 @api_router.get("/lab/data/coverage", dependencies=[Depends(require_owner)])

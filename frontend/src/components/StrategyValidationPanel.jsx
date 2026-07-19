@@ -9,6 +9,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 
 // The three native strategies the replay engine can run. "Select all" = run every one.
 const STRATEGIES = [
@@ -40,7 +41,7 @@ const STATUS_CLS = {
 const ATR_DEFAULTS = { multiplier: 2.5, period: 14, trail_activation_pct: 3, trail_distance: 2 };
 const _labCache = {
     cov: null, presets: null, runs: null, assets: null, period: null, strategies: null,
-    compareTf: false, exitMethod: "fixed", targetProfit: 5, targetLoss: 4,
+    compareTf: false, exitMethod: "fixed", targetProfit: 5, targetLoss: 4, useLive: true,
     atrParams: { ...ATR_DEFAULTS }, positionSize: 75,
 };
 
@@ -53,6 +54,7 @@ export default function StrategyValidationPanel() {
     const [exitMethod, setExitMethod] = useState(_labCache.exitMethod || "fixed");
     const [targetProfit, setTargetProfit] = useState(_labCache.targetProfit ?? 5);
     const [targetLoss, setTargetLoss] = useState(_labCache.targetLoss ?? 4);
+    const [useLive, setUseLive] = useState(_labCache.useLive ?? true);
     const [atrParams, setAtrParams] = useState(_labCache.atrParams || { ...ATR_DEFAULTS });
     const [positionSize, setPositionSize] = useState(_labCache.positionSize || 75);
     const [showFixedAdv, setShowFixedAdv] = useState(false); // collapsed by default
@@ -161,6 +163,7 @@ export default function StrategyValidationPanel() {
     const chooseStrategies = (next) => { _labCache.strategies = next; setStrategies(next); };
     const chooseCompareTf = (next) => { _labCache.compareTf = next; setCompareTf(next); };
     const chooseExitMethod = (next) => { _labCache.exitMethod = next; setExitMethod(next); };
+    const chooseUseLive = (v) => { _labCache.useLive = v; setUseLive(v); };
     const chooseTargetProfit = (next) => { _labCache.targetProfit = next; setTargetProfit(next); };
     const chooseTargetLoss = (next) => { _labCache.targetLoss = next; setTargetLoss(next); };
     const chooseAtrParam = (key, val) => {
@@ -206,7 +209,9 @@ export default function StrategyValidationPanel() {
             };
             let spec;
             if (track === "current") {
-                spec = { kind: "backtest", ...common };
+                spec = useLive
+                    ? { kind: "backtest", symbols: assets, period, strategies, compare_timeframes: compareTf, use_live_exit_settings: true }
+                    : { kind: "backtest", ...common };
             } else if (track === "presets") {
                 if (!presetId) { toast.error("Pick a preset"); setBusy(false); return; }
                 spec = { kind: "backtest", ...common, preset: presetId };
@@ -369,6 +374,20 @@ export default function StrategyValidationPanel() {
 
                         {track !== "fresh" && (
                             <div className="mt-4 pt-3 border-t border-atlas-border" data-testid="exit-logic-config">
+                                {track === "current" && (
+                                    <label data-testid="use-live-exit-toggle" className="flex items-start gap-3 p-3 mb-3 rounded-lg border border-atlas-cyan/40 bg-atlas-cyan/5 cursor-pointer">
+                                        <Switch data-testid="use-live-exit-switch" checked={useLive} onCheckedChange={chooseUseLive} className="mt-0.5" />
+                                        <span className="flex-1">
+                                            <span className="font-mono text-xs font-bold text-atlas-text">Use my live Exit Engine settings</span>
+                                            <span className="block font-mono text-[10px] text-atlas-textTertiary mt-0.5">
+                                                {useLive
+                                                    ? "Backtest replays through your DEPLOYED exit config (method + per-strategy & per-coin overrides) — results match paper/live."
+                                                    : "Manual override — choose an exit below to A/B test different rules."}
+                                            </span>
+                                        </span>
+                                    </label>
+                                )}
+                                {!(track === "current" && useLive) && (<>
                                 <Label className="label-tag text-[10px]">EXIT STRATEGY</Label>
                                 <div className="grid grid-cols-3 gap-2 mt-1.5">
                                     {[
@@ -460,6 +479,7 @@ export default function StrategyValidationPanel() {
                                         )}
                                     </div>
                                 )}
+                                </>)}
                             </div>
                         )}
 

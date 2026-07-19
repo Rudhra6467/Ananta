@@ -1,0 +1,38 @@
+{
+  "summary": "Verified the 'Use my live Exit Engine settings' toggle end-to-end on backend + WEB + MOBILE. Backend PDF confirms LIVE mode -> 'Exit method used: Live Exit Engine (deployed config)' + 'Exit settings: Live Exit Engine (deployed config)'; MANUAL mode -> 'Exit settings: Manual override (selected for this run)'. Run docs have exit_source='live'/'manual' and exit_method='engine'/'atr'. WEB (StrategyValidationPanel dialog, track A · Current Prod): toggle present with correct testIDs (use-live-exit-toggle, use-live-exit-switch), DEFAULT ON (data-state=checked), manual EXIT STRATEGY (native/atr/fixed) hidden when ON, reappears when OFF, hides again on re-ON. MOBILE (Research › Validate): wiz-live-exit-row + wiz-use-live-exit present, DEFAULT ON, wiz-exit-atr/wiz-exit-fixed hidden when ON and appear when OFF (verified via screenshot + DOM). No regressions observed on the rest of the Validate flow (strategy selection, period segmented, run + results/runs-list still render). Test data cleaned up via DELETE /api/lab/runs/{id}.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_use_live_exit_toggle.py",
+    "/app/test_reports/pytest/iter70_use_live_exit.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StrategyValidationPanel.jsx line 213: when useLive=true the spec payload drops exit_method/target_profit/target_loss/atr_params (correct — backend derives them). However common.exit_method still defaults to 'atr' via useState, so if the user toggles ON without changing anything the client no longer sends it — this is intentional but easy to break during refactors; consider extracting the LIVE payload builder into a named helper (buildLiveSpec) with a comment.",
+    "Web dialog page emits a React hydration console error: 'In HTML, <span> cannot be a child of <option>' originating from MonteCarloPanel.jsx line 56 (unrelated to this feature). Not blocking, but worth cleaning up in a subsequent iteration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_use_live_exit_toggle.py"
+  ],
+  "success_rate": {"backend": "100% (2/2 pytest passing)", "frontend": "100% (web + mobile toggle behavior matches spec)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md — verified on preview)",
+  "seed_data_creation": "Two temp lab runs were created & deleted during backend confirmation. No stale test data left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PDF endpoint is /api/lab/runs/{id}/pdf (NOT /report.pdf). Extract PDF text with pdfplumber (strings alone won't work — compressed streams). On WEB: to reach the StrategyValidationPanel you must (1) OWNER LOGIN via [data-testid=owner-email-input]/owner-password-input, (2) go to /research via bottom-nav-research, (3) dismiss any Welcome/Start Exploring overlay before clicking things, (4) expand [data-testid=research-advanced-toggle], (5) click [data-testid=run-validation-btn] to open the dialog. Toggle IDs: use-live-exit-toggle (label), use-live-exit-switch (Radix Switch — read data-state=checked/unchecked). On MOBILE: after login there is a 'Coming Soon to Ananta' welcome sheet — click 'Continue to Cockpit' to dismiss, then tap [data-testid=tab-research]. Toggle IDs: wiz-live-exit-row, wiz-use-live-exit (RN Switch renders as a DIV in web preview — click to toggle; verify via presence/absence of [data-testid=wiz-exit-atr] which is the manual segmented). Manual segmented: [data-testid=wiz-exit-atr] and [data-testid=wiz-exit-fixed]. Default is always ON.",
+  "rca of the issue": ""
+}
