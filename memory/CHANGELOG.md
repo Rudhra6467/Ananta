@@ -1189,3 +1189,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Entry gating: fuse_signals BUY/HOLD/BLOCKED + compute_kill_switches spread/confidence/daily-loss breaches.
 - Sizing: position_size_quantity fixed-lot determinism, 95% cash cap, non-BUY -> 0.
 - Status: 8 passed in ~1.8s. Run: `cd /app/backend && python3 -m pytest tests/ -q`.
+
+## Risk Monitor Restructure — web+mobile parity (2026-06)
+- Mobile (app/(tabs)/workspace.tsx): removed the redundant "ENTRY & EXIT ENGINE -> Configure in Exit Engine" loop-back card (rm-engine-summary/rm-goto-engine). Risk Monitor now shows 3 cards: ENTRY SETUP (Min Confidence, HTF Trend Filter toggle, Support/Level Entry toggle, Adaptive Sizing toggle, Breakout Min Confidence, Max Open Positions), read-only ACTIVE EXIT ENGINE (engine name + Trail Multiplier/Breakeven Arm/Hard Stop-Loss), and RISK MONITOR · SAFEGUARDS. Added ToggleRow component.
+- Web (Option B): replaced the embedded full Settings page in the Exit Engine "RISK MONITOR" sub-tab with new components/RiskMonitorPanel.jsx mirroring mobile exactly (same fields, same read-only Active Exit display, owner-gated).
+- All controls write via PUT /api/settings; verified htf_trend_enabled + min_confidence round-trip. Public users see disabled controls.
+- Verified: testing_agent iter_71 (code review PASS both platforms, redundant card gone, gating correct) + web smoke screenshot + API persistence curl.
