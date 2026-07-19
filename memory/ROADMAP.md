@@ -406,3 +406,10 @@ Research Database.
 - ✅ **Phase 1 DONE** (iter 34): Strategy Library (16 seeded, rich schema, AI grade) · chips + multi-select Filter drawer · CatalogDetail w/ AI summary + re-grade · multi-metric Leaderboard sort · Cockpit "Active Watchlist" + add-any-crypto. Web + mobile + backend, tested.
 - 🟡 **Phase 2 NEXT**: Mobile interactive YouTube-style paging (Parts 7-10) — finger-follows-drag main-tab pager + Research subtab pager + nested boundary swipe transfer + premium motion (Part 13). Web: smooth animated tab transitions.
 - ⚪ **Backlog**: Pine Script / Freqtrade / Jesse → JSON import converters (Part 6). Wire more library strategies to the live engine incrementally. Split `StrategyCenter.jsx` / `server.py` as they approach size limits.
+
+## Status update — 2026-06 (post Risk-Monitor restructure + P4)
+- ✅ DONE: Risk Monitor restructure (web+mobile parity) — Entry Setup + read-only Active Exit + Safeguards; redundant "Entry…" loop-back card removed.
+- ✅ DONE (P4): Deep Analytics + Multi-Timeframe on Mobile — new app/analytics.tsx (from Cockpit); backend health card `timeframe_comparison` (1h/30m/15m). Verified with live backtest data + testing_agent iter_72.
+- ⏸ DEFERRED (P3): Multi-tenant accounts — deferred until AFTER App Store launch per user (engine is currently single-tenant singleton; would require re-keying all engine collections by user_id + per-user loops + signup + auth rework via integration playbook).
+- ⛔ ON HOLD (P5): Richer Selectable Exits (Phase E).
+- NEXT: Mobile App Store build (Publish) + re-attempt production Publish/Deploy (previous prod deploy build failed).
