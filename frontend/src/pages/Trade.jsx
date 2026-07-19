@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layers, Archive, ListOrdered, BarChart3, Power, Download, RefreshCw, RotateCcw, PlusCircle } from "lucide-react";
+import { Layers, Archive, ListOrdered, BarChart3, Power, Download, RefreshCw, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import api, { API } from "@/lib/api";
 import { registerPdf } from "@/lib/pdfRegistry";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import ManualExitButton from "@/components/ManualExitButton";
 import PendingOrders from "@/components/PendingOrders";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
+import HeaderActionPortal from "@/components/HeaderActionPortal";
 
 const fmtNum = (v, dp = 2) => (v == null ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }));
 const fmtPrice = (v) => (v == null ? "—" : `$${fmtNum(v, Number(v) < 10 ? 4 : 2)}`);
@@ -69,16 +70,6 @@ export default function Trade() {
         } catch (e) { toast.error("UPDATE FAILED", { description: String(e?.message || e) }); }
     };
 
-    const freshStart = async () => {
-        if (!isOwner) { toast.error("Owner login required"); return; }
-        if (!window.confirm("FRESH START: wipe ALL trade & strategy history and reset the paper book to $1200 ($75/trade). This cannot be undone. Continue?")) return;
-        try {
-            const r = await api.freshStart();
-            toast.success(`Fresh start done — $${r.starting_balance} book, $${r.lot_usd}/trade`);
-            setTimeout(loadAll, 600);
-        } catch { toast.error("Fresh start failed (owner login required)"); }
-    };
-
     const downloadPdf = () => {
         window.open(`${API}/report/full.pdf`, "_blank");
         registerPdf({ title: "Ananta Full Report", type: "full", url: `${API}/report/full.pdf` });
@@ -87,28 +78,26 @@ export default function Trade() {
 
     return (
         <div className="space-y-5" data-testid="trade-page">
-            {/* Persistent trade toolbar — actions on the left, Stop Ananta pinned top-right */}
-            <div className="flex items-center justify-between gap-2 flex-wrap" data-testid="trade-toolbar">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <button data-testid="trade-fresh-start" onClick={freshStart}
-                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
-                        <RotateCcw className="w-3 h-3" /> FRESH START
-                    </button>
-                    <button data-testid="trade-download-pdf" onClick={downloadPdf}
-                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
-                        <Download className="w-3 h-3" /> PDF
-                    </button>
-                    <button data-testid="trade-refresh" onClick={loadAll}
-                        className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
-                        <RefreshCw className="w-3 h-3" /> REFRESH
-                    </button>
-                </div>
+            {/* Stop Ananta pinned to the shared top-header slot (top-right) */}
+            <HeaderActionPortal>
                 <button data-testid="trade-stop-ananta" onClick={toggleKill}
                     title={isOwner ? "Stop Ananta — blocks all new trades" : "Owner login required"}
-                    className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all ${
-                        killed ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative animate-pulse"
-                            : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"}`}>
-                    <Power className="w-4 h-4" strokeWidth={2.5} />{killed ? "STOPPED · RESUME" : "STOP ANANTA"}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] font-bold tracking-widest transition-all ${
+                        killed ? "border-atlas-negative bg-atlas-negative/20 text-atlas-negative animate-pulse"
+                            : "border-atlas-negative/50 bg-atlas-negative/10 text-atlas-negative hover:bg-atlas-negative/20"}`}>
+                    <Power className="w-3.5 h-3.5" strokeWidth={2.5} />{killed ? "RESUME" : "STOP ANANTA"}
+                </button>
+            </HeaderActionPortal>
+
+            {/* Persistent trade toolbar — PDF + Refresh */}
+            <div className="flex items-center gap-2 flex-wrap" data-testid="trade-toolbar">
+                <button data-testid="trade-download-pdf" onClick={downloadPdf}
+                    className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
+                    <Download className="w-3 h-3" /> PDF
+                </button>
+                <button data-testid="trade-refresh" onClick={loadAll}
+                    className="flex items-center gap-2 font-mono text-[10px] tracking-widest font-bold px-3 py-2 border border-atlas-border rounded-lg text-atlas-textSecondary hover:border-atlas-cyan hover:text-atlas-text transition-colors">
+                    <RefreshCw className="w-3 h-3" /> REFRESH
                 </button>
             </div>
 

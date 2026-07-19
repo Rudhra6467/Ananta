@@ -384,6 +384,12 @@ function LibraryCard({ s, metric, isOwner, onOpen, onDeploy }) {
                     <Icon className="w-5 h-5 text-atlas-cyan" strokeWidth={2} />
                 </div>
                 <div className="flex items-center gap-2 pointer-events-auto">
+                    {!s.reference_only && (
+                        <button data-testid={`card-edit-${s.id}`} onClick={(e) => { e.stopPropagation(); onOpen(); }} title="Edit strategy"
+                            className="text-atlas-textTertiary hover:text-atlas-cyan transition-colors">
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                    )}
                     <span data-testid={`card-status-${s.id}`}
                         className={`flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${STATUS[status] || "text-atlas-textTertiary border-atlas-border bg-atlas-panel"}`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current" /> {status}
@@ -401,16 +407,17 @@ function LibraryCard({ s, metric, isOwner, onOpen, onDeploy }) {
                     {s.reference_note || "Analysis only"}
                 </div>
             ) : (
-                <div className="relative z-10 pointer-events-auto flex items-center justify-between gap-2 mt-auto pt-3.5 border-t border-atlas-border">
-                    <button data-testid={`card-edit-${s.id}`} onClick={(e) => { e.stopPropagation(); onOpen(); }}
-                        className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
-                        <Pencil className="w-3.5 h-3.5" /> EDIT
-                    </button>
-                    {wired && (
+                <div className="relative z-10 pointer-events-auto flex justify-end mt-auto pt-3.5 border-t border-atlas-border">
+                    {wired ? (
                         <button data-testid={`card-deploy-${s.id}`} onClick={deploy} disabled={deploying}
-                            className="flex items-center justify-center gap-1.5 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-cyan hover:bg-atlas-cyan/20 transition-all disabled:opacity-50">
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 px-5 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-cyan hover:bg-atlas-cyan/20 transition-all disabled:opacity-50">
                             {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" strokeWidth={2.5} />}
                             {deployed ? "MANAGE" : "DEPLOY"}
+                        </button>
+                    ) : (
+                        <button data-testid={`card-view-${s.id}`} onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                            className="rounded-lg border border-atlas-border px-5 py-2 font-mono text-[10px] font-bold tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-all">
+                            VIEW
                         </button>
                     )}
                 </div>
