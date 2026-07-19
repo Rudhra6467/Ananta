@@ -1182,3 +1182,10 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Added pencil-edit icon (testID card-edit-<id>) top-right on mobile Strategy Center cards (strategy.tsx), omitted for reference-only; opens detail on tap. Single bottom action retained.
 - Verified by testing_agent iteration_69 (mobile): all PASS, no bugs. 16 cards / 15 edit icons (Pairs Trading reference-only omitted) / 15 deploy actions. Account has 0 promo occurrences. Reset promo_state after test.
 - Web equivalents were done + verified in the prior iteration (iteration_68). Web + mobile now in parity.
+
+## Launch Regression Suite (2026-06)
+- Added /app/backend/tests/test_critical_paths.py — 8 focused, DB-free, deterministic tests on the highest-risk trading paths.
+- Exit engine: structural stop -> SL_HIT, hard stop-loss -> SL_HIT, armed trailing take-profit -> TRAIL_HIT, no-trigger HOLD, and declarative per-strategy exit (STRAT_EXIT source) fires/holds correctly.
+- Entry gating: fuse_signals BUY/HOLD/BLOCKED + compute_kill_switches spread/confidence/daily-loss breaches.
+- Sizing: position_size_quantity fixed-lot determinism, 95% cash cap, non-BUY -> 0.
+- Status: 8 passed in ~1.8s. Run: `cd /app/backend && python3 -m pytest tests/ -q`.
