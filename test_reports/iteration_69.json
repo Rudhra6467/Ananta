@@ -1,0 +1,27 @@
+{
+  "summary": "MOBILE-ONLY frontend test of iter69 changes: (A) first-login Cockpit welcome sheet (pure RN, no image, updated copy, email waitlist) and (B) pencil-edit icon on Strategy Center cards. All 6 requested items pass. Owner login flow verified end-to-end via the Expo web preview. To bypass the multi-step onboarding wizard that intercepted the Cockpit landing, ananta_onboarded was pre-seeded in localStorage — after that the cockpit-welcome-sheet renders exactly as spec'd. Waitlist submit -> promo-joined transitions correctly; Continue closes the sheet. Account screen shows zero occurrences of 'Coming'/'Coming Soon' (promo fully removed) and still renders profile, credentials, system health, replay onboarding, features, settings, invite banner, logout. Strategy Center shows 16 cards, 15 pencil-edit icons (1 reference-only card correctly hides it), 15 deploy buttons, 1 reference note; tapping card-edit-hunter navigates to /strategy/hunter.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth.tsx imports resetWelcomeGate from ComingSoonPromo; the promo component owns module-level mutable state (_welcomeShownThisRun, _sheetOpen). This works but couples auth to a UI component; a small dedicated 'welcomeGate' util would be cleaner and easier to test.",
+    "In ComingSoonPromo.tsx the useEffect that opens the sheet uses `_welcomeShownThisRun` guard AFTER an async getItem; if the Cockpit remounts (loading->loaded branches both render <ComingSoonPromo variant='sheet'>), the second mount will see _welcomeShownThisRun=true and skip open. In practice we observed the sheet correctly persists open because _sheetOpen is checked in useState initializer, but this is subtle — leave a code comment for future maintainers."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "Pre-seeded localStorage 'ananta_onboarded=1' in the mobile web preview to skip the multi-step first-run onboarding wizard so we could land directly on Cockpit and evaluate the welcome sheet. Not a code change.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile web preview URL: https://hunter-squeeze-labs.expo.preview.emergentagent.com. Owner login: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH. After login, the app forces /onboarding until 'ananta_onboarded' AsyncStorage key is set — either complete the multi-step wizard OR pre-seed localStorage before login (page.evaluate) to reach Cockpit directly. Key testIDs verified: cockpit-welcome-sheet, promo-email-input, promo-join-waitlist, promo-joined, welcome-sheet-continue, account-logo-btn, account-close-btn, card-edit-<id> (15 found), card-deploy-<id> (15 found), library-card-<id> (16 found), card-reference-note-<id> (1 found — pairs-trading). Note: React Native Alert.alert on web does not fire a window.dialog event, so page.on('dialog') will NOT capture RN alerts; validate rejection by checking that promo-joined does NOT appear.",
+  "rca of the issue": ""
+}

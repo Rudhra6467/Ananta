@@ -197,7 +197,14 @@ function StrategyCard({ s, metric, isOwner, onOpen, onReload }: { s: any; metric
     <Pressable testID={`library-card-${s.id}`} onPress={onOpen} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
       <View style={styles.cardTop}>
         <View style={styles.cardIconBox}><Ionicons name={CATEGORY_ICON(s)} size={18} color={colors.teal} /></View>
-        <View testID={`card-status-${s.id}`}><Pill label={status} tone={STATUS_TONE[status] || "muted"} dot /></View>
+        <View style={styles.cardTopRight}>
+          {!s.reference_only && (
+            <Pressable testID={`card-edit-${s.id}`} onPress={onOpen} hitSlop={8}>
+              <Ionicons name="pencil" size={15} color={colors.textMuted} />
+            </Pressable>
+          )}
+          <View testID={`card-status-${s.id}`}><Pill label={status} tone={STATUS_TONE[status] || "muted"} dot /></View>
+        </View>
       </View>
 
       <Text style={[type.h3, { fontSize: 16, marginTop: spacing.sm }]} numberOfLines={1}>{s.name}</Text>
@@ -243,6 +250,7 @@ const styles = StyleSheet.create({
   card: { width: "48%", flexGrow: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, padding: spacing.md, minHeight: 178 },
   cardPressed: { backgroundColor: colors.cardPressed, transform: [{ scale: 0.99 }] },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  cardTopRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardIconBox: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
   cardDesc: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 4, minHeight: 34 },
   cardActivity: { color: colors.textFaint, fontSize: 10, fontWeight: "600", marginTop: 6 },

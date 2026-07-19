@@ -27,6 +27,7 @@ import { TradingWizard } from "../../src/components/TradingWizard";
 import { AskAnanta } from "../../src/components/AskAnanta";
 import { SystemHealthChip } from "../../src/components/SystemHealthChip";
 import { StrategyHealthCard } from "../../src/components/StrategyHealthCard";
+import ComingSoonPromo from "../../src/components/ComingSoonPromo";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { usd, pct, price, base } from "../../src/format";
 
@@ -61,8 +62,8 @@ export default function Cockpit() {
 
   const onRetry = useCallback(() => refresh(), [refresh]);
 
-  if (loading && !data) return <View style={styles.fill}><LoadingView /></View>;
-  if (error && !data) return <View style={styles.fill}><ErrorView message={error} onRetry={onRetry} /></View>;
+  if (loading && !data) return <View style={styles.fill}><ComingSoonPromo variant="sheet" isOwner={isOwner} /><LoadingView /></View>;
+  if (error && !data) return <View style={styles.fill}><ComingSoonPromo variant="sheet" isOwner={isOwner} /><ErrorView message={error} onRetry={onRetry} /></View>;
 
   const pf = data!.portfolio;
   const env = data!.environment;
@@ -79,6 +80,7 @@ export default function Cockpit() {
 
   return (
     <View style={styles.fill}>
+    <ComingSoonPromo variant="sheet" isOwner={isOwner} />
     <ScrollView
       style={styles.fill}
       contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: spacing.xxl }}

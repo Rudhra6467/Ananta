@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { Platform } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import api, { TOKEN_KEY } from "./api";
+import { resetWelcomeGate } from "./components/ComingSoonPromo";
 import { getItem, setItem, deleteItem } from "./storage";
 
 const BIO_FLAG = "ananta_biometric_enabled";
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.login(email, password);
     await setItem(TOKEN_KEY, res.token);
+    resetWelcomeGate();
     setOwner({ email: res.email, role: res.role });
   }, []);
 
