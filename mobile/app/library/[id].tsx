@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Alert, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +22,10 @@ export default function LibraryDetail() {
   const [backtesting, setBacktesting] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [engineState, setEngineState] = useState<any>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = () => api.libraryGet(id as string).then((d: any) => {
     if (d.internal && d.engine_key) { router.replace(`/strategy/${d.engine_key}`); return; }
@@ -62,6 +66,31 @@ export default function LibraryDetail() {
   if (s === null) return <View style={styles.fill}><LoadingView /></View>;
   if (s === false) return <View style={styles.fill}><Text style={[type.body, { padding: spacing.lg }]}>Strategy not found.</Text></View>;
   const r = s.historical_results || {};
+  const userAdded = !!(s.imported || s.origin === "clone");
+  const deployed = !!engineState?.enabled;
+
+  const saveRename = async () => {
+    const name = nameInput.trim();
+    if (!name || name === s.name) { setRenaming(false); return; }
+    setSavingName(true);
+    try { await api.libraryRename(id as string, name); setRenaming(false); load(); }
+    catch (e: any) { Alert.alert("Rename failed", e?.response?.data?.detail || e?.message); }
+    finally { setSavingName(false); }
+  };
+
+  const deleteStrategy = () => {
+    if (deployed) return Alert.alert("Disable first", "This strategy is deployed. Disable it before deleting.");
+    Alert.alert("Delete strategy?", `Delete "${s.name}" permanently? This removes the strategy and its saved parameters.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        setDeleting(true);
+        try { await api.libraryDelete(id as string); router.back(); }
+        catch (e: any) { Alert.alert("Delete failed", e?.response?.data?.detail || e?.message); setDeleting(false); }
+      } },
+    ]);
+  };
+
+  const testInLab = () => router.push(`/research?sub=validate&strat=${encodeURIComponent(s.engine_key)}`);
 
   return (
     <ScrollView style={styles.fill} testID="catalog-detail" contentContainerStyle={{ padding: spacing.md, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 90 }}>
@@ -73,7 +102,25 @@ export default function LibraryDetail() {
       <Card style={{ marginBottom: spacing.md }}>
         <View style={styles.rowBetween}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={type.h2} numberOfLines={2}>{s.name}</Text>
+            {renaming ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <TextInput testID="catalog-rename-input" value={nameInput} onChangeText={setNameInput} autoFocus maxLength={80}
+                  style={styles.renameInput} placeholderTextColor={colors.textFaint} />
+                <Pressable testID="catalog-rename-save" onPress={saveRename} disabled={savingName} hitSlop={8}>
+                  {savingName ? <ActivityIndicator size="small" color={colors.teal} /> : <Ionicons name="checkmark-circle" size={22} color={colors.teal} />}
+                </Pressable>
+                <Pressable testID="catalog-rename-cancel" onPress={() => setRenaming(false)} hitSlop={8}><Ionicons name="close-circle" size={22} color={colors.textMuted} /></Pressable>
+              </View>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={[type.h2, { flexShrink: 1 }]} numberOfLines={2}>{s.name}</Text>
+                {userAdded && isOwner && (
+                  <Pressable testID="catalog-rename-btn" onPress={() => { setNameInput(s.name || ""); setRenaming(true); }} hitSlop={8}>
+                    <Ionicons name="pencil" size={15} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+            )}
             <Text style={[type.small, { marginTop: 2 }]}>{s.style} · {s.category} · {s.source}</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -83,14 +130,24 @@ export default function LibraryDetail() {
             <Pressable testID="catalog-favorite" onPress={() => api.libraryFavorite(id as string).then(load)} hitSlop={8}>
               <Ionicons name={s.favorite ? "heart" : "heart-outline"} size={22} color={s.favorite ? colors.teal : colors.textMuted} />
             </Pressable>
+            {userAdded && isOwner && (
+              <Pressable testID="catalog-delete-btn" onPress={deleteStrategy} disabled={deleting} hitSlop={8}>
+                {deleting ? <ActivityIndicator size="small" color={colors.red} /> : <Ionicons name="trash-outline" size={20} color={colors.red} />}
+              </Pressable>
+            )}
           </View>
         </View>
-        {s.imported && (
+        {s.origin === "clone" ? (
+          <View testID="clone-badge" style={styles.importedBadge}>
+            <Ionicons name="copy" size={11} color={colors.teal} />
+            <Text style={{ color: colors.teal, fontSize: 10, fontWeight: "800" }}>COPY</Text>
+          </View>
+        ) : s.imported ? (
           <View testID="imported-badge" style={styles.importedBadge}>
             <Ionicons name="cloud-upload" size={11} color={colors.teal} />
             <Text style={{ color: colors.teal, fontSize: 10, fontWeight: "800" }}>IMPORTED · {s.source_label}</Text>
           </View>
-        )}
+        ) : null}
         <Text style={[type.body, { marginTop: spacing.sm, lineHeight: 20 }]}>{s.description}</Text>
         {s.wireable && s.engine_key && (
           <View style={styles.enginePanel}>
@@ -109,6 +166,11 @@ export default function LibraryDetail() {
                 style={[styles.engineBtn, { borderColor: colors.cardBorder }, (!isOwner || backtesting) && { opacity: 0.4 }]}>
                 {backtesting ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="bar-chart" size={13} color={colors.textMuted} />}
                 <Text style={[styles.engineBtnTxt, { color: colors.textMuted }]}>{backtesting ? "Backtesting…" : "Backtest"}</Text>
+              </Pressable>
+              <Pressable testID="catalog-test-lab" onPress={testInLab}
+                style={[styles.engineBtn, { borderColor: colors.cardBorder }]}>
+                <Ionicons name="shield-checkmark" size={13} color={colors.textMuted} />
+                <Text style={[styles.engineBtnTxt, { color: colors.textMuted }]}>Test in Lab</Text>
               </Pressable>
               <Pressable testID="catalog-manage-engine" onPress={() => router.push(`/strategy/${s.engine_key}`)}
                 style={[styles.engineBtn, { borderColor: colors.teal }]}>
@@ -144,16 +206,22 @@ export default function LibraryDetail() {
 
       <Card style={{ marginBottom: spacing.md }}>
         <SectionLabel>BACKTEST PERFORMANCE</SectionLabel>
-        <Text style={[type.small, { marginBottom: spacing.sm }]}>Seeded — run a real backtest to validate.</Text>
-        <View style={styles.perfGrid}>
-          {[["ROI", `${r.roi}%`], ["Win Rate", `${r.win_rate}%`], ["Profit Factor", r.profit_factor], ["Sharpe", r.sharpe],
-            ["Sortino", r.sortino], ["Max DD", `${r.max_drawdown}%`], ["Avg Trade", `${r.avg_trade}%`], ["Trades", r.trade_count]].map(([k, v]) => (
-            <View key={String(k)} style={styles.perfCell}>
-              <Text style={type.label}>{String(k).toUpperCase()}</Text>
-              <Text style={[type.h3, { fontSize: 15 }]}>{String(v)}</Text>
+        {(r.roi === undefined || r.roi === null) ? (
+          <Text style={[type.small, { marginTop: spacing.sm }]} testID="no-backtest">Not yet validated. Run a backtest or use Test in Lab to generate performance for this strategy.</Text>
+        ) : (
+          <>
+            <Text style={[type.small, { marginBottom: spacing.sm }]}>Seeded — run a real backtest to validate.</Text>
+            <View style={styles.perfGrid}>
+              {[["ROI", `${r.roi}%`], ["Win Rate", `${r.win_rate}%`], ["Profit Factor", r.profit_factor], ["Sharpe", r.sharpe],
+                ["Sortino", r.sortino], ["Max DD", `${r.max_drawdown}%`], ["Avg Trade", `${r.avg_trade}%`], ["Trades", r.trade_count]].map(([k, v]) => (
+                <View key={String(k)} style={styles.perfCell}>
+                  <Text style={type.label}>{String(k).toUpperCase()}</Text>
+                  <Text style={[type.h3, { fontSize: 15 }]}>{String(v)}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        )}
       </Card>
 
       <RuleList title="ENTRY RULES" items={s.entry_rules} tone={colors.teal} />
@@ -207,6 +275,7 @@ const styles = StyleSheet.create({
   back: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.sm },
   grade: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  renameInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 18, fontWeight: "700", borderWidth: 1, borderColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
   gradeTxt: { fontSize: 10, fontWeight: "800" },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
   importedBadge: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", marginTop: spacing.sm, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },

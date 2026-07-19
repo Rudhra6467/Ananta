@@ -194,7 +194,7 @@ export default function StrategyLibrary() {
         </View>
       </Modal>
     </ScrollView>
-    <AddStrategySheet visible={addOpen} onClose={() => setAddOpen(false)} />
+    <AddStrategySheet visible={addOpen} onClose={() => setAddOpen(false)} onCloned={load} />
     </View>
   );
 }
