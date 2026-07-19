@@ -1146,3 +1146,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - (tabs)/strategy.tsx: passes onCloned={load} so the grid refreshes after a clone.
 - Verified on Expo web preview: Copy Existing picker lists cloneable strategies; clone detail shows COPY badge + rename + delete + Test in Lab and starts OFF (DISABLED). Lint clean.
 - Remaining mobile parity (Phase 3): redesign the mobile Strategy Center GRID (still old Strategy Leaderboard with grades/scores) to match web minimalist grid + focused detail; port Research deep analytics (MFE/MAE, regime tables, exit comparison) + multi-timeframe results.
+
+### 2026-06-19 — MOBILE Validate tab + Cockpit Strategy Health card redesign (mockup match)
+- research.tsx Validate wizard: split StratCard into CoreStratCard (checkbox on RIGHT, name left, subtle LIVE dot) and OtherStratCard (compact, centered, checkbox-less). Core = Hunter/Squeeze/Continuation; Other = everything else. Selected = teal border + filled teal checkmark (core) / teal border + teal text (other). Fixed odd-card stretch by removing flexGrow (fixed 47.8% width, left-aligned wrap).
+- StrategyHealthCard.tsx (Cockpit): taller side-by-side recommended cards — solid teal square icon (dark arrow), large 20px/800 strategy name, SOLID GREEN "RECOMMENDED" badge (new theme token colors.green #2FA84F), large 26px P&L. Dropped the count badge + sub-line for a cleaner header (title + "View Health" pill).
+- theme.ts: added green (#2FA84F) + greenGlow tokens for recommendation badges.
+- Verified by testing_agent (iteration_66): all testIDs present, toggling + backtest + segmented controls work, all 6 Research sub-tabs render without crash, no regressions. NOTE: Cockpit Strategy Health "recommended" state currently shows the empty state because /api/lab/health returns no positive-tone strategies right now (legitimate data state, not a bug); layout verified via code review.
