@@ -807,6 +807,13 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
         finally { setDeploying(false); }
     };
 
+    // "Test in Research Lab" → jump into the Validate wizard with THIS wired strategy pre-selected.
+    const testInLab = () => {
+        useResearchStore.setState({ strat: [s.engine_key], step: 1, phase: "idle", runs: [], progress: 0 });
+        localStorage.setItem("ananta_research_sub", "validate");
+        window.dispatchEvent(new CustomEvent("ananta:navigate", { detail: { tabId: "research" } }));
+    };
+
     if (!s) return <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> LOADING</div>;
     const r = s.historical_results || {};
     const Icon = CATEGORY_ICON[s.category] || Boxes;
@@ -910,6 +917,10 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                                 className="flex items-center gap-1.5 font-mono text-[10px] font-bold rounded px-3 py-1.5 border border-atlas-border text-atlas-textSecondary hover:text-atlas-text disabled:opacity-40">
                                 {backtesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <BarChart3 className="w-3 h-3" />}
                                 {backtesting ? "Backtesting…" : "Run Backtest"}
+                            </button>
+                            <button data-testid="catalog-test-lab" onClick={testInLab}
+                                className="flex items-center gap-1.5 font-mono text-[10px] font-bold rounded px-3 py-1.5 border border-atlas-border text-atlas-textSecondary hover:text-atlas-text">
+                                <ShieldCheck className="w-3 h-3" /> Test in Research Lab
                             </button>
                             <button data-testid="catalog-manage-engine" onClick={() => onOpenInternal(s.engine_key)}
                                 className="ml-auto font-mono text-[10px] font-bold text-atlas-cyan hover:text-cyan-300 border border-atlas-cyan/40 rounded px-3 py-1.5 whitespace-nowrap">

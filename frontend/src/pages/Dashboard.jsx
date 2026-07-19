@@ -150,7 +150,15 @@ function StrategyHealthToday() {
     return (
         <div className="panel border-atlas-border rounded-2xl p-4 space-y-3" data-testid="strategy-health-today">
             <div className="flex items-center justify-between gap-2">
-                <div className="font-heading text-lg text-atlas-text leading-none">Strategy Health</div>
+                <div className="flex items-center gap-2">
+                    <div className="font-heading text-lg text-atlas-text leading-none">Strategy Health</div>
+                    {recommended.length > 0 && (
+                        <span data-testid="health-recommended-badge"
+                            className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-atlas-positive/15 text-atlas-positive border border-atlas-positive/30 leading-none">
+                            {recommended.length}
+                        </span>
+                    )}
+                </div>
                 <button data-testid="cockpit-view-health-dashboard" onClick={viewDashboard}
                     className="flex items-center gap-1.5 rounded-full border border-atlas-cyan/40 text-atlas-cyan font-mono text-[10px] font-bold tracking-wide px-3 py-1.5 hover:bg-atlas-cyan/10 active:scale-95 transition-all">
                     View Health <ArrowRight className="w-3 h-3" />

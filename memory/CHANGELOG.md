@@ -1115,3 +1115,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - **Frontend:** Strategy detail (CatalogDetail) now shows, for user-added strategies only, an inline **Rename** (pencil → input + save/cancel) and a **Delete** (trash → confirm) control. Clones show a "Copy" badge (no longer double-badged as "Imported"). Delete returns to the library grid (auto-refreshes).
 - **Tested:** backend curl (rename 200 / rename-core 400 / delete-seed 400 / delete-fresh 200 / delete-deployed 409 / delete-after-disable 200) + UI screenshots (rename + delete round-trip, 0 clones left). Artifacts cleaned.
 - **Env note:** observed a recurring event-loop hang on backend hot-reload caused by the synchronous Kraken backfill loop (0% CPU, requests stall). Pre-existing infra behaviour, not from this feature; a `supervisorctl restart backend` clears it.
+
+### 2026-06-XX — Cockpit health-count badge + Clone→Validate quick-action
+- **Cockpit nudge (P4):** "Strategy Health" card title now carries a small green count badge showing how many strategies are recommended for paper trading (hidden when zero). Sources the same daily health sweep.
+- **Clone → Validate:** wired strategies in the Strategy detail (CatalogDetail — catalog, imports, and clones) now have a **Test in Research Lab** button that pre-selects the strategy and jumps into the Validate wizard. Gives a fresh copy a one-tap path to tune & validate.
+- **Tested:** screenshots — badge renders "2" from health data; clone→open→Test in Research Lab lands on Research Validate (step 2) with the clone preselected. Lint clean.
+- **Deferred (not bundled):** backfill/trading-loop hardening for the reload stall (risky — touches the live engine, needs RCA); Mobile parity (large port, needs explore_sub_agent); Multi-tenant accounts (architectural); Richer Selectable Exits / Phase E (owner has it ON HOLD).
