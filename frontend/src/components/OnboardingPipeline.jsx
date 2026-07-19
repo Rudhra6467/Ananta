@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
-    UserCheck, Link2, ShieldCheck, Wallet, Brain, FlaskConical, Sparkles, LineChart, Rocket,
+    Link2, Brain, FlaskConical, Rocket,
     CheckCircle2, Loader2, X, PartyPopper,
 } from "lucide-react";
 import AnantaLogo from "@/components/AnantaLogo";
 
 const STEPS = [
-    { key: "account", icon: UserCheck, label: "Create Account", detail: "Owner identity verified" },
-    { key: "exchange", icon: Link2, label: "Connect Exchange", detail: "Kraken · CCXT" },
-    { key: "verify", icon: ShieldCheck, label: "API Verified", detail: "Read-only market access confirmed" },
-    { key: "import", icon: Wallet, label: "Import Portfolio", detail: "$1,200 paper book initialized" },
-    { key: "strategy", icon: Brain, label: "Choose Strategy", detail: "Hunter · Squeeze · Continuation" },
-    { key: "validate", icon: FlaskConical, label: "Run Historical Validation", detail: "Walk-Forward + Monte Carlo" },
-    { key: "ai", icon: Sparkles, label: "AI Review", detail: "Strategy Architect sign-off" },
-    { key: "paper", icon: LineChart, label: "Paper Trading", detail: "Live simulation engaged" },
-    { key: "live", icon: Rocket, label: "Ready For Live Trading", detail: "Gate armed — you decide when" },
+    { key: "account", icon: Link2, label: "Account & Exchange", subs: ["Owner identity verified", "Kraken connected · API verified"] },
+    { key: "portfolio", icon: Brain, label: "Portfolio & Strategy", subs: ["$1,200 paper book initialized", "Hunter · Squeeze · Continuation"] },
+    { key: "validate", icon: FlaskConical, label: "Validate & AI Review", subs: ["Walk-Forward + Monte Carlo", "Strategy Architect sign-off"] },
+    { key: "live", icon: Rocket, label: "Go Live", subs: ["Paper trading engaged", "Live gate armed — you decide when"] },
 ];
 
 /**
@@ -76,7 +71,9 @@ export default function OnboardingPipeline({ open, onClose }) {
                                     {state === "done" && <span className="font-mono text-[9px] text-atlas-cyan">DONE</span>}
                                     {state === "run" && <span className="font-mono text-[9px] text-atlas-cyan blink-cursor">RUNNING</span>}
                                 </div>
-                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">{s.detail}</div>
+                                <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5 space-y-0.5">
+                                    {s.subs.map((sub, j) => <div key={j}>{sub}</div>)}
+                                </div>
                             </div>
                         );
                     })}

@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { setItem } from "../src/storage";
 import { Logo } from "../src/components/Logo";
+import { ProvisioningPipeline } from "../src/components/ProvisioningPipeline";
 import api from "../src/api";
 import { colors, spacing, type, radius } from "../src/theme";
 
@@ -32,6 +33,7 @@ export default function Onboarding() {
   const [selected, setSelected] = useState<string[]>([]);
   const [loadingStrats, setLoadingStrats] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
 
   // (re)load strategies whenever this screen is focused — so a strategy created
   // mid-flow (via /library/import) shows up instantly on return.
@@ -67,7 +69,8 @@ export default function Onboarding() {
     try {
       await api.onboardingPaperSetup({ capital, allocation_type: allocType, allocation_value: allocValue, strategies: selected });
       await setItem("ananta_onboarded", "1");
-      router.replace("/(tabs)");
+      setStarting(false);
+      setProvisioning(true);
     } catch (e: any) {
       setStarting(false);
       Alert.alert("Setup failed", e?.message || "Could not start paper trading.");
@@ -179,6 +182,7 @@ export default function Onboarding() {
           </StepShell>
         )}
       </ScrollView>
+      <ProvisioningPipeline visible={provisioning} onDone={() => router.replace("/(tabs)")} />
     </View>
   );
 }

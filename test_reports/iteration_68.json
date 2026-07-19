@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only regression testing of iteration 68 (UI cleanups). Tested WEB Trade toolbar + STOP ANANTA relocation, WEB Strategy Center card cleanup + pencil edit, WEB 4-step OnboardingPipeline, and NEW mobile 4-step ProvisioningPipeline. All items pass EXCEPT the WEB STOP ANANTA header-slot render: the button is not visible on the Trade tab because AppShell's ContextInfo does not mount #header-action-slot for the 'trade' (and 'dashboard') branch — HeaderActionPortal has no target to portal into. Mobile onboarding provisioning tour works end-to-end.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "Trade / AppShell top-header", "issue": "STOP ANANTA button never renders on Trade tab. Trade.jsx portals it into HeaderActionPortal (#header-action-slot), but AppShell.jsx ContextInfo() returns EARLY for id==='trade' and id==='dashboard' without rendering the <div id='header-action-slot'>. Result: HeaderActionPortal has no target -> button is missing entirely. Verified: querySelector('#header-action-slot') === null on Trade tab; querySelector('[data-testid=\"trade-stop-ananta\"]') === null. Reference: /app/frontend/src/AppShell.jsx:255-272 (trade branch) and :235-253 (dashboard branch) both return before line 286 where the slot is rendered.", "selector": "[data-testid='trade-stop-ananta']", "priority": "HIGH"}
+      ],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Provisioning pipeline finale action", "platform": "web", "issue": "Both surfaces render a 4-step provisioning pipeline with a finale + ENTER button, however the web STOP ANANTA header pill (part of Trade tab) is missing on web while mobile has no equivalent (out of scope). No cross-platform provisioning flow divergence itself.", "expected": "Feature parity for provisioning tour + trade-stop control", "actual": "Provisioning parity OK; STOP ANANTA broken only on WEB Trade tab (see ui_bugs)."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Fix AppShell.jsx ContextInfo(): render <div id='header-action-slot' data-testid='header-action-slot' /> in the 'dashboard' and 'trade' branches (or lift the slot out of ContextInfo so it always exists). Without this, Trade.jsx's HeaderActionPortal has nowhere to render and STOP ANANTA disappears — this is the specific requirement from the review request.",
+    "After the fix, re-verify: (a) [data-testid='trade-stop-ananta'] exists on Trade tab, (b) initial label 'STOP ANANTA', (c) click toggles to 'RESUME' and back, (d) button lives inside header slot (not inside [data-testid='trade-toolbar'])."
+  ],
+  "critical_code_review_comments": [
+    "AppShell.jsx ContextInfo: two early returns (dashboard, trade) omit #header-action-slot, silently disabling any HeaderActionPortal usage on those tabs. Consider always rendering the slot regardless of tab id (e.g., render it in the parent wrapper alongside ContextInfo) so tabs that opt-in via HeaderActionPortal aren't dependent on which branch is hit.",
+    "Trade.jsx line 82-90: the STOP ANANTA button is the ONLY control mounted via HeaderActionPortal from Trade.jsx — a defensive fallback (render inline if portal target absent) could prevent this class of regressions."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "web ~90% (STOP ANANTA missing), mobile 100%"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (verified working on both web + mobile preview)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "WEB: Onboarding pipeline auto-opens for owner when localStorage 'ananta_onboarded'=1 and sessionStorage 'ananta_tour_seen' cleared, then reload. StrategyCenter cards verified: 16 total, 1 reference-only (pairs-trading) with dashed note, others show single DEPLOY/VIEW bottom action + top-right pencil (card-edit-<id>) that opens detail. Trade tab: toolbar has ONLY PDF + REFRESH, no FRESH START anywhere. Broken: trade-stop-ananta missing because #header-action-slot is not mounted for 'trade'/'dashboard' branches of AppShell ContextInfo (see /app/frontend/src/AppShell.jsx line 286 vs the two early-return branches above). MOBILE: full 4-step provisioning overlay + finale + ENTER ANANTA + SKIP all render and ENTER navigates into the tabs (Cockpit). Login worked via [data-testid='login-email-input'] / [data-testid='login-password-input'] / [data-testid='login-submit-btn'].",
+  "rca of the issue": "AppShell.jsx's ContextInfo function renders three different layouts depending on tab id. Only the third fallback branch (id in ['strategies','research','workspace']) contains <div id='header-action-slot' />. For id==='dashboard' and id==='trade', the function returns before reaching that JSX. HeaderActionPortal (components/HeaderActionPortal.jsx) polls document.getElementById('header-action-slot') via rAF until it finds it — on the Trade tab it never resolves, so no portal is created and Trade.jsx's STOP ANANTA <button> is never inserted into the DOM. Fix: render #header-action-slot unconditionally (e.g., add it inside the 'trade' branch alongside the Metric row, or restructure so the slot lives outside of ContextInfo). Reproduction: as owner, navigate to Trade tab -> inspect DOM: neither #header-action-slot nor [data-testid='trade-stop-ananta'] exists. On Strategy tab both do exist and the portal works (Search + Add pills visible next to the 'Strategy Center' title)."
+}
