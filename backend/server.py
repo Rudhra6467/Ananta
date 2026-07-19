@@ -3231,7 +3231,85 @@ async def library_clone(strategy_id: str, body: CloneRequest = CloneRequest()):
     })
     await db.strategy_library.insert_one({**new_doc})
     new_doc.pop("_id", None)
+    # A freshly copied strategy must NOT auto-trade — the live engine treats a missing
+    # meta row as enabled-by-default, so pin the clone to DISABLED until the owner deploys it.
+    await db.strategy_meta.update_one(
+        {"key": new_key},
+        {"$set": {"key": new_key, "status": "DISABLED", "enabled": False, "created_at": now, "updated_at": now}},
+        upsert=True,
+    )
     return {"cloned": True, "id": new_key, "strategy": new_doc}
+
+
+class LibraryRename(BaseModel):
+    name: str
+
+
+def _is_user_added(doc: dict) -> bool:
+    """Only user-added strategies (imports + clones) may be renamed/deleted.
+    Built-in Core and seeded Catalog strategies stay locked."""
+    return bool(doc.get("imported") or doc.get("origin") == "clone")
+
+
+@api_router.patch("/library/{strategy_id}", dependencies=[Depends(require_owner)])
+async def library_rename(strategy_id: str, body: LibraryRename):
+    """Rename a user-added (imported or cloned) library strategy. Keeps the runtime
+    registry name in sync for wired declarative strategies. Built-in strategies are locked."""
+    from strategy.declarative_defs import get_declarative_spec, register_imported  # noqa: PLC0415
+
+    src = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    if not _is_user_added(src):
+        raise HTTPException(status_code=400, detail="Only your imported or copied strategies can be renamed. Built-in strategies are locked.")
+    new_name = (body.name or "").strip()[:80]
+    if not new_name:
+        raise HTTPException(status_code=400, detail="A name is required")
+
+    now = _strat_now_iso()
+    await db.strategy_library.update_one({"id": strategy_id}, {"$set": {"name": new_name, "updated_at": now}})
+
+    ekey = src.get("engine_key")
+    spec = src.get("declarative_spec") or (get_declarative_spec(ekey) if ekey else None)
+    if ekey and spec and spec.get("entry"):
+        register_imported(ekey, new_name, src.get("description") or "", spec, src.get("engine_params") or {})
+
+    doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    return {"updated": True, "strategy": doc}
+
+
+@api_router.delete("/library/{strategy_id}", dependencies=[Depends(require_owner)])
+async def library_delete(strategy_id: str):
+    """Delete a user-added (imported or cloned) library strategy plus its saved configs and
+    engine state. Blocked while the strategy is deployed (must be disabled first). Built-in
+    Core/Catalog strategies are locked and cannot be deleted."""
+    from strategy.declarative_defs import unregister_imported  # noqa: PLC0415
+
+    src = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="strategy not found")
+    if not _is_user_added(src):
+        raise HTTPException(status_code=400, detail="Only your imported or copied strategies can be deleted. Built-in strategies are locked.")
+
+    ekey = src.get("engine_key")
+    if ekey:
+        meta = await db.strategy_meta.find_one({"key": ekey}, {"_id": 0}) or {}
+        # Mirror the live-engine gate: a missing meta row counts as enabled-by-default, so
+        # "deployed" means enabled AND not explicitly DISABLED/ERROR.
+        effective_enabled = meta.get("enabled", True) and meta.get("status", "PAPER") not in ("DISABLED", "ERROR")
+        if effective_enabled:
+            raise HTTPException(status_code=409, detail="This strategy is currently deployed. Disable it first, then delete.")
+
+    await db.strategy_library.delete_one({"id": strategy_id})
+    configs_removed = 0
+    if ekey:
+        unregister_imported(ekey)
+        res = await db.strategy_configs.delete_many({"strategy_key": ekey})
+        configs_removed = res.deleted_count
+        await db.strategy_meta.delete_one({"key": ekey})
+    return {"deleted": True, "id": strategy_id, "configs_removed": configs_removed}
+
+
 
 
 

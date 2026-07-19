@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload, ChevronDown,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload, ChevronDown, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -757,6 +757,10 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
     const [backtesting, setBacktesting] = useState(false);
     const [deploying, setDeploying] = useState(false);
     const [engineState, setEngineState] = useState(null);
+    const [renaming, setRenaming] = useState(false);
+    const [nameInput, setNameInput] = useState("");
+    const [savingName, setSavingName] = useState(false);
+    const [deletingLib, setDeletingLib] = useState(false);
 
     const load = () => api.libraryGet(id).then((d) => {
         if (d.internal && d.engine_key) { onOpenInternal(d.engine_key); return; }
@@ -806,6 +810,33 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
     if (!s) return <div className="panel p-8 font-mono text-[12px] text-atlas-textSecondary flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> LOADING</div>;
     const r = s.historical_results || {};
     const Icon = CATEGORY_ICON[s.category] || Boxes;
+    const userAdded = !!(s.imported || s.origin === "clone");
+    const deployed = !!engineState?.enabled;
+
+    const startRename = () => { setNameInput(s.name || ""); setRenaming(true); };
+    const saveRename = async () => {
+        const name = nameInput.trim();
+        if (!name || name === s.name) { setRenaming(false); return; }
+        setSavingName(true);
+        try {
+            await api.libraryRename(id, name);
+            toast.success("Renamed", { description: name });
+            setRenaming(false);
+            await load();
+        } catch (e) { toast.error("Rename failed", { description: String(e?.response?.data?.detail || e?.message) }); }
+        finally { setSavingName(false); }
+    };
+    const deleteStrategy = async () => {
+        if (deployed) { toast.error("Disable this strategy before deleting it"); return; }
+        if (!window.confirm(`Delete "${s.name}" permanently? This removes the strategy and its saved parameters. This cannot be undone.`)) return;
+        setDeletingLib(true);
+        try {
+            await api.libraryDelete(id);
+            toast.success("Strategy deleted", { description: s.name });
+            onBack();
+        } catch (e) { toast.error("Delete failed", { description: String(e?.response?.data?.detail || e?.message) }); setDeletingLib(false); }
+    };
+
 
     return (
         <div className="space-y-5" data-testid="catalog-detail">
@@ -815,19 +846,46 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
 
             <div className="panel p-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5"><Icon className="w-6 h-6 text-atlas-cyan" /></div>
-                        <div>
-                            <div className="font-heading text-xl text-atlas-text">{s.name}</div>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-12 h-12 rounded-xl grid place-items-center border border-atlas-border bg-atlas-cyan/5 shrink-0"><Icon className="w-6 h-6 text-atlas-cyan" /></div>
+                        <div className="min-w-0 flex-1">
+                            {renaming ? (
+                                <div className="flex items-center gap-2">
+                                    <input data-testid="catalog-rename-input" autoFocus value={nameInput} maxLength={80}
+                                        onChange={(e) => setNameInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
+                                        className="flex-1 min-w-0 bg-atlas-panel border border-atlas-cyan/50 rounded-lg px-2.5 py-1.5 font-heading text-lg text-atlas-text outline-none" />
+                                    <button data-testid="catalog-rename-save" onClick={saveRename} disabled={savingName}
+                                        className="p-1.5 rounded-lg border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan disabled:opacity-50">
+                                        {savingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                    </button>
+                                    <button data-testid="catalog-rename-cancel" onClick={() => setRenaming(false)} className="p-1.5 rounded-lg border border-atlas-border text-atlas-textTertiary hover:text-atlas-text"><X className="w-4 h-4" /></button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="font-heading text-xl text-atlas-text truncate">{s.name}</div>
+                                    {userAdded && isOwner && (
+                                        <button data-testid="catalog-rename-btn" onClick={startRename} title="Rename"
+                                            className="text-atlas-textTertiary hover:text-atlas-cyan shrink-0"><Pencil className="w-3.5 h-3.5" /></button>
+                                    )}
+                                </div>
+                            )}
                             <div className="font-mono text-[10px] text-atlas-textTertiary">{s.style} · {s.category} · {s.source}</div>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>Grade {s.ai_grade}</span>
-                        {s.imported && <span data-testid="imported-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Upload className="w-3 h-3" /> Imported</span>}
+                        {s.imported && s.origin !== "clone" && <span data-testid="imported-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Upload className="w-3 h-3" /> Imported</span>}
+                        {s.origin === "clone" && <span data-testid="clone-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</span>}
                         <button data-testid="catalog-favorite" onClick={() => api.libraryFavorite(id).then(load)} className="text-atlas-textTertiary hover:text-atlas-cyan" title="Favorite">
                             <Heart className={`w-5 h-5 ${s.favorite ? "fill-atlas-cyan text-atlas-cyan" : ""}`} />
                         </button>
+                        {userAdded && isOwner && (
+                            <button data-testid="catalog-delete-btn" onClick={deleteStrategy} disabled={deletingLib} title={deployed ? "Disable before deleting" : "Delete strategy"}
+                                className="text-atlas-textTertiary hover:text-atlas-negative disabled:opacity-40">
+                                {deletingLib ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                            </button>
+                        )}
                     </div>
                 </div>
                 <p className="font-mono text-xs text-atlas-textSecondary mt-3 leading-relaxed">{s.description}</p>
