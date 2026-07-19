@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -3357,6 +3358,14 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 # ---- lifecycle ----
 @app.on_event("startup")
 async def on_startup():
+    # Enlarge the default thread-pool executor. asyncio.to_thread (used by every CCXT
+    # market-data fetch) shares this pool; the small default (min(32, cpu+4)) could be
+    # fully consumed by concurrent/slow Kraken calls during warmup, starving all other
+    # to_thread work and making the API appear to hang. 48 workers comfortably absorbs
+    # the snapshot + OHLCV + levels fetch storm without changing any trading behaviour.
+    with contextlib.suppress(Exception):
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=48, thread_name_prefix="io"))
     # CRITICAL: nothing here may block on MongoDB. Uvicorn does not serve ANY request
     # (including the K8s /health probe) until this returns, so a slow/unreachable Atlas
     # here would hang the probe and crash-loop the whole container. All Mongo-dependent

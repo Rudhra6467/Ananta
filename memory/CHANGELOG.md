@@ -1121,3 +1121,11 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - **Clone → Validate:** wired strategies in the Strategy detail (CatalogDetail — catalog, imports, and clones) now have a **Test in Research Lab** button that pre-selects the strategy and jumps into the Validate wizard. Gives a fresh copy a one-tap path to tune & validate.
 - **Tested:** screenshots — badge renders "2" from health data; clone→open→Test in Research Lab lands on Research Validate (step 2) with the clone preselected. Lint clean.
 - **Deferred (not bundled):** backfill/trading-loop hardening for the reload stall (risky — touches the live engine, needs RCA); Mobile parity (large port, needs explore_sub_agent); Multi-tenant accounts (architectural); Richer Selectable Exits / Phase E (owner has it ON HOLD).
+
+### 2026-06-XX — Fix: backend event-loop stall on startup/reload (market-data pool exhaustion)
+- **Root cause (RCA):** `fetch_snapshots` gathers a live CCXT fetch over ALL enabled symbols at once; each spawns blocking HTTP calls via `asyncio.to_thread`. The default urllib3 pool (10) + small default thread-pool executor got exhausted by the concurrent fetch storm (also fed by the shared lab-backfill clients), starving all `to_thread` work and making the whole API appear to hang (0% CPU, requests time out) until a manual restart.
+- **Surgical fixes (no trading-logic change):**
+  1. `market_data.py`: CCXT Kraken/Coinbase clients now use a `requests.Session` with `HTTPAdapter(pool_connections=32, pool_maxsize=32)` and timeout lowered 8000→5000ms. (lab backfill reuses these same clients, so it benefits too.)
+  2. `market_data.py`: bounded `asyncio.Semaphore(8)` around the threaded exchange call so batch fetches can never spawn 20-30 simultaneous blocking calls.
+  3. `server.py` startup: enlarged the default asyncio executor to `ThreadPoolExecutor(max_workers=48)` so `to_thread` can't be starved.
+- **Verified:** after restart the API stayed responsive throughout the warmup window (21/22 probes 200; the one miss was the boot second). Zero "Connection pool is full" warnings since the restart (all such warnings pre-date it). Login + /api/market/snapshots (10 live prices) work.

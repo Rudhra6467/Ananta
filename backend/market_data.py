@@ -10,10 +10,23 @@ import logging
 import time
 
 import ccxt
+import requests
+from requests.adapters import HTTPAdapter
 
 from models import MarketSnapshot
 
 logger = logging.getLogger(__name__)
+
+
+def _pooled_session() -> requests.Session:
+    """A requests session with a generously-sized connection pool so concurrent
+    threaded CCXT fetches (snapshots + OHLCV + levels warmup) don't exhaust the
+    default 10-connection urllib3 pool and stall waiting for a free connection."""
+    s = requests.Session()
+    adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=0)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
 
 # Lazy-initialised exchange clients (sync; we run them in a thread)
 _KRAKEN: ccxt.kraken | None = None
@@ -48,14 +61,14 @@ _OHLCV_TTL = 300.0  # 5 minutes; new 1h candle only forms once an hour
 def _get_kraken() -> ccxt.kraken:
     global _KRAKEN
     if _KRAKEN is None:
-        _KRAKEN = ccxt.kraken({"enableRateLimit": True, "timeout": 8000})
+        _KRAKEN = ccxt.kraken({"enableRateLimit": True, "timeout": 5000, "session": _pooled_session()})
     return _KRAKEN
 
 
 def _get_coinbase() -> ccxt.coinbase:
     global _COINBASE
     if _COINBASE is None:
-        _COINBASE = ccxt.coinbase({"enableRateLimit": True, "timeout": 8000})
+        _COINBASE = ccxt.coinbase({"enableRateLimit": True, "timeout": 5000, "session": _pooled_session()})
     return _COINBASE
 
 
@@ -110,13 +123,20 @@ def _build_snapshot(symbol: str, ticker: dict, ob: dict, exchange: str) -> Marke
     )
 
 
+# Bound the number of concurrent threaded exchange calls so a batch fetch
+# (fetch_snapshots gathers over ALL symbols) can't spawn 20-30 simultaneous blocking
+# HTTP calls and exhaust the connection/thread pools. 8 keeps warmup snappy while safe.
+_FETCH_SEM = asyncio.Semaphore(8)
+
+
 async def fetch_snapshot(symbol: str) -> MarketSnapshot | None:
     """Async wrapper that runs the sync CCXT call in a thread + uses TTL cache."""
     cached = _CACHE.get(symbol)
     now = time.time()
     if cached and now - cached[0] < _CACHE_TTL:
         return cached[1]
-    snap = await asyncio.to_thread(_fetch_snapshot_sync, symbol)
+    async with _FETCH_SEM:
+        snap = await asyncio.to_thread(_fetch_snapshot_sync, symbol)
     if snap is not None:
         _CACHE[symbol] = (now, snap)
     return snap
