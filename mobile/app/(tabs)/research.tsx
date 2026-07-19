@@ -16,6 +16,7 @@ import { base } from "../../src/format";
 const PERIODS = [{ key: "1m", label: "1M" }, { key: "3m", label: "3M" }, { key: "6m", label: "6M" }, { key: "1y", label: "1Y" }];
 const ROUTES = [
   { key: "validate", title: "Validate" },
+  { key: "health", title: "Health" },
   { key: "ai", title: "AI Analysis" },
   { key: "closed", title: "Closed Trades" },
   { key: "reports", title: "Reports" },
@@ -38,6 +39,7 @@ export default function Research() {
     const pad = { padding: spacing.md, paddingBottom: insets.bottom + 100 };
     switch (route.key) {
       case "validate": return <ScrollView contentContainerStyle={pad}><Validate isOwner={isOwner} /></ScrollView>;
+      case "health": return <ScrollView contentContainerStyle={pad}><Health isOwner={isOwner} /></ScrollView>;
       case "ai": return <ScrollView contentContainerStyle={pad}><Coach isOwner={isOwner} /></ScrollView>;
       case "closed": return <ScrollView contentContainerStyle={pad}><ClosedTrades isOwner={isOwner} /></ScrollView>;
       case "reports": return <ScrollView contentContainerStyle={pad}><Reports /></ScrollView>;
@@ -64,6 +66,7 @@ export default function Research() {
             scrollEnabled
             options={{
               validate: { testID: "research-tab-validate" },
+              health: { testID: "research-tab-health" },
               ai: { testID: "research-tab-ai" },
               closed: { testID: "research-tab-closed" },
               reports: { testID: "research-tab-reports" },
@@ -213,6 +216,97 @@ function Validate({ isOwner }: { isOwner: boolean }) {
 }
 
 
+function Health({ isOwner }: { isOwner: boolean }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [sweeping, setSweeping] = useState(false);
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.labHealth().then((d) => setData(d?.ready ? d : { ready: false })).catch(() => setData({ error: true })).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const sweep = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    setSweeping(true);
+    try {
+      await api.labHealthSweep();
+      Alert.alert("Health sweep started", "Recomputing performance across timeframes. Pull to refresh in a moment.");
+    } catch (e: any) { Alert.alert("Sweep failed", e?.message); }
+    finally { setSweeping(false); }
+  };
+
+  if (loading && !data) return <Card style={{ alignItems: "center", paddingVertical: spacing.lg }}><ActivityIndicator color={colors.teal} /></Card>;
+  if (data?.error) return <Card><Text style={type.bodyMuted}>Couldn&apos;t load strategy health.</Text></Card>;
+
+  const strategies: any[] = data?.strategies || [];
+  const recommended = strategies.filter((s) => s.recommendation?.tone === "positive").length;
+
+  return (
+    <View testID="health-panel">
+      <Card style={{ marginBottom: spacing.md }}>
+        <View style={styles.rowBetween}>
+          <View>
+            <SectionLabel>DAILY STRATEGY HEALTH</SectionLabel>
+            <Text style={[type.small, { marginTop: 4 }]}>
+              {data?.ready ? `${recommended} recommended · ${strategies.length} analysed` : "No sweep yet — run one to precompute performance."}
+            </Text>
+          </View>
+          <Pressable testID="health-run-sweep" onPress={sweep} disabled={sweeping || !isOwner} style={[styles.pdfBtn, { paddingHorizontal: 12 }, (!isOwner) && { opacity: 0.4 }]}>
+            {sweeping ? <ActivityIndicator color={colors.teal} size="small" /> : <><Ionicons name="refresh" size={13} color={colors.teal} /><Text style={styles.pdfTxt}>RUN SWEEP</Text></>}
+          </Pressable>
+        </View>
+      </Card>
+      {strategies.length === 0 ? (
+        <Card><Text style={type.bodyMuted}>No health data yet. Run a sweep to see per-strategy recommendations.</Text></Card>
+      ) : strategies.map((s) => <HealthStrategyCard key={s.strategy} s={s} />)}
+    </View>
+  );
+}
+
+function HealthStrategyCard({ s }: { s: any }) {
+  const rec = s.recommendation || {};
+  const toneColor = rec.tone === "positive" ? colors.teal : rec.tone === "warning" ? colors.amber : colors.red;
+  const h = s.headline || {};
+  const pnl = Number(h.net_pnl ?? 0);
+  return (
+    <Card style={{ marginBottom: spacing.md }} testID={`health-strategy-${s.strategy}`}>
+      <View style={styles.rowBetween}>
+        <Text style={type.h3}>{s.name}</Text>
+        <View style={[styles.exitTag, { borderColor: toneColor, backgroundColor: "transparent" }]} testID={`health-badge-${s.strategy}`}>
+          <Text style={[styles.exitTagTxt, { color: toneColor }]}>{rec.badge || "—"}</Text>
+        </View>
+      </View>
+      {rec.reason ? <Text style={[type.small, { marginTop: 4 }]}>{rec.reason}</Text> : null}
+      <View style={styles.grid}>
+        <Mini label="Net P&L" value={`${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`} color={pnl >= 0 ? colors.teal : colors.red} />
+        <Mini label="Win Rate" value={`${(h.win_rate_pct ?? 0).toFixed(0)}%`} />
+        <Mini label="Profit Factor" value={(h.profit_factor ?? 0).toFixed(2)} />
+        <Mini label="Trades" value={String(h.trades ?? 0)} />
+      </View>
+      <View style={styles.healthMetaRow}>
+        <HealthMeta label="Best Timeframe" value={s.best_timeframe || "—"} />
+        <HealthMeta label="Best Exit" value={s.best_exit || "—"} />
+      </View>
+      <View style={styles.healthMetaRow}>
+        <HealthMeta label="MFE Capture" value={`${(s.capture_rate_pct ?? 0).toFixed(0)}%`} />
+        <HealthMeta label="Best Regime" value={s.best_regime || "—"} />
+      </View>
+      <Text style={[type.small, { fontSize: 10, marginTop: spacing.sm, color: colors.textFaint }]}>Based on the latest daily backtest sweep — not a live-trading result.</Text>
+    </Card>
+  );
+}
+
+function HealthMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.healthMeta}>
+      <Text style={[type.label, { fontSize: 9 }]}>{label}</Text>
+      <Text style={[type.body, { fontSize: 13, fontWeight: "700", marginTop: 2 }]} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
 function Coach({ isOwner }: { isOwner: boolean }) {
   const [aiOn, setAiOn] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -297,9 +391,77 @@ function ClosedTrades({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+const RUN_KIND_LABELS: Record<string, string> = { backtest: "Validation", grid_search: "Grid Search", sensitivity: "Sensitivity", walk_forward: "Walk-Forward" };
+const RUN_EXIT_LABELS: Record<string, string> = { fixed: "Fixed % Target", atr: "ATR Trail", native: "Full Engine", engine: "Full Engine" };
+
+function MyReports() {
+  const [runs, setRuns] = useState<any[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = React.useCallback(() => {
+    api.labRuns(50)
+      .then((d: any) => { setRuns((d.runs || []).filter((r: any) => r.kind !== "health_sweep").slice(0, 30)); setErr(null); })
+      .catch((e: any) => setErr(e?.status === 401 || e?.status === 403 ? "owner" : "load"));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const del = (r: any) => {
+    Alert.alert("Delete report?", "This permanently removes the validation report.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try { await api.deleteLabRun(r.id); setRuns((list) => (list || []).filter((x) => x.id !== r.id)); }
+        catch (e: any) { Alert.alert("Delete failed", e?.message); }
+      } },
+    ]);
+  };
+
+  return (
+    <Card style={{ marginBottom: spacing.md }} testID="my-reports-history">
+      <SectionLabel>MY REPORTS HISTORY</SectionLabel>
+      <Text style={[type.small, { marginVertical: spacing.sm }]}>Your past Research Lab validations — saved to your account across every device.</Text>
+      {err === "owner" ? (
+        <Text style={[type.small, { paddingVertical: spacing.sm }]} testID="reports-owner-gate">Owner login required to view your reports history.</Text>
+      ) : err === "load" ? (
+        <Pressable testID="reports-retry" onPress={load} style={styles.pdfBtn}><Ionicons name="refresh" size={13} color={colors.teal} /><Text style={styles.pdfTxt}>RETRY</Text></Pressable>
+      ) : runs === null ? (
+        <ActivityIndicator color={colors.teal} style={{ marginVertical: spacing.md }} />
+      ) : runs.length === 0 ? (
+        <Text style={[type.small, { paddingVertical: spacing.sm }]} testID="reports-empty">No reports yet. Complete a validation run and it&apos;ll appear here.</Text>
+      ) : (
+        runs.map((r) => {
+          const done = r.status === "DONE";
+          const running = r.status === "QUEUED" || r.status === "RUNNING";
+          const statusColor = done ? colors.teal : running ? colors.amber : colors.red;
+          const strat = r.kind === "health_sweep" ? "All" : (r.strategies || []).join(" + ") || "—";
+          return (
+            <View key={r.id} style={styles.reportRow} testID="report-row">
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.body, { fontSize: 13, fontWeight: "700" }]} numberOfLines={1}>{RUN_KIND_LABELS[r.kind] || r.kind} · {strat}</Text>
+                <Text style={[type.small, { fontSize: 10, marginTop: 2 }]} numberOfLines={1}>
+                  TF {r.timeframe || "1h"}{r.compare_timeframes ? " · MTF" : ""} · {RUN_EXIT_LABELS[r.exit_method] || r.exit_method || "—"} · {r.period || "—"}
+                </Text>
+                <Text style={[type.small, { fontSize: 10, color: statusColor, marginTop: 2 }]}>{r.status}</Text>
+              </View>
+              <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                <Pressable testID={`report-open-${r.id}`} disabled={!done} onPress={() => Linking.openURL(api.labRunPdfUrl(r.id))} style={[styles.iconBtn, !done && { opacity: 0.3 }]}>
+                  <Ionicons name="document-text-outline" size={16} color={colors.teal} />
+                </Pressable>
+                <Pressable testID={`report-delete-${r.id}`} disabled={running} onPress={() => del(r)} style={[styles.iconBtn, running && { opacity: 0.3 }]}>
+                  <Ionicons name="trash-outline" size={16} color={colors.red} />
+                </Pressable>
+              </View>
+            </View>
+          );
+        })
+      )}
+    </Card>
+  );
+}
+
 function Reports() {
   return (
     <View testID="reports-panel">
+      <MyReports />
       {["paper", "live"].map((mode) => (
         <Card key={mode} testID={`report-${mode}-box`} style={{ marginBottom: spacing.md }}>
           <SectionLabel>{mode === "paper" ? "PAPER TRADING REPORT" : "LIVE TRADING REPORT"}</SectionLabel>
@@ -396,4 +558,8 @@ const styles = StyleSheet.create({
   pdfTxt: { color: colors.teal, fontWeight: "700", fontSize: 11, letterSpacing: 0.6 },
   verdict: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   curveRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+  healthMetaRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  healthMeta: { flex: 1, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm },
+  reportRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+  iconBtn: { width: 34, height: 34, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.cardBorder, alignItems: "center", justifyContent: "center" },
 });

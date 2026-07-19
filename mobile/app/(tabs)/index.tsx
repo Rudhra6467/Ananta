@@ -26,21 +26,21 @@ import { LoadingView, ErrorView } from "../../src/components/StateView";
 import { TradingWizard } from "../../src/components/TradingWizard";
 import { AskAnanta } from "../../src/components/AskAnanta";
 import { SystemHealthChip } from "../../src/components/SystemHealthChip";
+import { StrategyHealthCard } from "../../src/components/StrategyHealthCard";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
 import { usd, pct, price, base } from "../../src/format";
 
 const RAIL_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "AVAX/USD"];
 
 async function loadCockpit() {
-  const [portfolio, environment, market, risk, reasoning, funnel] = await Promise.all([
+  const [portfolio, environment, market, risk, reasoning] = await Promise.all([
     api.portfolio(),
     api.getEnvironment(),
     api.marketSnapshots(),
     api.riskStatus(),
     api.reasoning(12),
-    api.researchFunnel().catch(() => null),
   ]);
-  return { portfolio, environment, market, risk, reasoning, funnel };
+  return { portfolio, environment, market, risk, reasoning };
 }
 
 function botStatus(risk: any, positions: any[]) {
@@ -76,12 +76,6 @@ export default function Cockpit() {
 
   const railMap = new Map(snaps.map((s) => [s.symbol, s]));
   const rail = snaps.length ? snaps : RAIL_SYMBOLS.map((sym) => railMap.get(sym)).filter(Boolean);
-  const fn = (data!.funnel && (data!.funnel.funnel || data!.funnel)) || {};
-  const mScanned = fn.detected ?? "—";
-  const mQualified = fn.qualified ?? "—";
-  const mSetups = fn.executed ?? "—";
-  const mRejected = (typeof fn.detected === "number" && typeof fn.qualified === "number") ? fn.detected - fn.qualified : "—";
-  const regimeVal = data!.reasoning?.items?.[0]?.bias ?? (Array.isArray(data!.reasoning) ? data!.reasoning[0]?.bias : null) ?? "NEUTRAL";
 
   return (
     <View style={styles.fill}>
@@ -139,16 +133,9 @@ export default function Cockpit() {
           </Pressable>
         </View>
 
-        {/* Scanning-engine matrix: Setups|Scanned / Rejected|Qualified / Regime base */}
-        <View style={[styles.metricGrid, { marginTop: spacing.md }]}>
-          <MetricCell testID="cockpit-metric-setups" label="Setups" value={mSetups} />
-          <MetricCell testID="cockpit-metric-scanned" label="Scanned" value={mScanned} />
-          <MetricCell testID="cockpit-metric-rejected" label="Rejected" value={mRejected} tone={colors.red} />
-          <MetricCell testID="cockpit-metric-qualified" label="Qualified" value={mQualified} tone={colors.teal} />
-        </View>
-        <View style={styles.regimeCell} testID="cockpit-metric-regime">
-          <Text style={type.label}>Regime</Text>
-          <Text style={styles.metricValue}>{String(regimeVal)}</Text>
+        {/* Strategy Health — top recommended strategies from the daily sweep */}
+        <View style={{ marginTop: spacing.md }}>
+          <StrategyHealthCard />
         </View>
       </View>
 
@@ -271,15 +258,6 @@ function WeeklyReviewModal({ visible, onClose }: { visible: boolean; onClose: ()
         </View>
       </View>
     </Modal>
-  );
-}
-
-function MetricCell({ label, value, tone, testID }: { label: string; value: any; tone?: string; testID?: string }) {
-  return (
-    <View style={styles.metricCell} testID={testID}>
-      <Text style={type.label}>{label}</Text>
-      <Text style={[styles.metricValue, tone ? { color: tone } : null]}>{String(value)}</Text>
-    </View>
   );
 }
 

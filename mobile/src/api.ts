@@ -128,6 +128,17 @@ export const api = {
   labCreateRun: (spec: any) => post<any>("/lab/runs", spec),
   labRun: (id: string) => get<any>(`/lab/runs/${id}`),
   labMonteCarlo: (payload: any) => post<any>("/lab/monte_carlo", payload),
+  // Strategy Health (daily sweep) + server-backed lab-runs history
+  labHealth: () => get<any>("/lab/health"),
+  labHealthStatus: () => get<any>("/lab/health/status"),
+  labHealthSweep: () => post<any>("/lab/health/sweep", {}),
+  labRuns: (limit = 50) => get<any>(`/lab/runs?limit=${limit}`),
+  labRunPdfUrl: (id: string) => `${API}/lab/runs/${id}/pdf`,
+  deleteLabRun: (id: string) => request<any>(`/lab/runs/${id}`, { method: "DELETE" }),
+  // Library management — clone / rename / delete (user-added strategies)
+  libraryClone: (id: string, name?: string) => post<any>(`/library/${id}/clone`, { name: name || null }),
+  libraryRename: (id: string, name: string) => request<any>(`/library/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  libraryDelete: (id: string) => request<any>(`/library/${id}`, { method: "DELETE" }),
 
   // --- Onboarding paper-trading setup (drives the existing paper engine) ---
   onboardingPaperSetup: (cfg: any) => post<any>("/onboarding/paper-setup", cfg),
