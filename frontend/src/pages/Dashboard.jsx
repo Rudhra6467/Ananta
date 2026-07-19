@@ -15,6 +15,7 @@ import CandleChart from "@/components/CandleChart";
 import ManualExitButton from "@/components/ManualExitButton";
 import WatchlistControl from "@/components/WatchlistControl";
 import TradingWizard from "@/components/TradingWizard";
+import ComingSoonPromo from "@/components/ComingSoonPromo";
 import { Rocket } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 
@@ -53,6 +54,8 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-5" data-testid="cockpit-page">
+            {/* First-login welcome sheet (Coming Soon to Ananta) — Cockpit only */}
+            <ComingSoonPromo variant="sheet" isOwner={isOwner} />
             {/* Action hub — dual control row directly beneath Account Value */}
             <div className="grid grid-cols-2 gap-3">
                 <button data-testid="cockpit-start-trading" onClick={() => (isOwner ? setWizardOpen(true) : toast.error("Owner login required"))}

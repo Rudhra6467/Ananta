@@ -1167,3 +1167,10 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - MOBILE: new src/components/ProvisioningPipeline.tsx — animated 4-step provisioning overlay mirroring web, wired into onboarding.tsx (shown on startPaper success -> ENTER ANANTA navigates to tabs).
 - Verified by testing_agent iteration_68 (web+mobile): all items PASS after the header-slot fix. No console errors.
 - OPEN: marketing promo image /promo/coming-soon.jpg is a baked AI-generated JPG with text artifacts ("Verification Badlys", garbled background phone text) — cannot be fixed in code; needs image regeneration or an HTML/CSS rebuild.
+
+### 2026-06-19 — "Coming Soon" promo rebuilt (HTML/CSS) + moved to Cockpit welcome sheet (web)
+- ComingSoonPromo.jsx fully rebuilt as pure HTML/CSS (no baked JPG): crisp header, 3 feature cards with bullets (fixed typo "Verification Badlys" -> "Verified badges"), "Stay Tuned" strip. Added email-capture Waitlist (data-testid promo-email-input + promo-join-waitlist -> POST /api/promo/coming-soon/waitlist with validated email).
+- New variant="sheet": first-login welcome MODAL on the Cockpit (data-testid cockpit-welcome-sheet). Show logic: non-owner first 3 sessions (localStorage views, MAX 3); owner every login (per-session flag ananta_welcome_shown, reset on login in AuthContext). "Continue to Cockpit" closes it.
+- Dashboard.jsx: mounts <ComingSoonPromo variant="sheet" isOwner={isOwner}/>. AccountOverlay.jsx: removed BOTH the promo banner and the permanent "What's Coming" section + import (promo no longer in Account). AuthContext.login: clears sessionStorage ananta_welcome_shown so the sheet re-shows each login.
+- Verified: welcome sheet renders on Cockpit for owner (screenshot); no typos/image/garbled text; waitlist endpoint stores email (curl); AccountOverlay lint clean (no promo refs). Reset polluted promo_state after test.
+- Scope: WEB only (this promo/feature does not exist on mobile).

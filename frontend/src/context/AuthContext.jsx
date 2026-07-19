@@ -39,6 +39,7 @@ export function AuthProvider({ children }) {
     const login = useCallback(async (email, password) => {
         const res = await api.login(email, password);
         localStorage.setItem(TOKEN_KEY, res.token);
+        sessionStorage.removeItem("ananta_welcome_shown");
         setOwner({ email: res.email, role: res.role });
         return res;
     }, []);
