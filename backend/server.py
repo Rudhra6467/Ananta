@@ -110,6 +110,8 @@ class SettingsUpdate(BaseModel):
     max_spread_pct: float | None = None
     max_daily_loss_pct: float | None = None
     min_confidence: float | None = None
+    allowed_regimes: list[str] | None = None
+    level_entry_enabled: bool | None = None
     position_size_pct_min: float | None = None
     position_size_pct_max: float | None = None
     adaptive_sizing_enabled: bool | None = None

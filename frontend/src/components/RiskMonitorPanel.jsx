@@ -43,7 +43,8 @@ export default function RiskMonitorPanel() {
                 <ToggleField label="Support / Level Entry" desc="Only enter at clean historical support zones" k="level_entry_enabled" value={s.level_entry_enabled} isOwner={isOwner} onSave={save} />
                 <ToggleField label="Adaptive Sizing" desc="Size the lot by setup strength" k="adaptive_sizing_enabled" value={s.adaptive_sizing_enabled} isOwner={isOwner} onSave={save} />
                 <NumField label="Breakout Min Confidence" k="breakout_min_confidence" value={s.breakout_min_confidence} isOwner={isOwner} onSave={save} />
-                <NumField label="Max Open Positions" k="max_concurrent_positions" value={s.max_concurrent_positions} isOwner={isOwner} onSave={save} last />
+                <NumField label="Max Open Positions" k="max_concurrent_positions" value={s.max_concurrent_positions} isOwner={isOwner} onSave={save} />
+                <RegimeField value={s.allowed_regimes} isOwner={isOwner} onSave={save} />
             </Card>
 
             {/* ACTIVE EXIT ENGINE (read-only) */}
@@ -110,6 +111,33 @@ function NumField({ label, k, value, isOwner, onSave, last }) {
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                 inputMode="decimal"
                 className="w-24 rounded-md border border-atlas-border bg-atlas-bg px-2.5 py-1.5 text-right font-mono text-[12px] font-bold text-atlas-text focus:border-atlas-cyan focus:outline-none disabled:opacity-50" />
+        </div>
+    );
+}
+
+const REGIMES = ["COMPRESSION", "REVERSAL", "TREND_UP", "TREND_DOWN", "RANGE", "NEUTRAL"];
+
+function RegimeField({ value, isOwner, onSave }) {
+    const active = Array.isArray(value) ? value : [];
+    const toggle = (r) => onSave({ allowed_regimes: active.includes(r) ? active.filter((x) => x !== r) : [...active, r] });
+    return (
+        <div className="py-2.5">
+            <div className="flex items-center justify-between">
+                <span className="font-mono text-[12px] text-atlas-textSecondary">Allowed Regimes</span>
+                <span data-testid="rm-regimes-count" className="font-mono text-[10px] text-atlas-textTertiary">{active.length ? `${active.length} selected` : "All regimes"}</span>
+            </div>
+            <div className="label-tag mt-0.5 text-[9px] text-atlas-textTertiary normal-case tracking-normal">Only open entries in these regimes. None selected = trade all.</div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+                {REGIMES.map((r) => {
+                    const on = active.includes(r);
+                    return (
+                        <button key={r} type="button" data-testid={`rm-regime-${r}`} disabled={!isOwner} onClick={() => toggle(r)}
+                            className={`px-2.5 py-1 rounded-full font-mono text-[10px] border transition-colors disabled:opacity-50 ${on ? "border-atlas-cyan bg-atlas-cyan/15 text-atlas-cyan" : "border-atlas-border text-atlas-textTertiary hover:text-atlas-textSecondary"}`}>
+                            {r}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }

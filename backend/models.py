@@ -250,6 +250,10 @@ class RiskSettings(BaseModel):
     max_daily_loss_pct: float = 10.0  # SWING PIVOT: drop more than 10% from day start -> kill
     account_max_drawdown_pct: float = 20.0  # RUIN LINE: peak-to-trough equity drawdown that defines account failure (graduation gate 9)
     min_confidence: float = 0.80  # SWING PIVOT: high-conviction macro floor
+    # Global regime filter (opt-in). Empty list = trade all regimes (default).
+    # When set (e.g. ["COMPRESSION","REVERSAL"]) the live engine only opens NEW
+    # entries when the asset regime is in this list. Configured in Risk Monitor.
+    allowed_regimes: list[str] = []
     # position sizing (legacy: % of equity, scaled by confidence)
     position_size_pct_min: float = 1.0
     position_size_pct_max: float = 3.0

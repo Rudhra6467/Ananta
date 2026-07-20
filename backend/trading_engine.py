@@ -888,6 +888,18 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         fusion_summary = f"HOLD - Hunter strategy is {_hstate} in the Strategy Center; no new entries."
         decision = "HOLD"
 
+    # --- Global regime filter (opt-in): only open entries in the configured regimes.
+    #     Empty allowed_regimes = trade all (default). Set in Risk Monitor › Entry Setup. ---
+    if decision == "BUY" and settings.allowed_regimes:
+        _regime = getattr(asset_regime, "regime", None)
+        if _regime not in settings.allowed_regimes:
+            blocked.append(f"REGIME_FILTERED regime={_regime} allowed={settings.allowed_regimes}")
+            fusion_summary = (
+                f"HOLD - current regime {_regime or 'UNKNOWN'} is not in the allowed set "
+                f"{settings.allowed_regimes}; entry filtered by the regime filter."
+            )
+            decision = "HOLD"
+
     # --- per-symbol cooldown gate (no revenge trades after SL, momentum reset after trail) ---
     if decision == "BUY" and not has_position:
         cooldown = await get_symbol_cooldown(db, symbol)
@@ -934,6 +946,8 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             reason_codes.append("REJECTED_MAX_POSITIONS")
         if any("COOLDOWN" in b for b in blocked):
             reason_codes.append("REJECTED_COOLDOWN")
+        if any("REGIME_FILTERED" in b for b in blocked):
+            reason_codes.append("REJECTED_REGIME_FILTER")
         if any("LOW_LIQUIDITY" in b for b in blocked):
             reason_codes.append("REJECTED_LOW_LIQUIDITY")
         if not reason_codes:

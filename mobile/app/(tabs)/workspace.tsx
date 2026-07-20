@@ -489,6 +489,7 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
         <ToggleRow label="Adaptive Sizing" desc="Size the lot by setup strength" k="adaptive_sizing_enabled" value={settings.adaptive_sizing_enabled} isOwner={isOwner} onSave={saveBool} />
         <NumRow label="Breakout Min Confidence" k="breakout_min_confidence" value={settings.breakout_min_confidence} isOwner={isOwner} onSave={save} />
         <NumRow label="Max Open Positions" k="max_concurrent_positions" value={settings.max_concurrent_positions} isOwner={isOwner} onSave={save} />
+        <RegimeChips value={settings.allowed_regimes} isOwner={isOwner} onSave={saveBool} />
       </Card>
 
       {/* ACTIVE EXIT ENGINE — read-only summary (configured in the Exit Engine flow) */}
@@ -558,6 +559,33 @@ function NumRow({ label, k, value, isOwner, onSave }: any) {
       <Text style={[type.body, { flex: 1 }]}>{label}</Text>
       <TextInput testID={`ee-set-${k}`} value={v} onChangeText={setV} editable={isOwner} keyboardType="decimal-pad"
         onEndEditing={() => onSave(k, v)} style={styles.input} placeholderTextColor={colors.textFaint} />
+    </View>
+  );
+}
+
+const REGIMES = ["COMPRESSION", "REVERSAL", "TREND_UP", "TREND_DOWN", "RANGE", "NEUTRAL"];
+
+function RegimeChips({ value, isOwner, onSave }: any) {
+  const active: string[] = Array.isArray(value) ? value : [];
+  const toggle = (r: string) => onSave("allowed_regimes", active.includes(r) ? active.filter((x) => x !== r) : [...active, r]);
+  return (
+    <View style={{ paddingVertical: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={[type.body]}>Allowed Regimes</Text>
+        <Text style={[type.small]} testID="rm-regimes-count">{active.length ? `${active.length} selected` : "All regimes"}</Text>
+      </View>
+      <Text style={[type.small, { marginTop: 2, marginBottom: 6, lineHeight: 16 }]}>Only open entries in these regimes. None = trade all.</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {REGIMES.map((r) => {
+          const on = active.includes(r);
+          return (
+            <Pressable key={r} testID={`rm-regime-${r}`} disabled={!isOwner} onPress={() => toggle(r)}
+              style={[styles.regChip, on && styles.regChipOn, !isOwner && { opacity: 0.5 }]}>
+              <Text style={[styles.regChipTxt, on && { color: colors.teal }]}>{r}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -640,6 +668,9 @@ const styles = StyleSheet.create({
   switchOn: { backgroundColor: colors.tealGlow, borderColor: colors.teal },
   knob: { width: 20, height: 20, borderRadius: 999, backgroundColor: colors.textFaint, alignSelf: "flex-start" },
   knobOn: { backgroundColor: colors.teal, alignSelf: "flex-end" },
+  regChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10 },
+  regChipOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  regChipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.3 },
   input: { width: 96, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, paddingHorizontal: spacing.sm, paddingVertical: 6, textAlign: "right", fontWeight: "700" },
   btn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.sm },
   btnPrimary: { backgroundColor: colors.teal },

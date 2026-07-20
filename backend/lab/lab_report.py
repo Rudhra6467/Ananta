@@ -413,6 +413,201 @@ def _result_block(s, run: dict):
     return [Paragraph("Unknown run kind.", s["italic"])]
 
 
+def _agg_backtest(res: dict):
+    """Merge per-symbol backtest summaries into one strategy-level view for the
+    executive summary + profitability table. Returns None if no usable data."""
+    per = {k: v for k, v in (res.get("per_symbol") or {}).items() if isinstance(v, dict) and "error" not in v}
+    if not per:
+        return None
+    trades = sum(int(v.get("trades") or 0) for v in per.values())
+    net = sum(float(v.get("net_pnl") or 0) for v in per.values())
+    rets = [float(v["total_return_pct"]) for v in per.values() if v.get("total_return_pct") is not None]
+    pfs = [float(v["profit_factor"]) for v in per.values() if isinstance(v.get("profit_factor"), (int, float))]
+    dds = [float(v["max_drawdown_pct"]) for v in per.values() if v.get("max_drawdown_pct") is not None]
+    win_w = sum(float(v.get("win_rate_pct") or 0) * int(v.get("trades") or 0) for v in per.values())
+    caps = [float((v.get("capture_stats") or {}).get("capture_rate_pct")) for v in per.values()
+            if (v.get("capture_stats") or {}).get("capture_rate_pct") is not None]
+    profit_left = sum(float((v.get("capture_stats") or {}).get("total_profit_left_usd") or 0) for v in per.values())
+
+    def _merge(field):
+        out: dict = {}
+        for v in per.values():
+            for k, m in (v.get(field) or {}).items():
+                g = out.setdefault(k, {"n": 0, "net_pnl": 0.0, "win_w": 0.0, "ret_w": 0.0})
+                n = int(m.get("n") or 0)
+                g["n"] += n
+                g["net_pnl"] += float(m.get("net_pnl") or 0)
+                g["win_w"] += float(m.get("win_pct") or 0) * n
+                g["ret_w"] += float(m.get("avg_return_pct") or 0) * n
+        for g in out.values():
+            n = g["n"] or 1
+            g["win_pct"] = round(g["win_w"] / n, 1)
+            g["avg_return_pct"] = round(g["ret_w"] / n, 3)
+        return out
+
+    mtf = res.get("multi_timeframe") or {}
+    tf_votes = [(e.get("verdict") or {}).get("best_tf") for e in mtf.values()]
+    tf_votes = [t for t in tf_votes if t]
+    best_tf = max(set(tf_votes), key=tf_votes.count) if tf_votes else None
+    return {
+        "trades": trades, "net_pnl": round(net, 2),
+        "total_return_pct": round(sum(rets) / len(rets), 3) if rets else 0.0,
+        "profit_factor": round(sum(pfs) / len(pfs), 2) if pfs else None,
+        "win_rate_pct": round(win_w / (trades or 1), 1),
+        "max_drawdown_pct": round(max(dds), 2) if dds else None,
+        "capture_rate_pct": round(sum(caps) / len(caps), 1) if caps else None,
+        "profit_left_usd": round(profit_left, 2),
+        "regimes": _merge("regime_breakdown"), "exits": _merge("exit_module_breakdown"),
+        "best_tf": best_tf,
+    }
+
+
+def _perf_bucket(net, win):
+    if net > 0 and win >= 50:
+        return "Good"
+    if net >= 0 or win >= 45:
+        return "Acceptable"
+    return "Poor"
+
+
+def _usability_score(a: dict) -> int:
+    score = 0
+    ret, net, win = a["total_return_pct"], a["net_pnl"], a["win_rate_pct"]
+    pf = a["profit_factor"] or 0
+    cap, dd = a["capture_rate_pct"], (a["max_drawdown_pct"] or 0)
+    score += 3 if net > 0 else (1 if ret > -2 else 0)
+    score += 2 if win >= 50 else (1 if win >= 45 else 0)
+    score += 2 if pf >= 1.3 else (1 if pf >= 1.0 else 0)
+    if cap is not None:
+        score += 2 if cap >= 60 else (1 if cap >= 40 else 0)
+    else:
+        score += 1
+    score += 1 if (dd and dd < 15) or not dd else 0
+    return max(0, min(10, score))
+
+
+def _actionable_summary(s, run, res):
+    """Trader-facing decision block placed at the top of backtest reports."""
+    a = _agg_backtest(res)
+    if not a:
+        return []
+    net, ret, win, pf = a["net_pnl"], a["total_return_pct"], a["win_rate_pct"], (a["profit_factor"] or 0)
+    if net > 0 and ret > 1.0:
+        verdict = "PROFITABLE"
+    elif net >= 0 or ret >= -2.0:
+        verdict = "MARGINAL"
+    else:
+        verdict = "UNDERPERFORMING"
+
+    regimes = a["regimes"]
+    good = {k: g for k, g in regimes.items() if g["net_pnl"] > 0 and g["win_pct"] >= 50}
+    total_n = sum(g["n"] for g in regimes.values()) or (a["trades"] or 1)
+    usable_pct = round(sum(g["n"] for g in good.values()) / total_n * 100) if total_n else 0
+    best_regime = max(regimes.items(), key=lambda kv: kv[1]["net_pnl"], default=(None, None))
+    worst_regime = min(regimes.items(), key=lambda kv: kv[1]["net_pnl"], default=(None, None))
+    worst_is_loser = bool(worst_regime[0]) and bool(worst_regime[1]) and worst_regime[1]["net_pnl"] < 0
+
+    cap = a["capture_rate_pct"]
+    if cap is not None and cap < 40 and a["profit_left_usd"] > 0:
+        bottleneck = "Exit logic — a large share of open profit is given back (low MFE capture)."
+    elif worst_is_loser and abs(worst_regime[1]["net_pnl"]) > abs(net) * 0.5:
+        bottleneck = f"Regime — most losses come from the {worst_regime[0]} regime (wrong conditions)."
+    elif a["trades"] > 40 and ret < 0:
+        bottleneck = "Over-trading — high trade count with a negative edge; entries too loose."
+    elif win < 40:
+        bottleneck = "Weak entries — low win rate; the entry trigger needs tightening."
+    else:
+        bottleneck = "No single dominant bottleneck; the edge is broadly thin."
+
+    exits = a["exits"]
+    best_exit = max(exits.items(), key=lambda kv: kv[1]["net_pnl"], default=(None, None))
+    if cap is not None and cap < 40:
+        exit_sugg = "Widen the ATR trail (e.g. x3.5) or add a structural exit — exits are cutting winners early."
+    elif best_exit[0]:
+        exit_sugg = f"'{_mod_label(best_exit[0])}' is the best exit here; test a Fixed % 5% TP / 3.5% SL against it."
+    else:
+        exit_sugg = "Test Fixed % (5% TP / 3.5% SL) vs the ATR trail to find the better exit."
+
+    one_liner = (
+        f"Use {'freely' if verdict == 'PROFITABLE' else 'selectively' if verdict == 'MARGINAL' else 'sparingly (or hold)'}"
+        f" — best in {best_regime[0] or 'n/a'} on {a['best_tf'] or 'n/a'}; "
+        f"{'avoid ' + worst_regime[0] if worst_is_loser else 'watch drawdown'}."
+    )
+
+    flow = [
+        Paragraph("EXECUTIVE SUMMARY", s["h2"]),
+        Paragraph("Read this first — the 2-minute decision on whether to run this strategy, where, and what to fix.", s["subtitle"]),
+        Spacer(1, 6),
+        _kv_table(s, ["Field", "Assessment"], [
+            ["Overall verdict", verdict],
+            ["Recommended usage", f"~{usable_pct}% of the time (only in profitable conditions)"],
+            ["Best conditions", f"{best_regime[0] or '—'} regime · {a['best_tf'] or '—'} timeframe"],
+            ["Main bottleneck", bottleneck],
+            ["Net P&L / Return", f"${net:g}  ·  {ret:g}%  ·  {a['trades']} trades  ·  {win:g}% win  ·  PF {pf:g}"],
+            ["One-line recommendation", one_liner],
+        ], [1.7 * inch, 4.9 * inch]),
+        Spacer(1, 12),
+    ]
+
+    cond_rows = []
+    for k in sorted(regimes, key=lambda x: regimes[x]["net_pnl"], reverse=True):
+        g = regimes[k]
+        bucket = _perf_bucket(g["net_pnl"], g["win_pct"])
+        rec = {"Good": "Use freely", "Acceptable": "Use with normal size", "Poor": "Avoid / reduce size heavily"}[bucket]
+        note = "Major loser" if (g["net_pnl"] < 0 and abs(g["net_pnl"]) > abs(net) * 0.4) else ("Best regime" if k == best_regime[0] and g["net_pnl"] > 0 else "—")
+        up = round(g["n"] / total_n * 100) if total_n else 0
+        cond_rows.append([k, bucket, rec, f"~{up}%", note])
+    cond_rows.append(["Best timeframe", a["best_tf"] or "—", f"Prefer {a['best_tf'] or 'n/a'}", "—", "—"])
+    flow += [
+        Paragraph("Profitability Conditions", s["h3"]),
+        Paragraph("Where this strategy makes or loses money. Set your Risk Monitor regime filter to the 'Use freely' rows.", s["subtitle"]),
+        _kv_table(s, ["Condition", "Performance", "Recommendation", "Usable %", "Notes"], cond_rows,
+                  [1.3 * inch, 1.05 * inch, 2.0 * inch, 0.7 * inch, 1.05 * inch]),
+        Spacer(1, 12),
+    ]
+
+    score = _usability_score(a)
+    size_pct = "100%" if score >= 7 else "50-75%" if score >= 5 else "25-50%" if score >= 3 else "0-25% (avoid)"
+    freq = ("Freely, in allowed regimes" if usable_pct >= 50
+            else "Selective — only the best regime/timeframe" if usable_pct >= 20
+            else "Rarely — most conditions lose")
+    on_when = f"{best_regime[0] or 'best regime'} on {a['best_tf'] or 'best TF'}"
+    off_when = f"{worst_regime[0]} and high-volatility periods" if worst_is_loser else "high-volatility periods"
+    flow += [
+        Paragraph("Usability Score &amp; Practical Guidance", s["h3"]),
+        _kv_table(s, ["Guidance", "Value"], [
+            ["Overall usability", f"{score} / 10"],
+            ["Recommended position size", f"{size_pct} of normal lot"],
+            ["Recommended frequency", freq],
+            ["Turn ON when", on_when],
+            ["Turn OFF when", off_when],
+            ["Exit suggestion", exit_sugg],
+        ], [1.9 * inch, 4.7 * inch]),
+        Spacer(1, 12),
+    ]
+
+    fixes = []
+    if "Exit" in bottleneck:
+        fixes.append(("Highest impact", exit_sugg))
+    else:
+        fixes.append(("Highest impact", bottleneck))
+    if worst_is_loser:
+        allow = ", ".join(good.keys()) or (best_regime[0] or "profitable regimes")
+        fixes.append(("High impact", f"Restrict entries to {allow} and avoid {worst_regime[0]} using the Risk Monitor regime filter."))
+    if a["trades"] > 40 and ret < 2:
+        fixes.append(("Medium impact", "Raise Min Confidence / tighten the entry trigger to cut low-quality trades (reduce over-trading)."))
+    elif win < 50:
+        fixes.append(("Medium impact", "Tighten entries (higher confidence or stricter setup) to lift the win rate."))
+    flow += [
+        Paragraph("What to Fix Next", s["h3"]),
+        Paragraph("Prioritised, actionable — highest expected impact first.", s["subtitle"]),
+    ]
+    for label, txt in fixes[:3]:
+        flow.append(Paragraph(f"<b>{label}:</b> {txt}", s["body"]))
+    flow.append(Spacer(1, 8))
+    return flow
+
+
 def build_lab_report(run: dict) -> bytes:
     s = _styles()
     buf = BytesIO()
@@ -426,6 +621,10 @@ def build_lab_report(run: dict) -> bytes:
     ]
     flow += _config_block(s, run)
     flow.append(PageBreak())
+    # Trader-facing actionable summary at the top of backtest reports.
+    if run.get("kind") == "backtest" and run.get("status") == "DONE" and run.get("result"):
+        flow += _actionable_summary(s, run, run["result"])
+        flow.append(PageBreak())
     flow += _result_block(s, run)
     doc.build(flow)
     return buf.getvalue()

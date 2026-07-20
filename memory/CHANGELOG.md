@@ -1208,3 +1208,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Web (components/AccountOverlay.jsx): added owner-only "PAPER TRADING" section with Reset button (testID account-reset-paper), window.confirm + sonner toast -> api.resetPortfolio().
 - NOTE: full 15-strategy manual health sweep starves the API via synchronous backfill while running (pre-existing); recovers after completion/restart. Not in scope this pass.
 - PENDING user decision: (A) configurable regime filter, (B) PDF overhaul — awaiting go-ahead.
+
+## Regime Filter + PDF Overhaul (2026-06)
+- Backend regime filter (global, opt-in): added `allowed_regimes: list[str] = []` to RiskSettings; live engine (trading_engine.evaluate_symbol) hard-gates NEW entries when the asset regime is not in the list (empty = trade all); added REJECTED_REGIME_FILTER reason code. Added allowed_regimes + level_entry_enabled to SettingsUpdate whitelist (FIX: level_entry_enabled was previously a silent no-op — not in the whitelist). Verified round-trip persist.
+- UI: "Allowed Regimes" chip selector in Risk Monitor > Entry Setup on web (RiskMonitorPanel.jsx) + mobile (workspace.tsx). testIDs rm-regime-<REGIME>. None selected = trade all. Verified rendering via screenshot.
+- PDF overhaul (lab/lab_report.py, backtest reports only): new top-of-report actionable block — Executive Summary (verdict/usage%/best conditions/bottleneck/one-liner), Profitability Conditions table (per-regime perf+recommendation+usable%+notes+best TF), Usability Score /10 + position-size/frequency/ON-OFF guidance, Exit verdict+suggestion, "What to Fix Next" (prioritised). Existing technical sections retained. Verified: 6-page PDF renders, all sections present.
+- FYI: full 15-strategy MANUAL health sweep starves the API via synchronous backfill while running (pre-existing); recovers after completion/restart.
