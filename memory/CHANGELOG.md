@@ -1214,3 +1214,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - UI: "Allowed Regimes" chip selector in Risk Monitor > Entry Setup on web (RiskMonitorPanel.jsx) + mobile (workspace.tsx). testIDs rm-regime-<REGIME>. None selected = trade all. Verified rendering via screenshot.
 - PDF overhaul (lab/lab_report.py, backtest reports only): new top-of-report actionable block — Executive Summary (verdict/usage%/best conditions/bottleneck/one-liner), Profitability Conditions table (per-regime perf+recommendation+usable%+notes+best TF), Usability Score /10 + position-size/frequency/ON-OFF guidance, Exit verdict+suggestion, "What to Fix Next" (prioritised). Existing technical sections retained. Verified: 6-page PDF renders, all sections present.
 - FYI: full 15-strategy MANUAL health sweep starves the API via synchronous backfill while running (pre-existing); recovers after completion/restart.
+
+## "Coming Up" in Account (2026-06)
+- Added a "Coming Up" entry in Account settings on both surfaces; opens the existing Coming Soon promo (features sheet + Join Waitlist).
+- Web (AccountOverlay.jsx): new Settings row (testID account-coming-up) opens a Dialog rendering <ComingSoonPromo variant="inline" /> (account-coming-up-dialog).
+- Mobile (app/account.tsx): "Coming Up" row (testID account-coming-up, pill "New") opens a bottom-sheet Modal with <ComingSoonPromo variant="inline" /> (account-coming-up-sheet + close).
+- Reuses POST /api/promo/coming-soon/waitlist (verified {waitlist_joined:true}). Lint clean; web compiles.

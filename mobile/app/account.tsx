@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
 import api from "../src/api";
 import { deleteItem } from "../src/storage";
+import ComingSoonPromo from "../src/components/ComingSoonPromo";
 import { colors, spacing, type, radius } from "../src/theme";
 
 // Account overlay — opened by tapping the Ananta logo. Mirrors the layout in the
@@ -73,6 +74,7 @@ export default function AccountOverlay() {
   const email = owner?.email || "—";
   const initials = (email.split("@")[0] || "A").slice(0, 2).toUpperCase();
   const [health, setHealth] = useState<any>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
 
   // Live platform status (moved here from Workspace › Engine & Risk).
   useEffect(() => {
@@ -209,6 +211,8 @@ export default function AccountOverlay() {
         {/* Settings (placeholder rows) */}
         <Text style={styles.sectionLabel}>Settings</Text>
         <View style={styles.card}>
+          <Row icon="sparkles-outline" label="Coming Up" pill="New" pillTone="accent" testID="account-coming-up" onPress={() => setPromoOpen(true)} />
+          <View style={styles.divider} />
           <Row icon="card-outline" label="Payment methods" pill="Soon" testID="account-setting-payments" />
           <View style={styles.divider} />
           <Row icon="notifications-outline" label="Notifications" pill="Soon" testID="account-setting-notifications" />
@@ -239,6 +243,23 @@ export default function AccountOverlay() {
 
         <Text style={styles.footer}>Ananta.AI · Signed in as {email}</Text>
       </ScrollView>
+
+      {/* Coming Up — reuses the Coming Soon promo (features + join waitlist) */}
+      <Modal visible={promoOpen} transparent animationType="slide" onRequestClose={() => setPromoOpen(false)}>
+        <View style={styles.promoOverlay}>
+          <View style={[styles.promoSheet, { paddingBottom: insets.bottom + spacing.md }]} testID="account-coming-up-sheet">
+            <View style={styles.promoHead}>
+              <Text style={styles.promoHeadTitle}>Coming Up</Text>
+              <Pressable testID="account-coming-up-close" onPress={() => setPromoOpen(false)} hitSlop={12}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: spacing.sm }}>
+              <ComingSoonPromo variant="inline" />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -305,6 +326,10 @@ const styles = StyleSheet.create({
   },
   credKey: { ...type.bodyMuted },
   resetSub: { ...type.small, fontSize: 11, color: colors.textFaint, marginTop: 1 },
+  promoOverlay: { flex: 1, backgroundColor: "#000000AA", justifyContent: "flex-end" },
+  promoSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, paddingHorizontal: spacing.lg, paddingTop: spacing.md, maxHeight: "90%" },
+  promoHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
+  promoHeadTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
   credVal: { ...type.body, fontWeight: "600", flexShrink: 1, marginLeft: spacing.md, textAlign: "right" },
   divider: { height: 1, backgroundColor: colors.cardBorder },
   banner: {

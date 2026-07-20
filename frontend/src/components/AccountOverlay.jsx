@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy, RotateCcw } from "lucide-react";
+import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy, RotateCcw, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import ComingSoonPromo from "@/components/ComingSoonPromo";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LearningHub from "@/components/LearningHub";
@@ -55,6 +56,7 @@ export default function AccountOverlay({ open, onOpenChange }) {
     const initials = (owner?.email?.split("@")[0] || "AN").slice(0, 2).toUpperCase();
     const [health, setHealth] = useState(null);
     const [resetting, setResetting] = useState(false);
+    const [promoOpen, setPromoOpen] = useState(false);
 
     const onResetPaper = async () => {
         if (!isOwner) return;
@@ -86,6 +88,7 @@ export default function AccountOverlay({ open, onOpenChange }) {
     }, [open]);
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="bg-atlas-panel border-atlas-border max-w-md p-0 gap-0 overflow-hidden" data-testid="account-overlay">
                 <DialogHeader className="px-5 pt-5 pb-3 border-b border-atlas-border">
@@ -171,6 +174,14 @@ export default function AccountOverlay({ open, onOpenChange }) {
                     <div>
                         <div className="label-tag mb-2">SETTINGS</div>
                         <div className="rounded-lg border border-atlas-border overflow-hidden divide-y divide-atlas-border">
+                            <button type="button" data-testid="account-coming-up" onClick={() => setPromoOpen(true)}
+                                className="w-full flex items-center justify-between px-3 py-3 hover:bg-atlas-panelHover transition-colors group">
+                                <span className="flex items-center gap-2.5 font-body text-sm text-atlas-textSecondary group-hover:text-atlas-text"><Sparkles className="w-4 h-4 text-atlas-cyan" /> Coming Up</span>
+                                <span className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-full font-mono text-[10px] bg-atlas-cyan/15 text-atlas-cyan">New</span>
+                                    <ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:text-atlas-textSecondary" />
+                                </span>
+                            </button>
                             <Row icon={CreditCard} label="Payment methods" pill="Soon" testid="account-setting-payments" />
                             <Row icon={Bell} label="Notifications" pill="Soon" testid="account-setting-notifications" />
                             <a href="/privacy" target="_blank" rel="noopener noreferrer" data-testid="account-setting-privacy"
@@ -232,5 +243,18 @@ export default function AccountOverlay({ open, onOpenChange }) {
                 </div>
             </DialogContent>
         </Dialog>
+
+        <Dialog open={promoOpen} onOpenChange={setPromoOpen}>
+            <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto p-0" data-testid="account-coming-up-dialog">
+                <DialogHeader className="px-5 pt-5">
+                    <DialogTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-atlas-cyan" /> Coming Up</DialogTitle>
+                    <DialogDescription>A look at what&apos;s next for Ananta — join the waitlist to get early access.</DialogDescription>
+                </DialogHeader>
+                <div className="px-5 pb-5">
+                    <ComingSoonPromo variant="inline" />
+                </div>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 }
