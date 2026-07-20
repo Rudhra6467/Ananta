@@ -1201,3 +1201,10 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Mobile (app/analytics.tsx NEW): full-screen Analytics reachable from Cockpit ("Deep Analytics" link, testID cockpit-analytics-link) via /analytics stack route. Sections: Portfolio Performance (SVG equity curve + stat grid: total return, net P&L, win rate, profit factor, max drawdown, avg hold — computed client-side from closed trades), Strategy Performance (per-strategy headline + recommendation badge + best TF from /lab/health), Multi-Timeframe Comparison (strategy chips -> per-TF table highlighting best_timeframe), Exit Breakdown (by exit_module/reason).
 - Registered `analytics` in app/_layout.tsx Stack.
 - Web unaffected (this is a mobile feature). P3 multi-tenant DEFERRED post-launch per user; P5 on hold.
+
+## Reset Paper Trading State — Account UI (2026-06)
+- Backend (trading_engine.reset_portfolio): now also clears pending_orders, cooldowns and strategy_health (cached performance) so post-reset validations/paper runs are clean. Endpoint POST /api/portfolio/reset (owner-gated) verified: returns {ok:true}, portfolio fresh (0 positions, realized 0, cash=starting), 0 trades.
+- Mobile (app/account.tsx): added "Paper Trading" section with "Reset Paper Trading State" (testID account-reset-paper), owner-only, destructive confirm Alert -> api.portfolioReset(). Added portfolioReset to src/api.ts.
+- Web (components/AccountOverlay.jsx): added owner-only "PAPER TRADING" section with Reset button (testID account-reset-paper), window.confirm + sonner toast -> api.resetPortfolio().
+- NOTE: full 15-strategy manual health sweep starves the API via synchronous backfill while running (pre-existing); recovers after completion/restart. Not in scope this pass.
+- PENDING user decision: (A) configurable regime filter, (B) PDF overhaul — awaiting go-ahead.

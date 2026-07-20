@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy } from "lucide-react";
+import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LearningHub from "@/components/LearningHub";
@@ -53,6 +54,21 @@ export default function AccountOverlay({ open, onOpenChange }) {
     const email = owner?.email || "Not signed in";
     const initials = (owner?.email?.split("@")[0] || "AN").slice(0, 2).toUpperCase();
     const [health, setHealth] = useState(null);
+    const [resetting, setResetting] = useState(false);
+
+    const onResetPaper = async () => {
+        if (!isOwner) return;
+        if (!window.confirm("Reset Paper Trading?\n\nThis permanently clears all open positions, closed trades, P&L and cached performance. Ananta starts fresh on the current logic. This cannot be undone.")) return;
+        setResetting(true);
+        try {
+            await api.resetPortfolio();
+            toast.success("Paper trading state reset", { description: "Ananta starts fresh with zero trades." });
+        } catch (e) {
+            toast.error("Reset failed", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally {
+            setResetting(false);
+        }
+    };
 
     // Live platform status (moved here from Workspace › Engine & Risk). Loads while open.
     useEffect(() => {
@@ -178,6 +194,28 @@ export default function AccountOverlay({ open, onOpenChange }) {
                         signed in. We do not sell personal data. Trading is executed via your own exchange keys,
                         which are stored securely and never shared.
                     </p>
+
+                    {isOwner && (
+                        <div data-testid="account-paper-trading">
+                            <div className="label-tag mb-2">PAPER TRADING</div>
+                            <button
+                                type="button"
+                                data-testid="account-reset-paper"
+                                onClick={onResetPaper}
+                                disabled={resetting}
+                                className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-lg border border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10 transition-colors disabled:opacity-50"
+                            >
+                                <span className="flex items-center gap-2.5 min-w-0">
+                                    <RotateCcw className="w-4 h-4 shrink-0" />
+                                    <span className="flex flex-col items-start min-w-0">
+                                        <span className="font-body text-sm font-medium">{resetting ? "Resetting…" : "Reset Paper Trading State"}</span>
+                                        <span className="font-mono text-[10px] text-atlas-textTertiary truncate">Clears positions, trades, P&amp;L &amp; cached performance</span>
+                                    </span>
+                                </span>
+                                <ChevronRight className="w-4 h-4 shrink-0" />
+                            </button>
+                        </div>
+                    )}
 
                     {isOwner && (
                         <button

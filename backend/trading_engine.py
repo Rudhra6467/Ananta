@@ -196,6 +196,11 @@ async def reset_portfolio(db: AsyncIOMotorDatabase) -> Portfolio:
     await db.portfolio.replace_one({"id": "singleton"}, fresh.model_dump(), upsert=True)
     await db.trades.delete_many({})
     await db.reasoning.delete_many({})
+    # Fresh start: clear resting orders, cooldowns and cached performance so new
+    # validations/paper runs reflect current logic cleanly (no stale-state bleed).
+    await db.pending_orders.delete_many({})
+    await db.cooldowns.delete_many({})
+    await db.strategy_health.delete_many({})
     return fresh
 
 

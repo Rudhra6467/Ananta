@@ -155,6 +155,7 @@ export const api = {
   demoStatus: () => get<any>("/admin/demo/status"),
   demoLoad: () => post<any>("/admin/demo/load"),
   demoReset: () => post<any>("/admin/demo/reset"),
+  portfolioReset: () => post<any>("/portfolio/reset"),
 
   // Trade-history PDF url (open in browser via Linking)
   tradesPdfUrl: (mode: string) => `${API}/report/trades.pdf?mode=${mode}&inline=true`,

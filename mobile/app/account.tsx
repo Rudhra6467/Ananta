@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -68,7 +68,7 @@ function HealthRow({ label, ok, okText, badText, neutral }: { label: string; ok?
 export default function AccountOverlay() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { owner, logout } = useAuth();
+  const { owner, logout, isOwner } = useAuth();
 
   const email = owner?.email || "—";
   const initials = (email.split("@")[0] || "A").slice(0, 2).toUpperCase();
@@ -91,6 +91,27 @@ export default function AccountOverlay() {
   const onLogout = async () => {
     await logout();
     router.replace("/login");
+  };
+
+  const onResetPaper = () => {
+    if (!isOwner) { Alert.alert("Owner login required", "Log in as the owner to reset paper trading."); return; }
+    Alert.alert(
+      "Reset Paper Trading?",
+      "This permanently clears all open positions, closed trades, P&L and cached performance. The bot starts fresh on the current logic. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset", style: "destructive", onPress: async () => {
+            try {
+              await api.portfolioReset();
+              Alert.alert("Done", "Paper trading state has been reset. Ananta starts fresh with zero trades.");
+            } catch (e: any) {
+              Alert.alert("Reset failed", e?.response?.data?.detail || e?.message || "Please try again.");
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -195,6 +216,21 @@ export default function AccountOverlay() {
           <Row icon="shield-checkmark-outline" label="Security" pill="Soon" testID="account-setting-security" />
         </View>
 
+        {/* Paper Trading — fresh start */}
+        <Text style={styles.sectionLabel}>Paper Trading</Text>
+        <View style={styles.card}>
+          <Pressable testID="account-reset-paper" onPress={onResetPaper} style={({ pressed }) => [styles.credRow, pressed && styles.rowPressed]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="refresh-circle-outline" size={18} color={colors.red} />
+              <View>
+                <Text style={[styles.credKey, { color: colors.red }]}>Reset Paper Trading State</Text>
+                <Text style={styles.resetSub}>Clears positions, trades, P&L & cached performance</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        </View>
+
         {/* Log out */}
         <Pressable testID="account-logout-btn" onPress={onLogout} style={({ pressed }) => [styles.logout, pressed && styles.rowPressed]}>
           <Ionicons name="log-out-outline" size={18} color={colors.red} />
@@ -268,6 +304,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   credKey: { ...type.bodyMuted },
+  resetSub: { ...type.small, fontSize: 11, color: colors.textFaint, marginTop: 1 },
   credVal: { ...type.body, fontWeight: "600", flexShrink: 1, marginLeft: spacing.md, textAlign: "right" },
   divider: { height: 1, backgroundColor: colors.cardBorder },
   banner: {
