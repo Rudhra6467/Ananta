@@ -250,14 +250,9 @@ function WatchlistRibbon({ snapshots, symbols, selected, onSelect, onChanged }) 
                     className="w-8 h-8 grid place-items-center rounded-lg border border-atlas-border text-atlas-cyan hover:bg-atlas-cyan/10 hover:border-atlas-cyan/50 transition-colors shrink-0">
                     <Plus className="w-4 h-4" strokeWidth={2.5} />
                 </button>
-                {sel && (
-                    <span className="font-mono text-sm tabular-nums text-atlas-textSecondary flex items-center gap-2">
-                        {fmt(sel.price)}
-                        {chg != null && (
-                            <span className={`text-xs font-bold ${chg > 0 ? "text-atlas-positive" : chg < 0 ? "text-atlas-negative" : "text-atlas-textTertiary"}`}>
-                                {chg > 0 ? "+" : ""}{chg.toFixed(2)}%
-                            </span>
-                        )}
+                {sel && chg != null && (
+                    <span data-testid="watchlist-change" className={`font-mono text-xs font-bold shrink-0 ${chg > 0 ? "text-atlas-positive" : chg < 0 ? "text-atlas-negative" : "text-atlas-textTertiary"}`}>
+                        {chg > 0 ? "+" : ""}{chg.toFixed(2)}%
                     </span>
                 )}
             </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Power, Target, Shield, SlidersHorizontal } from "lucide-react";
+import { Power, Target, Shield, SlidersHorizontal, Save, Check } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +13,7 @@ export default function RiskMonitorPanel() {
     const { isOwner } = useAuth();
     const [s, setS] = useState(null);
     const [risk, setRisk] = useState(null);
+    const [savedFlash, setSavedFlash] = useState(false);
 
     useEffect(() => {
         api.settings().then(setS).catch(() => {});
@@ -25,6 +26,26 @@ export default function RiskMonitorPanel() {
         if (!isOwner) { toast.error("Owner login required"); return; }
         try { const next = await api.updateSettings(patch); setS(next); }
         catch (e) { toast.error("Save failed", { description: String(e?.response?.data?.detail || e?.message || e) }); }
+    };
+
+    const saveAll = async () => {
+        if (!isOwner) { toast.error("Owner login required"); return; }
+        const patch = {
+            min_confidence: s.min_confidence, htf_trend_enabled: s.htf_trend_enabled,
+            level_entry_enabled: s.level_entry_enabled, adaptive_sizing_enabled: s.adaptive_sizing_enabled,
+            breakout_min_confidence: s.breakout_min_confidence, max_concurrent_positions: s.max_concurrent_positions,
+            allowed_regimes: Array.isArray(s.allowed_regimes) ? s.allowed_regimes : [],
+            max_daily_loss_pct: s.max_daily_loss_pct, max_spread_pct: s.max_spread_pct, normal_lot_usd: s.normal_lot_usd,
+        };
+        try {
+            const next = await api.updateSettings(patch);
+            setS(next);
+            toast.success("Risk settings saved");
+            setSavedFlash(true);
+            setTimeout(() => setSavedFlash(false), 2000);
+        } catch (e) {
+            toast.error("Save failed", { description: String(e?.response?.data?.detail || e?.message || e) });
+        }
     };
 
     if (!s) return <div className="py-10 text-center font-mono text-[11px] text-atlas-textTertiary" data-testid="rm-loading">Loading risk configuration…</div>;
@@ -77,6 +98,19 @@ export default function RiskMonitorPanel() {
                 <NumField label="Max Spread %" k="max_spread_pct" value={s.max_spread_pct} isOwner={isOwner} onSave={save} />
                 <NumField label="Normal Lot (USD)" k="normal_lot_usd" value={s.normal_lot_usd} isOwner={isOwner} onSave={save} last />
             </Card>
+
+            {/* Save — changes also auto-save; this gives explicit confirmation */}
+            <div className="pt-1">
+                <button
+                    data-testid="rm-save-settings"
+                    onClick={saveAll}
+                    disabled={!isOwner}
+                    className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-mono text-sm font-bold transition-colors disabled:opacity-50 ${savedFlash ? "border border-atlas-positive text-atlas-positive bg-atlas-positive/10" : "border border-atlas-cyan text-atlas-cyan hover:bg-atlas-cyan/10"}`}
+                >
+                    {savedFlash ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save Settings</>}
+                </button>
+                <p className="text-center label-tag text-[9px] text-atlas-textTertiary mt-2">Changes also save automatically</p>
+            </div>
         </div>
     );
 }

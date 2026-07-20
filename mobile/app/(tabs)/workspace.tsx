@@ -467,6 +467,23 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
     const killed = !!settings?.manual_kill_switch;
     try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); }
   };
+  const [savedFlash, setSavedFlash] = useState(false);
+  const saveAll = async () => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    const patch: any = {
+      min_confidence: settings.min_confidence, htf_trend_enabled: settings.htf_trend_enabled,
+      level_entry_enabled: settings.level_entry_enabled, adaptive_sizing_enabled: settings.adaptive_sizing_enabled,
+      breakout_min_confidence: settings.breakout_min_confidence, max_concurrent_positions: settings.max_concurrent_positions,
+      allowed_regimes: Array.isArray(settings.allowed_regimes) ? settings.allowed_regimes : [],
+      max_daily_loss_pct: settings.max_daily_loss_pct, max_spread_pct: settings.max_spread_pct, normal_lot_usd: settings.normal_lot_usd,
+    };
+    try {
+      const s = await api.updateSettings(patch);
+      setSettings(s);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2000);
+    } catch (e: any) { Alert.alert("Save failed", e?.response?.data?.detail || e?.message || "Please try again."); }
+  };
 
   if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.lg }} />;
 
@@ -521,6 +538,14 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
         <NumRow label="Max Spread %" k="max_spread_pct" value={settings.max_spread_pct} isOwner={isOwner} onSave={save} />
         <NumRow label="Normal Lot (USD)" k="normal_lot_usd" value={settings.normal_lot_usd} isOwner={isOwner} onSave={save} />
       </Card>
+
+      {/* Save — changes also auto-save; this gives explicit confirmation */}
+      <Pressable testID="rm-save-settings" onPress={saveAll} disabled={!isOwner}
+        style={[styles.saveBtn, savedFlash && styles.saveBtnDone, !isOwner && { opacity: 0.5 }]}>
+        <Ionicons name={savedFlash ? "checkmark-circle" : "save-outline"} size={16} color={savedFlash ? colors.green : colors.teal} />
+        <Text style={[styles.saveTxt, savedFlash && { color: colors.green }]}>{savedFlash ? "Saved" : "Save Settings"}</Text>
+      </Pressable>
+      <Text style={styles.saveHint}>Changes also save automatically</Text>
     </View>
   );
 }
@@ -671,6 +696,10 @@ const styles = StyleSheet.create({
   regChip: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10 },
   regChipOn: { borderColor: colors.teal, backgroundColor: colors.tealGlow },
   regChipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.3 },
+  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: spacing.md, paddingVertical: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.teal, backgroundColor: colors.tealGlow },
+  saveBtnDone: { borderColor: colors.green, backgroundColor: colors.greenGlow },
+  saveTxt: { color: colors.teal, fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
+  saveHint: { color: colors.textFaint, fontSize: 11, textAlign: "center", marginTop: spacing.sm },
   input: { width: 96, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, color: colors.text, paddingHorizontal: spacing.sm, paddingVertical: 6, textAlign: "right", fontWeight: "700" },
   btn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: radius.md, paddingVertical: spacing.sm + 2, marginTop: spacing.sm },
   btnPrimary: { backgroundColor: colors.teal },

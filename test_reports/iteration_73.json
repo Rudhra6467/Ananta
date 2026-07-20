@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only verification of two reported UI fixes on WEB and MOBILE. Bug 1 (WEB watchlist duplicate price): FIXED — only one price shown (inside the select), and the change chip renders as percentage only (e.g. '-0.79%') with no '$' price beside the + button. However, at NARROW WEB viewports (~375-500px) the change chip overflows OUTSIDE its ribbon container and VISUALLY OVERLAPS the CHARTS button (chip x=347 while ribbon right=280 at 375px viewport). At 320px it wraps below (no overlap) and at 768+px there is no overlap. Bug 2 (Save Settings): FIXED on WEB (button visible, flashes 'Saved', toast 'Risk settings saved' shown, resets after ~2s) and on MOBILE (button visible with 47px tap height, flashes 'Saved', resets).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "WatchlistRibbon", "issue": "At narrow viewports (~375-500px) the watchlist-change chip overflows outside the ribbon container (ribbon width 264, chip rendered at x=347) and visually overlaps the CHARTS button (open-chart-button). Confirmed via bounding-box overlap check at 375px and 480px; no overlap at 320px or 768+px. Root cause: the inner `flex items-center gap-3 min-w-0` div containing WATCHLIST label + select + add-btn + chip has no `flex-wrap`, and the chip has `shrink-0`, so at intermediate widths the chip is pushed past the parent's right edge and into the sibling CHARTS column.", "selector": "[data-testid='watchlist-change']", "priority": "HIGH"}
+      ],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "WEB Dashboard.jsx WatchlistRibbon (lines 234-258): fix the residual overlap at 370-500px viewports. Options: (a) add `flex-wrap` to the inner flex div holding label+select+add+chip, (b) wrap the chip together with WatchlistControl in the outer flex so it wraps on its own line, or (c) add `overflow-hidden` on the outer ribbon panel. Bug 1's original 'duplicate price' issue is FIXED; only the overlap portion needs a second pass. Verify at 375, 414, and 480 widths."
+  ],
+  "critical_code_review_comments": [
+    "Dashboard.jsx line 235: inner `<div className=\"flex items-center gap-3 min-w-0\">` lacks flex-wrap while its child chip is `shrink-0`. This is the direct cause of overflow into the sibling CHARTS grid cell at narrow viewports.",
+    "Save button UX: on WEB, when a public visitor is not logged in as owner the Save Settings button is rendered disabled (opacity-50) with the same 'Save Settings' label — acceptable but consider a subtitle like 'Owner login required' for clarity (currently only shown via toast on click)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "web 2/3 fully passing (watchlist duplicate-price FIXED, save-settings FIXED, overlap at narrow widths remains); mobile 1/1 fully passing"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — worked on both surfaces.",
+  "seed_data_creation": "",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Web onboarding wizard MUST be completed after owner login before tabs are reachable: click 'Start Exploring' then wait 4-5s for provisioning, then click 'ENTER ANANTA'. Setting localStorage 'ananta_onboarded'='1' BEFORE login also works. Bottom nav testids are: bottom-nav-dashboard, bottom-nav-strategies, bottom-nav-research, bottom-nav-workspace (this is EXIT ENGINE), bottom-nav-trade. Mobile onboarding is 3 steps: Start Exploring → Skip for Now (Paper Trading) → Continue. Mobile bottom tabs: tab-index (cockpit), tab-strategy, tab-research, tab-workspace (Exit Engine), tab-trade. Risk Monitor sub-tab is text-labelled 'RISK MONITOR' inside the Exit Engine screen on both surfaces.",
+  "rca of the issue": "Bug 1 residual overlap RCA: WatchlistRibbon (Dashboard.jsx L234) is `flex ... flex-wrap` at the OUTER level, but the inner group `<div class='flex items-center gap-3 min-w-0'>` (L235) is NOT flex-wrap. Inside that inner group live WATCHLIST label + <select> (~174px) + add-btn (32px) + change chip (~42px). The chip has `shrink-0`. When the container falls into the ~250-320px range, the intrinsic min-content of the row exceeds the container, but because the container has `min-w-0`, the row can render beyond the container's right edge without triggering the outer flex-wrap. The chip therefore ends up at x=347 while the ribbon's right edge is at x=280. The sibling ChartDrawer sits in a `flex-1` column starting at ~x=292, so the chip's rendered rect (x=347-389) intersects the CHARTS button rect (x=292-359). Reproduction: viewport 375x800, navigate to /, watchlist selects auto-selects ARB or first symbol; the '-x.xx%' chip visibly overlaps the CHARTS button. Mitigation: either add `flex-wrap` to the inner div, move the chip out of the inner container so it becomes a wrapping sibling, or clip with `overflow-hidden` on the outer ribbon panel."
+}
