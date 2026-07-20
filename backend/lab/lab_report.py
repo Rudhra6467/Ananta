@@ -70,6 +70,37 @@ def _exit_params_rows(run: dict):
     return rows
 
 
+def _entry_gates_block(s, run: dict):
+    """Transparency: shows exactly which live entry gates were active for this run, so the
+    numbers can be trusted against the UI (answers 'were my settings actually used?')."""
+    live = ((run.get("result") or {}).get("exit_source") or run.get("exit_source")) == "live"
+    so = run.get("setting_overrides") or {}
+    if live:
+        regs = so.get("allowed_regimes")
+        rows = [
+            ["Live Risk Monitor settings applied", "YES — entries gated exactly like the deployed engine"],
+            ["Allowed regimes filter", ", ".join(regs) if regs else "All regimes (no filter set in the UI)"],
+            ["Min confidence", _fmt(so.get("min_confidence"))],
+            ["Breakout min confidence", _fmt(so.get("breakout_min_confidence"))],
+            ["HTF trend filter", "ON" if so.get("htf_trend_enabled") else "OFF"],
+            ["Support / level entry", "ON" if so.get("level_entry_enabled") else "OFF"],
+        ]
+        note = ("Entries were filtered by your live regime + confidence settings, so these results "
+                "reflect how the deployed bot would actually have traded.")
+    else:
+        rows = [
+            ["Live Risk Monitor settings applied", "NO — analytical run"],
+            ["Allowed regimes filter", "Not enforced — every regime is shown for comparison"],
+            ["Min confidence", "Not enforced in this run"],
+        ]
+        note = ("This is an ANALYTICAL run: entry filters were NOT applied, so you see performance across "
+                "ALL regimes. To validate with your live regime + confidence filters, enable "
+                "'Use my live Exit Engine settings' when starting the run.")
+    return [Paragraph("ENTRY GATES (THIS RUN)", s["h3"]),
+            _kv_table(s, ["Setting", "Status"], rows, [2.4 * inch, 3.8 * inch]),
+            Paragraph(note, s["subtitle"]), Spacer(1, 12)]
+
+
 def _config_block(s, run: dict):
     rows = [
         ["Run ID", run.get("id", "—")],
@@ -92,7 +123,8 @@ def _config_block(s, run: dict):
     return [Paragraph("RUN CONFIGURATION &amp; PROVENANCE", s["h2"]),
             Paragraph("Every run stores its exact inputs + the git commit that produced it — "
                       "fully reproducible.", s["subtitle"]), Spacer(1, 6),
-            _kv_table(s, ["Field", "Value"], rows, [1.8 * inch, 4.4 * inch]), Spacer(1, 12)]
+            _kv_table(s, ["Field", "Value"], rows, [1.8 * inch, 4.4 * inch]), Spacer(1, 12),
+            *_entry_gates_block(s, run)]
 
 
 def _summary_metrics(s, title, summ: dict):

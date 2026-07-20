@@ -347,7 +347,8 @@ class LabWorker:
                          exit_method=run.get("exit_method", "fixed"),
                          target_profit=run.get("target_profit", 5.0),
                          target_loss=run.get("target_loss", 4.0),
-                         atr_params=run.get("atr_params"))
+                         atr_params=run.get("atr_params"),
+                         live_entry_gates=(run.get("exit_source") == "live"))
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
         base_tf = run.get("timeframe") or "1h"
         # Primary execution timeframe the user picked (1h default; 30m/15m optional).
@@ -373,7 +374,8 @@ class LabWorker:
         tf_results: dict[str, dict] = {}
         cmp_overrides = dict(setting_overrides=run.get("setting_overrides"),
                              profile_overrides=run.get("profile_overrides"),
-                             strategies=run.get("strategies"))
+                             strategies=run.get("strategies"),
+                             live_entry_gates=(run.get("exit_source") == "live"))
         # Each cell = 1 chosen-config backtest + 1 exit-comparison (5 configs in one task).
         total = (len(symbols) or 1) * len(timeframes) * 2
         step = 0

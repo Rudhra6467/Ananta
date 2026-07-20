@@ -78,6 +78,7 @@ def run_backtest(
     target_profit: float = 5.0,
     target_loss: float = 4.0,
     atr_params: dict | None = None,
+    live_entry_gates: bool = False,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
@@ -215,6 +216,10 @@ def run_backtest(
         px = bar[_C]
         window = bars[max(0, i + 1 - ANALYSIS_LOOKBACK): i + 1]
         regime = classify_regime(window)
+        # Live entry gate — global regime filter (parity with the deployed engine): when
+        # replaying live Risk Monitor settings, skip entries outside the allowed regimes.
+        if live_entry_gates and s.allowed_regimes and regime.regime not in s.allowed_regimes:
+            return None
         strategy = entry_profile = struct_stop = None
         _conf = None
         if "hunter" in allowed and hunter_allowed(regime.regime):
@@ -255,6 +260,12 @@ def run_backtest(
                     break
         if strategy is None:
             return None
+        # Live entry gate — minimum confidence floor (parity with the live macro-confidence
+        # gate). Only when replaying live settings and the signal exposes a confidence/score.
+        if live_entry_gates and _conf is not None and s.min_confidence:
+            _c = _conf if _conf <= 1.0 else _conf / 100.0
+            if _c < s.min_confidence:
+                return None
         return {"i": i, "strategy": strategy, "entry_profile": entry_profile,
                 "struct_stop": struct_stop, "regime": regime.regime,
                 "conf": round(_conf, 3) if isinstance(_conf, (int, float)) else None}
@@ -547,6 +558,7 @@ def run_multi_exit(
     timeframe: str = "1h",
     strategies: list | tuple | set | None = None,
     configs: list[dict] | None = None,
+    live_entry_gates: bool = False,
 ) -> dict:
     """Replay the (identical) entry set under every exit config and return a comparison
     block: per-config headline metrics + the best engine ranked by return-over-drawdown.
@@ -563,6 +575,7 @@ def run_multi_exit(
             target_profit=cfg.get("target_profit", 5.0),
             target_loss=cfg.get("target_loss", 4.0),
             atr_params=cfg.get("atr_params"),
+            live_entry_gates=live_entry_gates,
         )
         if "error" in r:
             rows[cfg["key"]] = {"label": cfg["label"], "error": r["error"]}

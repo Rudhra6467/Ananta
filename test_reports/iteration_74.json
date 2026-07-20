@@ -1,0 +1,40 @@
+{
+  "summary": "Verified Research Lab Live-Exit-Settings fix: allowed_regimes + min_confidence are now applied to Lab backtest entries when exit_source='live'. 5/5 in-process pytest cases passed: baseline analytical run on BTC/USD 1h over 6 months produced 32 trades incl. 20 TREND_UP (regimes NOT filtered); live-gated run with allowed_regimes=[COMPRESSION,REVERSAL] + min_confidence=0.7 produced 12 trades with ZERO TREND_UP and only COMPRESSION+REVERSAL regimes; gate ≤ baseline invariant holds. PDF ENTRY GATES section renders correctly: 'Live Risk Monitor settings applied: YES' + allowed regimes + min-confidence value for live run, and 'NO — analytical run' + 'Not enforced' for manual run. Web watchlist ribbon at narrow viewports (380/360/320 px): ribbon and CHARTS button live in separate grid cells with ~12 px gap → structurally cannot overlap; flex-wrap present at Dashboard.jsx:234 so the 24 h chip wraps within the ribbon and never pushes into CHARTS.",
+  "platforms_tested": ["web"],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/lab/runs", "issue": "The LabWorker single-process queue serialises everything: while a long-running health_sweep is RUNNING, newly-enqueued backtest runs sit in QUEUED for many minutes with no way to cancel or prioritise. During this iteration a 07-19 health_sweep still at 30% blocked API-driven Lab tests; pivoted to in-process backtest.run_backtest() for verification. Not a regression, but worth surfacing — consider a cancel endpoint or a separate lane for short user-initiated backtests."}
+    ]
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_lab_live_entry_gates.py",
+    "/app/test_reports/pytest/iter74_live_entry_gates.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: expose a /api/lab/runs/{id}/cancel endpoint so a stuck/long health_sweep can be aborted without blocking user-initiated backtests behind it in the single-worker queue."
+  ],
+  "critical_code_review_comments": [
+    "backtest.py _scan_entry correctly threads live_entry_gates through both gates: (a) regime membership filter using s.allowed_regimes and (b) confidence floor using s.min_confidence (with the 0..1 vs 0..100 normalisation handled). Guards for None/empty are in place so a run without live gates behaves exactly as before — no regression risk to analytical runs.",
+    "runner.py create_run sets exit_source='live' only when use_live_exit_settings AND kind=='backtest'; runner._run_backtest passes live_entry_gates=(exit_source=='live') to run_backtest for BOTH the base cell and the exit-comparison cell (cmp_overrides), so the multi-exit A/B/C is also gated correctly.",
+    "lab_report._entry_gates_block reads exit_source from result-first, then run-level — resilient to older docs that only set it on the run. Copy is clear ('YES — entries gated exactly like the deployed engine' vs 'NO — analytical run').",
+    "Dashboard.jsx watchlist-ribbon has flex-wrap AND every child span/button is shrink-0 with explicit truncation on the select — the change chip cannot push adjacent components; the CHARTS button lives in a separate grid cell so overlap between watchlist-change and open-chart-button is structurally impossible at every viewport tested (380/360/320 px)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lab_live_entry_gates.py"
+  ],
+  "success_rate": {"backend": "100% (5/5 pytest)", "frontend": "100% (layout invariants verified)"},
+  "seed_data_creation": "None. Two orphaned QUEUED lab_runs (50a1aef5, e9d2c311) from the initial API attempts were deleted via DELETE /api/lab/runs/{id} before finishing so they don't clutter the queue.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "In-process pytest at /app/backend/tests/test_lab_live_entry_gates.py is the canonical regression test for this fix (5 cases, ~60 s). Do NOT try to verify via /api/lab/runs unless the LabWorker queue is idle — a long-running health_sweep will block behind-the-queue backtest runs. The narrow-viewport watchlist overlap check is a structural layout property (separate grid cells + flex-wrap on ribbon), so browser-automation regressions on the CHARTS/chip pairing are unnecessary as long as those two properties remain in Dashboard.jsx.",
+  "rca of the issue": "Root cause of the original bug (validation PDFs still showing TREND_UP under UI Risk Monitor settings): backtest._scan_entry never consulted RiskSettings.allowed_regimes or RiskSettings.min_confidence — regime + confidence were computed but not used to gate entries. Fix threads a new live_entry_gates flag from runner (ON when exit_source=='live') into _scan_entry which (a) returns None when regime.regime not in s.allowed_regimes, and (b) returns None when the signal confidence < s.min_confidence (with 0..1 vs 0..100 normalisation). PDF now also documents which gates were applied. Verified: baseline 32→gated 12 trades on BTC/USD 6m; zero TREND_UP under gate."
+}

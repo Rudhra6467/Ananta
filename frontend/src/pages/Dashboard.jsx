@@ -232,7 +232,7 @@ function WatchlistRibbon({ snapshots, symbols, selected, onSelect, onChanged }) 
     const fmt = (p) => (p == null ? "—" : `$${p.toLocaleString(undefined, { minimumFractionDigits: p < 10 ? 4 : 2, maximumFractionDigits: p < 10 ? 4 : 2 })}`);
     return (
         <div className="panel px-4 py-3 flex items-center justify-between gap-3 flex-wrap" data-testid="watchlist-ribbon">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-wrap">
                 <span className="label-tag shrink-0">WATCHLIST</span>
                 <select
                     data-testid="watchlist-select"
