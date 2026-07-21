@@ -36,7 +36,7 @@ export default function OnboardingPipeline({ open, onClose }) {
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] bg-atlas-bg/95 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto" data-testid="onboarding-pipeline">
+        <div className="fixed inset-0 z-[60] bg-atlas-bg flex items-center justify-center p-4 overflow-y-auto" data-testid="onboarding-pipeline">
             <button data-testid="onboarding-skip" onClick={onClose}
                 className="absolute top-5 right-5 flex items-center gap-1.5 font-mono text-[10px] tracking-widest text-atlas-textTertiary hover:text-atlas-text transition-colors">
                 {done ? "CLOSE" : "SKIP"} <X className="w-3.5 h-3.5" />

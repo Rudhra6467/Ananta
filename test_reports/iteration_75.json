@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only verification of two web bug fixes. Bug 1 (toggle visibility): PASS. In the RUN VALIDATION dialog, use-live-exit-toggle + use-live-exit-switch are VISIBLE on both track-current (Current Prod) and track-presets (C · Presets) and HIDDEN on track-fresh (B · Param Opt) — matches the requested spec exactly. Bug 2 (onboarding overlay closes instantly, no 2-3s lag from backdrop-blur): PASS. Measured latencies over the natural post-login flow (login → dismiss Coming-Soon promo → trigger tour): SKIP closed the overlay in 86 ms; ENTER ANANTA closed it in 79 ms. Overlay DOM has no backdrop-blur class and CSS backdropFilter='none' / filter='none' — regression guard passes. Bug 3 (validation with use_live_exit_settings:true respecting allowed_regimes + min_confidence): deferred to iter74's in-process pytest at /app/backend/tests/test_lab_live_entry_gates.py (5/5 passing) as testing_type=frontend-only and prior agent flagged /api/lab/runs is queue-blocked; the frontend already sends use_live_exit_settings:true on POST /api/lab/runs when track='current' and toggle is ON (StrategyValidationPanel.jsx:213 confirmed by code review).",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Post-login → tour trigger (edge case)", "issue": "When a user logs in successfully, the 'Coming Soon to Ananta' promo Radix Dialog auto-opens. While that promo dialog is open, Radix sets `body { pointer-events: none }`. If the onboarding tour is dispatched (e.g. via window 'ananta:tour' or the tourOpen auto-open useEffect fires) BEFORE the user closes the promo, clicks on the tour (SKIP/ENTER) are silently blocked because body pointer-events is disabled at the DOM root, and Radix will not restore it until every open Radix Dialog is closed. Once the promo is closed (Continue to Cockpit or X), body pointer-events return to 'auto' and both SKIP and ENTER on the tour close instantly (79-86 ms). Not the originally reported bug (backdrop-blur has been correctly removed) but likely contributes to the 'lag/hang closing tour' user perception if the promo happens to be behind the tour.", "affected_selectors": ["[data-testid='onboarding-skip']", "[data-testid='onboarding-enter']"]}
+      ],
+      "design_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL (not blocking): serialize post-login modals so only one Radix Dialog can be open at a time — either delay the ComingSoonPromo auto-open until after the guided tour is dismissed, or delay the tour auto-open (setTourOpen) until after the promo is dismissed. Otherwise a natural race can put the tour on top of the promo and clicks on SKIP/ENTER will be dropped until the underlying promo is closed. AppShell.jsx:80-85 sets tourOpen based purely on sessionStorage; add a guard for `!promoOpen` or gate the tour behind the promo's onClose."
+  ],
+  "critical_code_review_comments": [
+    "OnboardingPipeline.jsx L39 correctly uses `bg-atlas-bg` (opaque, no backdrop-blur) so paint of the overlay is cheap; the animation timers (L29-32) are cleared in cleanup (L27-28, L33) so no state leaks after close. Fix verified structurally and behaviourally.",
+    "StrategyValidationPanel.jsx L375 gate `track !== 'fresh'` wraps the entire exit-logic-config block; L377 has a redundant inner `track !== 'fresh'` check around the toggle (harmless duplicate but noise — could be dropped). The toggle rendering condition is correct — visible on 'current' + 'presets', hidden on 'fresh'.",
+    "StrategyValidationPanel.jsx L213 correctly threads `use_live_exit_settings: true` into the POST /api/lab/runs payload only when kind='backtest' (i.e. NOT Param Opt) AND useLive is true — matches the backend contract in runner.py that sets exit_source='live' under the same conditions, which in turn is what backtest.py._scan_entry uses to apply allowed_regimes + min_confidence gates."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% — 3/3 requested checks pass"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (from /app/memory/test_credentials.md) — worked",
+  "seed_data_creation": "None. Did not create a lab run (per iter74 note that /api/lab/runs queue is single-worker and testing_type is frontend-only).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To hit the RUN VALIDATION dialog: (1) preseed localStorage 'ananta_onboarded'='1' so the WebOnboarding wizard doesn't intercept; (2) preseed sessionStorage 'ananta_tour_seen'='1' so the tour doesn't auto-open; (3) login as owner; (4) dismiss the 'Coming Soon to Ananta' promo (Continue to Cockpit); (5) nav to Research tab via [data-testid='bottom-nav-research']; (6) click [data-testid='research-advanced-toggle'] to expand advanced tools; (7) [data-testid='run-validation-btn'] is now clickable. Track selectors: [data-testid='track-current'|'track-fresh'|'track-presets']. Toggle: [data-testid='use-live-exit-toggle'] (label wrapper) + [data-testid='use-live-exit-switch'] (Radix Switch). For the tour: dispatch `window.dispatchEvent(new CustomEvent('ananta:tour'))` — but ONLY after all other Radix Dialogs are fully closed, otherwise the promo overlay steals pointer-events from body and clicks on SKIP/ENTER will be silently dropped.",
+  "rca of the issue": "Bug 2 root cause was correctly identified as backdrop-blur causing paint jank — that class has been removed from OnboardingPipeline.jsx L39 (verified: className has no 'backdrop-blur*' token; computed backdropFilter='none'). Any residual 'lag' users may report is now caused by an unrelated interaction: the ComingSoonPromo Radix Dialog auto-opens after owner login, and while it is open, body has pointer-events:none. If the tour is triggered on top of the still-open promo, its SKIP/ENTER buttons will not respond until the promo is closed. In the natural user flow (dismiss promo → tour → close tour), both SKIP (86 ms) and ENTER (79 ms) close well under 100 ms. Bug 1 root cause (toggle previously hidden on non-current tracks) is fixed by making the gate `track !== 'fresh'` at L375 (previously was `track === 'current'`). Verified across all three tracks: current=visible, presets=visible, fresh=hidden."
+}
