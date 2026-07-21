@@ -1232,3 +1232,15 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - ISSUE 2 — Killed auto-save in the Risk Monitor. Field edits now update LOCAL state only; nothing persists until "Save Settings" (rm-save-settings) is clicked. Removed the "CHANGES ALSO SAVE AUTOMATICALLY" text on both surfaces. Verified (iter76): 0 /api/settings writes on field edit, 1 on Save click.
 - ISSUE 3 — The "Use my live Risk Monitor & Exit Engine settings" toggle was missing from the WEB Research WIZARD (it only lived in the buried Advanced-Tools panel), so wizard runs never sent use_live_exit_settings and PDFs ignored live Allowed Regimes + Min Confidence. Added the toggle (default ON) to ResearchWizard.jsx step 4 + threaded useLive through researchStore.js run(). Verified: RUN payload = {use_live_exit_settings:true} (no exit_method). Mobile already had this toggle; aligned its label + payload (drops exit_method when live) for parity.
 - Verified on both surfaces via testing_agent iter76. Web additionally verified by me (payload capture + save-behavior).
+
+## Exit Engine data-consistency + Current Active Exit card + launch-blocker fixes (2026-07-21)
+CRITICAL CHAIN (was 500ing the app):
+- Mobile NumRow now commits typed values on keystroke + guards NaN (renders "" not "NaN"); deploy() validates finite numbers before PUT.
+- Backend PUT /api/settings drops explicit null values (a null numeric was poisoning the settings singleton).
+- Backend load_settings() -> _safe_settings(): tolerant of partial/null/bad-type docs (falls back to defaults) so a bad write can never 500 load_settings/position_watcher/portfolio. shadow_sim uses it too. Regression: tests/test_settings_resilience.py (4 pass).
+DATA CONSISTENCY (single source of truth = settings singleton):
+- New shared describeActiveExit() (frontend/src/lib/exitConfig.js + mobile helper) drives BOTH the Exit Engine home card AND the Risk Monitor "Active Exit Engine" card. Previously Risk Monitor always showed Trail/Breakeven even for Fixed% — now Fixed% shows Take-Profit% + Stop-Loss% everywhere.
+NEW FEATURE — "Current Active Exit Engine" card on Exit Engine home/Step 1 (web active-exit-card + mobile ee-active-exit): reads GET /api/settings, shows exit type + values + scope + Edit/Modify button that jumps into the active method's Configure step.
+SCOPED DEPLOY (flow #4): per-strategy / per-coin deploys no longer overwrite the global exit_method_pref or global params, and MERGE with existing overrides so other strategies/coins are untouched. Verified via curl (global stays 'native' when a hunter override is saved).
+ONBOARDING TOUR: fixed sticky/re-open race — auto-open now fires once via a ref and re-checks 'seen' on the deferred promo-close open, so ENTER ANANTA reliably dismisses.
+Verified: web self-test (both cards show Fixed-% 7/3.2; tour opens+closes) + testing_agent iter79 (web/backend) + iter80 (mobile 6/6 P0). Backend: 15 pytest pass (2 use_live integration tests time out only due to a busy single-worker lab queue / health sweep — not a logic regression).

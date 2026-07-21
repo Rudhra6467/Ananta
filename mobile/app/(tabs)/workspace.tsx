@@ -99,7 +99,8 @@ export default function ExitEngine() {
   };
 
   const inWizard = view === "edit" || view === "strategy" || view === "coin" || view === "global";
-  const wizardScope = view === "strategy" ? "strategy" : view === "coin" ? "coin" : "global";
+  const editActive = view === "edit" && settings ? describeActiveExit(settings) : null;
+  const wizardScope = view === "strategy" ? "strategy" : view === "coin" ? "coin" : (editActive ? editActive.scope : "global");
   const backHome = () => { setView("home"); loadSettings(); };
 
   return (
@@ -121,7 +122,7 @@ export default function ExitEngine() {
 
         {inWizard && (<>
           <BackHeader onBack={backHome} />
-          <ExitFlow isOwner={isOwner} settings={settings} initialScope={wizardScope} initialStep={view === "edit" || view === "global" ? 2 : 1} onExit={backHome} />
+          <ExitFlow isOwner={isOwner} settings={settings} initialScope={wizardScope} initialStep={view === "edit" || view === "global" ? 2 : 1} initialMethod={editActive ? editActive.method : null} onExit={backHome} />
         </>)}
 
         {view === "ai" && (<><BackHeader onBack={() => setView("home")} /><AiAnalysis isOwner={isOwner} trades={trades} /></>)}
@@ -200,7 +201,7 @@ function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
   );
 }
 
-function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onExit }: { isOwner: boolean; settings?: any; initialScope?: string | null; initialStep?: number; onExit?: () => void }) {
+function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, initialMethod = null, onExit }: { isOwner: boolean; settings?: any; initialScope?: string | null; initialStep?: number; initialMethod?: string | null; onExit?: () => void }) {
   const [step, setStep] = useState(initialStep);
   const [scope, setScope] = useState<string | null>(initialScope);
   const [strategy, setStrategy] = useState("hunter");
@@ -229,6 +230,14 @@ function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onE
   };
 
   const pick = (m: any) => { setMethod(m); setCfg({ ...DEFAULTS[m.id], ...savedCfgFor(m.id) }); setResult(null); setStep(3); };
+  // Edit-current entry: jump straight into the active method's Configure step (web parity).
+  useEffect(() => {
+    if (initialMethod) {
+      const m = METHODS.find((x) => x.id === initialMethod);
+      if (m) pick(m);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Store empty input as "" (never NaN) — a NaN here becomes null on the wire and poisons
   // the settings singleton. NumRow renders "" for non-finite, so typing resumes cleanly.
   const setF = (k: string, v: string) => setCfg((c: any) => {
@@ -266,20 +275,28 @@ function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onE
     if (!isOwner) return Alert.alert("Owner login required");
     setDeploying(true);
     try {
-      const patch: any = { exit_method_pref: method.id };
       const bad = (x: any) => x === "" || x == null || !Number.isFinite(Number(x));
-      if (method.id === "fixed_pct") {
-        if (bad(cfg.target_pct) || bad(cfg.stop_pct)) { setDeploying(false); return Alert.alert("Enter valid values", "Take-Profit % and Stop-Loss % must both be numbers."); }
-        patch.stop_loss_pct = Number(cfg.stop_pct); patch.fixed_target_pct = Number(cfg.target_pct);
+      const patch: any = {};
+      if (scope === "strategy") {
+        // Per-strategy override — merge so other strategies AND global settings stay untouched.
+        const prof: any = { method: method.id };
+        if (cfg.trail_atr_mult != null) prof.trail_atr_mult = cfg.trail_atr_mult;
+        if (cfg.profit_arm_pct != null) prof.profit_arm_pct = cfg.profit_arm_pct;
+        if (cfg.time_exit_hours != null) prof.time_exit_hours = cfg.time_exit_hours;
+        if (method.id === "fixed_pct") { prof.target_pct = Number(cfg.target_pct); prof.stop_pct = Number(cfg.stop_pct); }
+        patch.profile_overrides = { ...(settings?.profile_overrides || {}), [strategy]: { ...(settings?.profile_overrides?.[strategy] || {}), ...prof } };
+      } else if (scope === "coin") {
+        patch.asset_exit_overrides = { ...(settings?.asset_exit_overrides || {}), [coin]: { method: method.id, ...cfg } };
+      } else {
+        // Global scope — the ONLY scope that changes the account-wide active exit.
+        patch.exit_method_pref = method.id;
+        if (method.id === "fixed_pct") {
+          if (bad(cfg.target_pct) || bad(cfg.stop_pct)) { setDeploying(false); return Alert.alert("Enter valid values", "Take-Profit % and Stop-Loss % must both be numbers."); }
+          patch.stop_loss_pct = Number(cfg.stop_pct); patch.fixed_target_pct = Number(cfg.target_pct);
+        }
+        if (method.id === "atr_trailing" || method.id === "chandelier") { patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9; }
+        if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
       }
-      if (method.id === "atr_trailing" || method.id === "chandelier") { patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9; }
-      if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
-      const prof: any = {};
-      if (cfg.trail_atr_mult != null) prof.trail_atr_mult = cfg.trail_atr_mult;
-      if (cfg.profit_arm_pct != null) prof.profit_arm_pct = cfg.profit_arm_pct;
-      if (cfg.time_exit_hours != null) prof.time_exit_hours = cfg.time_exit_hours;
-      if (scope === "strategy" && Object.keys(prof).length) patch.profile_overrides = { [strategy]: prof };
-      if (scope === "coin") patch.asset_exit_overrides = { [coin]: { method: method.id, ...cfg } };
       await api.updateSettings(patch);
       const where = scope === "strategy" ? `strategy "${strategy}"` : scope === "coin" ? coin : "all markets";
       Alert.alert("Deployed", `${method.name} applied to ${where}. Live next cycle.`);

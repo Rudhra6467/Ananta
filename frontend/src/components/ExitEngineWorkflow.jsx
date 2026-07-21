@@ -128,19 +128,27 @@ export default function ExitEngineWorkflow() {
         if (!isOwner) { toast.error("Owner login required to deploy"); return; }
         setDeploying(true);
         try {
-            const patch = { exit_method_pref: method.id };
-            if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; patch.fixed_target_pct = cfg.target_pct; }
-            if (method.id === "atr_trailing" || method.id === "chandelier") {
-                patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9;
+            const patch = {};
+            if (scope === "global") {
+                // Global scope is the ONLY scope that changes the account-wide active exit.
+                patch.exit_method_pref = method.id;
+                if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; patch.fixed_target_pct = cfg.target_pct; }
+                if (method.id === "atr_trailing" || method.id === "chandelier") {
+                    patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9;
+                }
+                if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
+            } else if (scope === "strategy") {
+                // Per-strategy override — merge so other strategies AND global settings stay untouched.
+                const prof = { method: method.id };
+                if (cfg.trail_atr_mult != null) prof.trail_atr_mult = cfg.trail_atr_mult;
+                if (cfg.profit_arm_pct != null) prof.profit_arm_pct = cfg.profit_arm_pct;
+                if (cfg.time_exit_hours != null) prof.time_exit_hours = cfg.time_exit_hours;
+                if (method.id === "fixed_pct") { prof.target_pct = cfg.target_pct; prof.stop_pct = cfg.stop_pct; }
+                patch.profile_overrides = { ...(saved?.profile_overrides || {}), [strategy]: { ...(saved?.profile_overrides?.[strategy] || {}), ...prof } };
+            } else if (scope === "coin") {
+                // Per-coin override — merge so other coins AND global settings stay untouched.
+                patch.asset_exit_overrides = { ...(saved?.asset_exit_overrides || {}), [coin]: { method: method.id, ...cfg } };
             }
-            if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
-            const prof = {};
-            if (cfg.trail_atr_mult != null) prof.trail_atr_mult = cfg.trail_atr_mult;
-            if (cfg.profit_arm_pct != null) prof.profit_arm_pct = cfg.profit_arm_pct;
-            if (cfg.time_exit_hours != null) prof.time_exit_hours = cfg.time_exit_hours;
-
-            if (scope === "strategy" && Object.keys(prof).length) patch.profile_overrides = { [strategy]: prof };
-            if (scope === "coin") patch.asset_exit_overrides = { [coin]: { method: method.id, ...cfg } };
             const next = await api.updateSettings(patch);
             setSaved(next);
             const where = scope === "strategy" ? `strategy "${strategy}"` : scope === "coin" ? coin : "all markets (global)";
