@@ -145,13 +145,26 @@ async def create_run(db, spec: dict) -> dict:
         setting_overrides = {**sdoc, **(spec.get("setting_overrides") or {})}
         profile_overrides = sdoc.get("profile_overrides") or spec.get("profile_overrides")
         exit_source = "live"
-        # Honor the DEPLOYED exit-method preference so the backtest matches live trading.
+        # Resolve the EFFECTIVE deployed exit for this run, matching the UI precedence
+        # (per-coin override > per-strategy override > global exit_method_pref) so the PDF
+        # shows the exact config the user saved — global OR a Fixed% strategy/coin override.
         pref = setting_overrides.get("exit_method_pref") or "native"
-        if pref == "fixed_pct":
+        ov = None
+        aeo = setting_overrides.get("asset_exit_overrides") or {}
+        po = setting_overrides.get("profile_overrides") or {}
+        for sym in symbols:
+            if isinstance(aeo.get(sym), dict) and aeo[sym].get("method"):
+                ov = aeo[sym]; break
+        if ov is None:
+            for st in (spec.get("strategies") or []):
+                if isinstance(po.get(st), dict) and po[st].get("method"):
+                    ov = po[st]; break
+        eff_method = (ov.get("method") if ov else pref) or "native"
+        if eff_method == "fixed_pct":
             # "Fixed % Target + Stop" — replay the exact deployed TP%/SL% (as $ on the live lot).
             lot = float(setting_overrides.get("normal_lot_usd") or 75.0)
-            tp_pct = float(setting_overrides.get("fixed_target_pct") or 3.0)
-            sl_pct = float(setting_overrides.get("stop_loss_pct") or 2.2)
+            tp_pct = float((ov or {}).get("target_pct", setting_overrides.get("fixed_target_pct") or 3.0))
+            sl_pct = float((ov or {}).get("stop_pct", setting_overrides.get("stop_loss_pct") or 2.2))
             exit_method = "fixed"
             target_profit = round(lot * tp_pct / 100.0, 2)
             target_loss = round(lot * sl_pct / 100.0, 2)

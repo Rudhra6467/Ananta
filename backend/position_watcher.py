@@ -53,10 +53,26 @@ EXIT_SL = "SL_HIT"
 EXIT_TRAIL = "TRAIL_HIT"
 
 
-def _resolve_exit_method(settings: RiskSettings, symbol: str) -> str:
-    """Effective deployed exit method for a symbol: per-coin override if set, else global."""
-    ov = (getattr(settings, "asset_exit_overrides", None) or {}).get(symbol) or {}
-    return ov.get("method") or getattr(settings, "exit_method_pref", None) or "native"
+def _resolve_exit_method(settings: RiskSettings, symbol: str, strategy: str | None = None) -> str:
+    """Effective deployed exit method: per-coin override > per-strategy override > global."""
+    aeo = (getattr(settings, "asset_exit_overrides", None) or {}).get(symbol) or {}
+    if aeo.get("method"):
+        return aeo["method"]
+    if strategy:
+        po = (getattr(settings, "profile_overrides", None) or {}).get(strategy) or {}
+        if po.get("method"):
+            return po["method"]
+    return getattr(settings, "exit_method_pref", None) or "native"
+
+
+def _fixed_pct_targets(settings: RiskSettings, symbol: str, strategy: str | None):
+    """Effective fixed TP%/SL% for a position: per-coin override > per-strategy override > global."""
+    aeo = (getattr(settings, "asset_exit_overrides", None) or {}).get(symbol) or {}
+    po = (getattr(settings, "profile_overrides", None) or {}).get(strategy or "", {}) or {}
+    ov = aeo if aeo.get("method") else (po if po.get("method") else {})
+    tp = float(ov.get("target_pct", getattr(settings, "fixed_target_pct", 3.0)))
+    sl = float(ov.get("stop_pct", getattr(settings, "stop_loss_pct", 2.2)))
+    return tp, sl
 
 
 def _fixed_pct_decision(pos: Position, last: float, settings: RiskSettings) -> ExitDecision:
@@ -66,9 +82,7 @@ def _fixed_pct_decision(pos: Position, last: float, settings: RiskSettings) -> E
     if entry <= 0 or last <= 0:
         return ExitDecision(action=ACT_NONE)
     pnl_pct = (last - entry) / entry * 100.0
-    ov = (getattr(settings, "asset_exit_overrides", None) or {}).get(pos.symbol) or {}
-    tp_pct = float(ov.get("target_pct", getattr(settings, "fixed_target_pct", 3.0)))
-    sl_pct = float(ov.get("stop_pct", getattr(settings, "stop_loss_pct", 2.2)))
+    tp_pct, sl_pct = _fixed_pct_targets(settings, pos.symbol, pos.strategy)
     if pnl_pct <= -sl_pct:
         return ExitDecision(action=ACT_EXIT_FULL, module="FIXED_SL", exit_reason="FIXED_TARGET_LOSS",
                             reason=f"Fixed stop-loss hit ({pnl_pct:.2f}% <= -{sl_pct:.2f}%)", confidence=1.0, fraction=1.0)
@@ -361,7 +375,7 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
         # Deployed exit method: "Fixed % Target + Stop" uses a fixed TP/SL (matches the Lab
         # 'fixed' backtest); everything else runs the Universal Exit Engine. Emergency
         # (kill-switch) always uses the engine so its KILL module fires.
-        if not emergency and _resolve_exit_method(settings, pos.symbol) == "fixed_pct":
+        if not emergency and _resolve_exit_method(settings, pos.symbol, pos.strategy) == "fixed_pct":
             decision = _fixed_pct_decision(pos, snap.price, settings)
         # Declarative strategies (Phase B): honor the strategy's OWN exit rule as a secondary
         # trigger — universal safety exits (stops/kill/floors) keep top priority; only when the

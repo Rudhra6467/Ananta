@@ -53,10 +53,18 @@ def _exit_label(run: dict) -> str:
 
 def _live_exit_desc(run: dict) -> str:
     """Describe WHICH deployed exit config a live-settings run replayed (answers the user's
-    'is the PDF using my saved Fixed % config?')."""
-    pref = ((run.get("setting_overrides") or {}).get("exit_method_pref")) or "native"
+    'is the PDF using my saved config?'). Precedence: per-coin > per-strategy > global."""
+    so = run.get("setting_overrides") or {}
     names = {"fixed_pct": "Fixed % Target + Stop", "atr_trailing": "ATR Trailing Stop",
              "chandelier": "Chandelier Exit", "native": "Universal Exit Engine"}
+    aeo, po = so.get("asset_exit_overrides") or {}, so.get("profile_overrides") or {}
+    for sym in (run.get("symbols") or []):
+        if isinstance(aeo.get(sym), dict) and aeo[sym].get("method"):
+            return f"Deployed config · {names.get(aeo[sym]['method'], aeo[sym]['method'])} (coin · {sym})"
+    for st in (run.get("strategies") or []):
+        if isinstance(po.get(st), dict) and po[st].get("method"):
+            return f"Deployed config · {names.get(po[st]['method'], po[st]['method'])} (strategy · {st})"
+    pref = so.get("exit_method_pref") or "native"
     return f"Deployed config · {names.get(pref, pref)}"
 
 

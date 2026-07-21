@@ -52,6 +52,25 @@ def test_per_coin_fixed_params_override_global():
     assert d.action == ACT_EXIT_FULL and d.module == "FIXED_TP"
 
 
+def test_per_strategy_override_wins_over_global():
+    # Global native, but the position's strategy has a deployed Fixed% override.
+    s = RiskSettings(exit_method_pref="native",
+                     profile_overrides={"hunter": {"method": "fixed_pct", "target_pct": 4.5, "stop_pct": 2.7}})
+    assert _resolve_exit_method(s, "BTC/USD", "hunter") == "fixed_pct"
+    assert _resolve_exit_method(s, "BTC/USD", "squeeze") == "native"  # other strategies unaffected
+    d = _fixed_pct_decision(_pos(100.0, "BTC/USD"), 104.5, s)  # hunter position +4.5%
+    assert d.action == ACT_EXIT_FULL and d.module == "FIXED_TP"
+
+
+def test_coin_override_beats_strategy_override():
+    s = RiskSettings(exit_method_pref="native",
+                     asset_exit_overrides={"BTC/USD": {"method": "fixed_pct", "target_pct": 1.5, "stop_pct": 1.0}},
+                     profile_overrides={"hunter": {"method": "fixed_pct", "target_pct": 9.0, "stop_pct": 9.0}})
+    # coin override (1.5%) wins over strategy override (9%)
+    d = _fixed_pct_decision(_pos(100.0, "BTC/USD"), 101.5, s)
+    assert d.action == ACT_EXIT_FULL and d.module == "FIXED_TP"
+
+
 def test_pdf_labels_reflect_deployed_fixed_config():
     fixed_run = {
         "exit_method": "fixed", "target_profit": 40.0, "target_loss": 25.0, "exit_source": "live",

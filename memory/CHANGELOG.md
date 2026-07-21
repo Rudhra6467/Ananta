@@ -1244,3 +1244,11 @@ NEW FEATURE — "Current Active Exit Engine" card on Exit Engine home/Step 1 (we
 SCOPED DEPLOY (flow #4): per-strategy / per-coin deploys no longer overwrite the global exit_method_pref or global params, and MERGE with existing overrides so other strategies/coins are untouched. Verified via curl (global stays 'native' when a hunter override is saved).
 ONBOARDING TOUR: fixed sticky/re-open race — auto-open now fires once via a ref and re-checks 'seen' on the deferred promo-close open, so ENTER ANANTA reliably dismisses.
 Verified: web self-test (both cards show Fixed-% 7/3.2; tour opens+closes) + testing_agent iter79 (web/backend) + iter80 (mobile 6/6 P0). Backend: 15 pytest pass (2 use_live integration tests time out only due to a busy single-worker lab queue / health sweep — not a logic regression).
+
+## Per-strategy / per-coin exit overrides now reflected everywhere (2026-07-21)
+ROOT CAUSE of the recurring "TP stuck at 3%": when the user deployed via "Modify Exit for a Strategy" (or a coin), the scoped-deploy fix correctly stopped it overwriting the GLOBAL config — but describeActiveExit + the Lab runner still read only the GLOBAL fields, so the card/PDF showed the global 3% instead of the strategy's saved 4.5%.
+- describeActiveExit (frontend/src/lib/exitConfig.js + mobile helper) now resolves the active exit with precedence: per-coin override > per-strategy override > global. It reads target_pct/stop_pct (and trail params) from the matching override entry (identified by a `method` field). Card + Risk Monitor now show the override values.
+- Lab runner use_live path resolves the same precedence against the run's symbols/strategies, so a Hunter Fixed% override validation produces exit_method=fixed with the override's TP/SL (verified: hunter 4.5/2.7 -> fixed $45/$27 on $1000 lot).
+- Live executor (position_watcher): _resolve_exit_method + _fixed_pct_targets now honor per-strategy overrides too (coin > strategy > global) so paper/live trading matches the Lab.
+- PDF _live_exit_desc names the actual deployed source (e.g. "Deployed config · Fixed % Target + Stop (strategy · hunter)").
+Verified: web card + Risk Monitor show Fixed-% 4.5/2.7 for a hunter-only override (global stays native); backend curl (global unchanged + run maps to fixed 45/27); 9 pytest in test_fixed_pct_exit.py incl. per-strategy + coin>strategy precedence.

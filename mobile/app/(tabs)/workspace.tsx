@@ -42,26 +42,34 @@ const EXIT_METHOD_NAMES: Record<string, string> = {
   breakeven_trail: "Breakeven Trail", structural_trail: "Structural Trail", native: "Universal Exit Engine",
 };
 const _n = (v: any, fb: number) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
+function _firstExitOverride(map: any): { key: string; value: any } | null {
+  for (const key of Object.keys(map || {})) {
+    const value = map[key];
+    if (value && typeof value === "object" && value.method) return { key, value };
+  }
+  return null;
+}
 
 // Single source of truth for the DEPLOYED exit config — used by ExitHome + RiskMonitor so
-// every mobile screen agrees with the backend settings singleton.
+// every mobile screen agrees with the backend. Precedence: coin > strategy > global.
 function describeActiveExit(s: any): { method: string; typeLabel: string; scope: string; scopeLabel: string; rows: { label: string; value: string }[] } {
   if (!s) return { method: "native", typeLabel: "-", scope: "global", scopeLabel: "Global", rows: [] };
-  const method = s.exit_method_pref || "native";
+  const coinOv = _firstExitOverride(s.asset_exit_overrides);
+  const stratOv = _firstExitOverride(s.profile_overrides);
+  let ov: any = null, scope = "global", scopeLabel = "Global (all markets)", method = s.exit_method_pref || "native";
+  if (coinOv) { ov = coinOv.value; method = ov.method; scope = "coin"; scopeLabel = `Per-coin · ${coinOv.key}`; }
+  else if (stratOv) { ov = stratOv.value; method = ov.method; scope = "strategy"; scopeLabel = `Per-strategy · ${stratOv.key}`; }
   const typeLabel = EXIT_METHOD_NAMES[method] || "Universal Exit Engine";
-  const stop = _n(s.stop_loss_pct, 2.2);
-  const coins = Object.keys(s.asset_exit_overrides || {});
-  const strats = Object.keys(s.profile_overrides || {});
-  let scope = "global", scopeLabel = "Global (all markets)";
-  if (coins.length) { scope = "coin"; scopeLabel = `Per-coin · ${coins.join(", ")}`; }
-  else if (strats.length) { scope = "strategy"; scopeLabel = `Per-strategy · ${strats.join(", ")}`; }
+  const pick = (ovKey: string, globalKey: string, dflt: number) => _n(ov?.[ovKey], _n(s[globalKey], dflt));
+  const stop = pick("stop_pct", "stop_loss_pct", 2.2);
   let rows: { label: string; value: string }[];
   if (method === "fixed_pct") {
-    rows = [{ label: "Take-Profit target", value: `${_n(s.fixed_target_pct, 3.0)}%` }, { label: "Stop-Loss", value: `${stop}%` }];
+    rows = [{ label: "Take-Profit target", value: `${pick("target_pct", "fixed_target_pct", 3.0)}%` }, { label: "Stop-Loss", value: `${stop}%` }];
   } else if (method === "atr_trailing" || method === "chandelier") {
-    rows = [{ label: "Trail arm", value: `${_n(s.trail_arm_pct, 1.6)}%` }, { label: "Trail distance", value: `${_n(s.trail_distance_pct, 0.9)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
+    rows = [{ label: "Trail arm", value: `${pick("trail_arm", "trail_arm_pct", 1.6)}%` }, { label: "Trail distance", value: `${pick("trail_dist", "trail_distance_pct", 0.9)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
   } else {
-    rows = [{ label: "Trail multiplier", value: `${_n(s.profile_overrides?.hunter?.trail_atr_mult, 2.0)}x` }, { label: "Breakeven arm", value: `${_n(s.trail_arm_pct, 1.6)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
+    const trailMult = _n(ov?.trail_atr_mult, _n(s.profile_overrides?.hunter?.trail_atr_mult, 2.0));
+    rows = [{ label: "Trail multiplier", value: `${trailMult}x` }, { label: "Breakeven arm", value: `${pick("profit_arm_pct", "trail_arm_pct", 1.6)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
   }
   return { method, typeLabel, scope, scopeLabel, rows };
 }
