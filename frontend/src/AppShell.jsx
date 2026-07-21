@@ -68,6 +68,7 @@ function Shell() {
     const hidden = useHideOnScroll(60);
     const [tourOpen, setTourOpen] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const tourAutoRef = useRef(false);
 
     // First-login Paper Trading wizard (web parity with mobile). Shown once per
     // browser to a logged-in account that hasn't completed setup yet.
@@ -75,25 +76,28 @@ function Shell() {
         setShowOnboarding(isOwner && !localStorage.getItem("ananta_onboarded"));
     }, [isOwner]);
 
-    // Onboarding tour. Owner: auto-open once per browser session (only AFTER the
-    // first-login wizard is done), always re-launchable. Public: gated to the waitlist.
-    // If the Cockpit "Coming Soon" sheet is open, wait for it to close first — two
-    // stacked modals leave the tour buttons unclickable (Radix locks body pointer-events).
+    // Auto-open the onboarding tour AT MOST ONCE per session, only after the first-login
+    // wizard is dismissed, and deferred until the Cockpit "Coming Soon" sheet closes (two
+    // stacked modals leave the tour buttons unclickable — Radix locks body pointer-events).
+    // A ref guards against re-opening; openIfUnseen re-checks so closing the tour sticks.
     useEffect(() => {
+        if (showOnboarding || tourAutoRef.current) return;
         const wantAuto = isOwner && localStorage.getItem("ananta_onboarded") && !sessionStorage.getItem("ananta_tour_seen");
-        let cleanupPromo = () => {};
-        if (wantAuto) {
-            if (sessionStorage.getItem("ananta_promo_active")) {
-                const onPromoClosed = () => setTourOpen(true);
-                window.addEventListener("ananta:promo-closed", onPromoClosed, { once: true });
-                cleanupPromo = () => window.removeEventListener("ananta:promo-closed", onPromoClosed);
-            } else {
-                setTourOpen(true);
-            }
+        if (!wantAuto) return;
+        tourAutoRef.current = true;
+        const openIfUnseen = () => { if (!sessionStorage.getItem("ananta_tour_seen")) setTourOpen(true); };
+        if (sessionStorage.getItem("ananta_promo_active")) {
+            window.addEventListener("ananta:promo-closed", openIfUnseen, { once: true });
+            return () => window.removeEventListener("ananta:promo-closed", openIfUnseen);
         }
+        openIfUnseen();
+    }, [isOwner, showOnboarding]);
+
+    // Manual re-launch (owner) / gated waitlist (public) — stable listener.
+    useEffect(() => {
         const onTour = () => { if (isOwner) setTourOpen(true); else gate("Guided onboarding tour"); };
         window.addEventListener("ananta:tour", onTour);
-        return () => { window.removeEventListener("ananta:tour", onTour); cleanupPromo(); };
+        return () => window.removeEventListener("ananta:tour", onTour);
     }, [isOwner, gate]);
     const closeTour = () => { sessionStorage.setItem("ananta_tour_seen", "1"); setTourOpen(false); };
 
