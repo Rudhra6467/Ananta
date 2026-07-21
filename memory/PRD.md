@@ -851,3 +851,26 @@ Tested iter 43 (backend pytest 5/5 + HTTP e2e; web + mobile import UI parity; re
 ### KNOWN PRE-EXISTING FLAKE (not introduced by P2): tests/test_iter39_phase_b.py::test_backtest_requires_owner
 can report 200 in-suite though the route is correctly owner-gated (curl + isolated pytest both 403 with no token).
 Verify auth via a standalone no-token request, not the legacy in-suite ordering.
+
+## PHASE 1 COMPLETE — Research Lab PDF / Trade Report upgrades (2026-06, launch prep)
+Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
+- lab/lab_report.py: added 5 analytical sections to backtest reports (data already captured by the replay
+  engine; changes are purely in the PDF/presentation layer):
+  1. Strategy name column in the Full trade log (_trade_log_block).
+  2. Strategy-wise Performance Summary inside the Executive Summary (_strategy_summary_flow).
+  3. Regime × Strategy Performance Matrix — net P&L / n·win% cells (_regime_strategy_matrix_flow).
+  4. Exit Type Performance per Strategy (_exit_per_strategy_flow).
+  5. Top Winning & Losing Setups — strategy·symbol·regime·exit (_top_setups_flow).
+  New helpers: _group_stats, _all_trades, _strat_label; combined _strategy_analytics_block rendered as a
+  "STRATEGY DEEP-DIVE" page after the Executive Summary in build_lab_report.
+- describeActiveExit per-strategy/per-coin override fix RE-VERIFIED across Web (exitConfig.js), Mobile
+  (workspace.tsx) and Backend — precedence: per-coin > per-strategy > global.
+- KNOWN LOW carry-forward: mobile workspace.tsx duplicates describeActiveExit byte-for-byte from
+  frontend/src/lib/exitConfig.js — candidate to extract to a shared module.
+
+### NEXT (launch-prep roadmap, user-approved order)
+- P1 Phase 2: Deep Strategy Analysis report (Hunter/Squeeze/Continuation, last 12mo, BTC/ETH/SOL) — ~14mo of
+  1h data is seeded locally for all three (10,492 1h bars each).
+- P1 Phase 3: Optimization support — recommend aggressive combos (TP 4.5–6.5% / SL 2.7–3.2%); SHOW combos
+  first, user picks which config to deploy to preview (no auto-deploy).
+- P2 Phase 4: Current System Assessment (Exit Engine/Risk Monitor stability, PDF limits, 7–10 day paper-testing guidance).
