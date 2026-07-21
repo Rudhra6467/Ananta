@@ -874,3 +874,18 @@ Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
 - P1 Phase 3: Optimization support — recommend aggressive combos (TP 4.5–6.5% / SL 2.7–3.2%); SHOW combos
   first, user picks which config to deploy to preview (no auto-deploy).
 - P2 Phase 4: Current System Assessment (Exit Engine/Risk Monitor stability, PDF limits, 7–10 day paper-testing guidance).
+
+## PHASE 2 COMPLETE — Deep Strategy Analysis + Consolidated report (2026-07-21, launch prep)
+- 3 isolated 12-month backtests (Hunter / Squeeze / Continuation) on BTC+ETH+SOL, 1h, NATIVE Universal Exit
+  Engine, analytical (no live entry gates). Run IDs stored transiently; findings below.
+- New: build_multi_strategy_report() in lab/lab_report.py + POST /api/lab/reports/consolidated {run_ids,
+  period_label} → side-by-side comparison PDF (head-to-head overview, per-strategy read, regime×strategy
+  matrix, exit-per-strategy, top setups). Self-tested (200 + PDF content verified).
+- FINDINGS (12mo, native exit, directional — small samples): all three net-negative.
+  Hunter 22t/18.2%win/PF0.14/-$17.45/cap8.7%; Squeeze 24t/16.7%/PF0.13/-$17.81/cap13.7%;
+  Continuation 92t/18.5%/PF0.13/-$88.0/cap14.6%. Each traded ONLY its designated regime (router OK).
+  ROOT CAUSE: Structural/Hard-Stop + Breakeven/Structure modules = 0% win across ALL strategies (~70% of
+  closures, only ever close losers); ATR Trail (Universal) is the ONLY net-positive exit everywhere
+  (Continuation +$3.44@47%/PF1.38, Squeeze +$2.36@80%). MFE capture 8-15% ⇒ exit is the primary leak.
+  Entry edge also thin (fixed & ATR configs net-neg on identical Hunter entries). Recent 3mo w/ Fixed-$ TP:
+  Continuation PF 1.86/60%win/+$24.73 ⇒ regime+exit choice flips outcome. Motivates Phase 3.

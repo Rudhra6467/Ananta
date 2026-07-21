@@ -846,3 +846,116 @@ def build_lab_report(run: dict) -> bytes:
     flow += _result_block(s, run)
     doc.build(flow)
     return buf.getvalue()
+
+
+
+# ---------------------------------------------------------------------------
+# Consolidated multi-strategy report — side-by-side comparison of several
+# isolated single-strategy backtest runs over the SAME window/symbols. Built
+# for the paper-testing documentation artifact (Phase 2).
+# ---------------------------------------------------------------------------
+def _run_strat_key(run: dict) -> str:
+    strs = run.get("strategies") or []
+    return strs[0] if len(strs) == 1 else "combined"
+
+
+def _agg_verdict(a: dict) -> str:
+    net, ret = a["net_pnl"], a["total_return_pct"]
+    if net > 0 and ret > 1.0:
+        return "PROFITABLE"
+    if net >= 0 or ret >= -2.0:
+        return "MARGINAL"
+    return "UNDERPERFORMING"
+
+
+def _consolidated_overview(s, cols: list):
+    """cols: list of (label, agg, trades). One metric per row, one column per strategy."""
+    header = ["Metric"] + [c[0] for c in cols]
+
+    def _best(d, lab=False):
+        if not d:
+            return "—"
+        k = max(d.items(), key=lambda kv: kv[1]["net_pnl"])[0]
+        return _mod_label(k) if lab else k
+
+    def row(name, fn):
+        return [name] + [fn(c[1], c[2]) for c in cols]
+
+    rows = [
+        row("Trades", lambda a, t: str(a["trades"])),
+        row("Win rate", lambda a, t: f'{a["win_rate_pct"]:g}%'),
+        row("Profit factor", lambda a, t: _pf(a["profit_factor"])),
+        row("Net P&L", lambda a, t: f'${a["net_pnl"]:+.2f}'),
+        row("Total return", lambda a, t: f'{a["total_return_pct"]:+g}%'),
+        row("Max drawdown", lambda a, t: _fmt(a["max_drawdown_pct"], "%")),
+        row("MFE capture", lambda a, t: (f'{a["capture_rate_pct"]:g}%' if a["capture_rate_pct"] is not None else "—")),
+        row("Best regime", lambda a, t: _best(a["regimes"])),
+        row("Best exit module", lambda a, t: _best(a["exits"], lab=True)),
+        row("Best timeframe", lambda a, t: a["best_tf"] or "—"),
+        row("Usability", lambda a, t: f"{_usability_score(a)} / 10"),
+        row("Verdict", lambda a, t: _agg_verdict(a)),
+    ]
+    strat_w = (5.0 / len(cols)) * inch
+    return _kv_table(s, header, rows, [1.6 * inch] + [strat_w] * len(cols))
+
+
+def build_multi_strategy_report(runs: list, symbols: list | None = None,
+                                period_label: str | None = None) -> bytes:
+    """Render a single side-by-side comparison PDF from several isolated single-strategy
+    backtest runs (same window + symbols, one strategy each). Shareable paper-testing artifact."""
+    s = _styles()
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=48, bottomMargin=40,
+                            leftMargin=42, rightMargin=42, title="Ananta Consolidated Strategy Report")
+    done = [r for r in runs if r.get("status") == "DONE" and r.get("result")]
+    syms = symbols or (done[0].get("symbols") if done else []) or []
+    win = ""
+    if done:
+        r0 = done[0]
+        win = f'{_date(r0.get("start_ms"))} → {_date(r0.get("end_ms"))}'
+    flow = [
+        Paragraph("ANANTA — CONSOLIDATED STRATEGY REPORT", s["title"]),
+        Paragraph(f"Side-by-side comparison · {', '.join(syms)} · {period_label or ''} ({win}) · "
+                  f"each strategy replayed in isolation through the live Universal Exit Engine.", s["subtitle"]),
+        Spacer(1, 12),
+    ]
+    # Build per-strategy columns.
+    cols = []
+    all_trades: list = []
+    for r in done:
+        a = _agg_backtest(r.get("result") or {})
+        if not a:
+            continue
+        trades = _all_trades(r.get("result") or {})
+        all_trades += trades
+        cols.append((_strat_label(_run_strat_key(r)), a, trades))
+    if not cols:
+        flow.append(Paragraph("No completed strategy runs to compare.", s["italic"]))
+        doc.build(flow)
+        return buf.getvalue()
+
+    flow += [Paragraph("HEAD-TO-HEAD OVERVIEW", s["h2"]),
+             Paragraph("All strategies over the identical window &amp; symbols. Compare win rate + profit "
+                       "factor + MFE capture to see which edge is strongest and where each one lives.", s["subtitle"]),
+             Spacer(1, 4), _consolidated_overview(s, cols), Spacer(1, 14)]
+
+    # Ranked read: best net P&L first.
+    ranked = sorted(cols, key=lambda c: c[1]["net_pnl"], reverse=True)
+    flow.append(Paragraph("Read", s["h3"]))
+    for label, a, _t in ranked:
+        best_reg = max(a["regimes"].items(), key=lambda kv: kv[1]["net_pnl"])[0] if a["regimes"] else "n/a"
+        flow.append(Paragraph(
+            f"<b>{label}:</b> {_agg_verdict(a)} — {a['net_pnl']:+.2f} net, "
+            f"{a['win_rate_pct']:g}% win, PF {_pf(a['profit_factor'])} over {a['trades']} trades; "
+            f"strongest in {best_reg}.", s["body"]))
+    flow += [Spacer(1, 10), PageBreak()]
+
+    # Cross-sectional analytics across ALL strategies (matrix, exit-per-strategy, top setups).
+    flow += [Paragraph("CROSS-STRATEGY ANALYTICS", s["h2"]),
+             Paragraph("Combined across every strategy run — regime ownership, exit behaviour and the "
+                       "standout individual trades over the full window.", s["subtitle"]), Spacer(1, 8)]
+    flow += _regime_strategy_matrix_flow(s, all_trades)
+    flow += _exit_per_strategy_flow(s, all_trades)
+    flow += _top_setups_flow(s, all_trades)
+    doc.build(flow)
+    return buf.getvalue()

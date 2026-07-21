@@ -2111,6 +2111,31 @@ async def lab_run_pdf(run_id: str):
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+class ConsolidatedReportReq(BaseModel):
+    run_ids: list[str]
+    period_label: str | None = None
+
+
+@api_router.post("/lab/reports/consolidated", dependencies=[Depends(require_owner)])
+async def lab_consolidated_report(body: ConsolidatedReportReq):
+    """Render one side-by-side comparison PDF from several completed single-strategy backtest runs."""
+    if not body.run_ids:
+        raise HTTPException(status_code=400, detail="run_ids required")
+    runs = await db.lab_runs.find({"id": {"$in": body.run_ids}}, {"_id": 0}).to_list(length=len(body.run_ids))
+    done = [r for r in runs if r.get("status") == "DONE" and r.get("result")]
+    if not done:
+        raise HTTPException(status_code=409, detail="no completed runs among run_ids")
+    # Preserve the caller's ordering.
+    order = {rid: i for i, rid in enumerate(body.run_ids)}
+    done.sort(key=lambda r: order.get(r["id"], 999))
+    syms = done[0].get("symbols") or []
+    from lab.lab_report import build_multi_strategy_report
+    pdf_bytes = build_multi_strategy_report(done, symbols=syms, period_label=body.period_label)
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="ananta_consolidated_strategies.pdf"'})
+
+
+
 @api_router.post("/lab/runs/{run_id}/propose", dependencies=[Depends(require_owner)])
 async def lab_propose(run_id: str):
     """Build a production-settings proposal from a completed run's best params (diff only)."""
