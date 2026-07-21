@@ -134,7 +134,22 @@ async def load_settings(db: AsyncIOMotorDatabase) -> RiskSettings:
         s = RiskSettings()
         await db.settings.insert_one(s.model_dump())
         return s
-    return RiskSettings(**doc)
+    return _safe_settings(doc)
+
+
+def _safe_settings(doc: dict) -> RiskSettings:
+    """Build RiskSettings tolerant of a partial/dirty singleton: null values and any
+    type errors fall back to model defaults so a bad write can never 500 the engine."""
+    clean = {k: v for k, v in doc.items() if v is not None}
+    try:
+        return RiskSettings(**clean)
+    except Exception:
+        base = RiskSettings().model_dump()
+        merged = {**base, **{k: v for k, v in clean.items() if k in base}}
+        try:
+            return RiskSettings(**merged)
+        except Exception:
+            return RiskSettings()
 
 
 async def load_strategy_states(db: AsyncIOMotorDatabase) -> dict[str, dict]:

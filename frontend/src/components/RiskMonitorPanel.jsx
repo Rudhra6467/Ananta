@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/AuthContext";
+import { describeActiveExit } from "@/lib/exitConfig";
 
 // Compact Risk Monitor — parity with the mobile Exit Engine "Risk Monitor" view:
 //   1. ENTRY SETUP    — rules that decide WHEN Ananta opens a position
@@ -48,9 +49,8 @@ export default function RiskMonitorPanel() {
 
     if (!s) return <div className="py-10 text-center font-mono text-[11px] text-atlas-textTertiary" data-testid="rm-loading">Loading risk configuration…</div>;
 
-    const engineName = s.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
-    const trailMult = s.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
     const safe = risk?.status?.overall_safe !== false;
+    const active = describeActiveExit(s);
 
     return (
         <div className="space-y-5" data-testid="risk-monitor-panel">
@@ -68,12 +68,12 @@ export default function RiskMonitorPanel() {
             {/* ACTIVE EXIT ENGINE (read-only) */}
             <Card icon={Target} title="ACTIVE EXIT ENGINE" subtitle="Configured in the Exit Engine flow." testId="rm-active-exit">
                 <div className="flex items-center justify-between py-2 border-b border-atlas-border">
-                    <span className="label-tag text-[9px] text-atlas-textTertiary">STATUS</span>
-                    <span className="font-mono text-sm font-bold text-atlas-cyan" data-testid="rm-active-name">{engineName} ●</span>
+                    <span className="label-tag text-[9px] text-atlas-textTertiary">TYPE</span>
+                    <span className="font-mono text-sm font-bold text-atlas-cyan" data-testid="rm-active-name">{active.typeLabel} ●</span>
                 </div>
-                <SummaryRow label="Trail Multiplier" value={`${trailMult}x`} />
-                <SummaryRow label="Breakeven Arm" value={`${s.trail_arm_pct}%`} />
-                <SummaryRow label="Hard Stop-Loss" value={`${s.stop_loss_pct}%`} last />
+                {active.rows.map((r, i) => (
+                    <SummaryRow key={r.label} label={r.label} value={r.value} last={i === active.rows.length - 1} />
+                ))}
             </Card>
 
             {/* SAFEGUARDS */}

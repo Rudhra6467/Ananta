@@ -36,6 +36,36 @@ const DEFAULTS: Record<string, any> = {
   time_based: { time_exit_hours: 48 },
   chandelier: { atr_period: 22, atr_mult: 3.0 },
 };
+
+const EXIT_METHOD_NAMES: Record<string, string> = {
+  fixed_pct: "Fixed-% Stop", atr_trailing: "ATR Trailing Stop", chandelier: "Chandelier Exit",
+  breakeven_trail: "Breakeven Trail", structural_trail: "Structural Trail", native: "Universal Exit Engine",
+};
+const _n = (v: any, fb: number) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
+
+// Single source of truth for the DEPLOYED exit config — used by ExitHome + RiskMonitor so
+// every mobile screen agrees with the backend settings singleton.
+function describeActiveExit(s: any): { method: string; typeLabel: string; scope: string; scopeLabel: string; rows: { label: string; value: string }[] } {
+  if (!s) return { method: "native", typeLabel: "-", scope: "global", scopeLabel: "Global", rows: [] };
+  const method = s.exit_method_pref || "native";
+  const typeLabel = EXIT_METHOD_NAMES[method] || "Universal Exit Engine";
+  const stop = _n(s.stop_loss_pct, 2.2);
+  const coins = Object.keys(s.asset_exit_overrides || {});
+  const strats = Object.keys(s.profile_overrides || {});
+  let scope = "global", scopeLabel = "Global (all markets)";
+  if (coins.length) { scope = "coin"; scopeLabel = `Per-coin · ${coins.join(", ")}`; }
+  else if (strats.length) { scope = "strategy"; scopeLabel = `Per-strategy · ${strats.join(", ")}`; }
+  let rows: { label: string; value: string }[];
+  if (method === "fixed_pct") {
+    rows = [{ label: "Take-Profit target", value: `${_n(s.fixed_target_pct, 3.0)}%` }, { label: "Stop-Loss", value: `${stop}%` }];
+  } else if (method === "atr_trailing" || method === "chandelier") {
+    rows = [{ label: "Trail arm", value: `${_n(s.trail_arm_pct, 1.6)}%` }, { label: "Trail distance", value: `${_n(s.trail_distance_pct, 0.9)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
+  } else {
+    rows = [{ label: "Trail multiplier", value: `${_n(s.profile_overrides?.hunter?.trail_atr_mult, 2.0)}x` }, { label: "Breakeven arm", value: `${_n(s.trail_arm_pct, 1.6)}%` }, { label: "Hard stop-loss", value: `${stop}%` }];
+  }
+  return { method, typeLabel, scope, scopeLabel, rows };
+}
+
 const FIELDS: Record<string, { k: string; label: string }[]> = {
   fixed_pct: [{ k: "target_pct", label: "Take-Profit target (%)" }, { k: "stop_pct", label: "Stop-Loss (%)" }],
   atr_trailing: [{ k: "atr_mult", label: "ATR stop multiple (x)" }, { k: "atr_period", label: "ATR period" }, { k: "trail_arm", label: "Trail arm (%)" }, { k: "trail_dist", label: "Trail distance (xATR)" }],
@@ -116,31 +146,25 @@ function BackHeader({ onBack }: { onBack: () => void }) {
 function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
   { settings: any; onEdit: () => void; onScope: (s: "strategy" | "coin" | "global") => void; onExplain: () => void; onTest: () => void; onRisk: () => void }) {
   if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.xl }} />;
-  const engineName = settings.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
-  const trailMult = settings.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
-  const params = [
-    { label: "Trail Multiplier", value: `${trailMult}x` },
-    { label: "Breakeven Arm", value: `${settings.trail_arm_pct ?? 0}%` },
-    { label: "Hard Stop-Loss", value: `${settings.stop_loss_pct ?? 0}%` },
-    { label: "Dynamic Trail", value: settings.dynamic_trail_enabled === false ? "Off" : "On" },
-  ];
+  const active = describeActiveExit(settings);
 
   return (
     <View>
-      <Text style={styles.sectionTitle}>Current Active Exit</Text>
+      <Text style={styles.sectionTitle}>Current Active Exit Engine</Text>
       <View style={styles.activeCard} testID="ee-active-exit">
-        <Text style={styles.activeName} testID="ee-active-name">{engineName}</Text>
+        <Text style={styles.activeName} testID="ee-active-name">{active.typeLabel}</Text>
         <View style={styles.paramGrid}>
-          {params.map((p) => (
+          {active.rows.map((p) => (
             <View key={p.label} style={styles.paramCell} testID={`ee-param-${p.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}>
               <Text style={styles.paramLabel}>{p.label}</Text>
               <Text style={styles.paramValue}>{p.value}</Text>
             </View>
           ))}
         </View>
+        <Text style={styles.activeScope} testID="ee-active-scope">Scope · {active.scopeLabel}</Text>
         <Pressable testID="ee-edit-current" onPress={onEdit} style={styles.editBtn}>
           <Ionicons name="create-outline" size={16} color={colors.bg} />
-          <Text style={styles.editTxt}>Edit Current Exit</Text>
+          <Text style={styles.editTxt}>Edit / Modify Exit</Text>
         </Pressable>
       </View>
 
@@ -205,7 +229,12 @@ function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onE
   };
 
   const pick = (m: any) => { setMethod(m); setCfg({ ...DEFAULTS[m.id], ...savedCfgFor(m.id) }); setResult(null); setStep(3); };
-  const setF = (k: string, v: string) => setCfg((c: any) => ({ ...c, [k]: parseFloat(v) }));
+  // Store empty input as "" (never NaN) — a NaN here becomes null on the wire and poisons
+  // the settings singleton. NumRow renders "" for non-finite, so typing resumes cleanly.
+  const setF = (k: string, v: string) => setCfg((c: any) => {
+    const n = parseFloat(v);
+    return { ...c, [k]: v === "" || !Number.isFinite(n) ? "" : n };
+  });
 
   const buildSpec = () => {
     const spec: any = { kind: "backtest", symbols: SYMBOLS, period: "3m", timeframe: "1h",
@@ -238,7 +267,11 @@ function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onE
     setDeploying(true);
     try {
       const patch: any = { exit_method_pref: method.id };
-      if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; patch.fixed_target_pct = cfg.target_pct; }
+      const bad = (x: any) => x === "" || x == null || !Number.isFinite(Number(x));
+      if (method.id === "fixed_pct") {
+        if (bad(cfg.target_pct) || bad(cfg.stop_pct)) { setDeploying(false); return Alert.alert("Enter valid values", "Take-Profit % and Stop-Loss % must both be numbers."); }
+        patch.stop_loss_pct = Number(cfg.stop_pct); patch.fixed_target_pct = Number(cfg.target_pct);
+      }
       if (method.id === "atr_trailing" || method.id === "chandelier") { patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9; }
       if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
       const prof: any = {};
@@ -493,9 +526,8 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
 
   if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.lg }} />;
 
-  const engineName = settings.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
-  const trailMult = settings.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
   const safe = risk?.status?.overall_safe !== false;
+  const active = describeActiveExit(settings);
 
   return (
     <View>
@@ -518,12 +550,10 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
       <Card testID="rm-active-exit" style={{ marginBottom: spacing.md }}>
         <SectionLabel>ACTIVE EXIT ENGINE</SectionLabel>
         <View style={styles.rmStatusRow}>
-          <Text style={styles.rmStatusLabel}>STATUS</Text>
-          <Text style={[styles.rmStatusVal, { color: colors.teal }]}>{engineName} ●</Text>
+          <Text style={styles.rmStatusLabel}>TYPE</Text>
+          <Text style={[styles.rmStatusVal, { color: colors.teal }]} testID="rm-active-name">{active.typeLabel} ●</Text>
         </View>
-        <SummaryRow label="Trail Multiplier" value={`${trailMult}x`} />
-        <SummaryRow label="Breakeven Arm" value={`${settings.trail_arm_pct}%`} />
-        <SummaryRow label="Hard Stop-Loss" value={`${settings.stop_loss_pct}%`} />
+        {active.rows.map((r) => (<SummaryRow key={r.label} label={r.label} value={r.value} />))}
       </Card>
 
       {/* SAFEGUARDS — account-level protection */}
@@ -575,8 +605,9 @@ function ChipRow({ label, items, value, onPick, prefix }: any) {
 }
 
 function NumRow({ label, k, value, isOwner, onSave }: any) {
-  const [v, setV] = useState(String(value ?? ""));
-  useEffect(() => setV(String(value ?? "")), [value]);
+  const fmt = (x: any) => (x === "" || x == null || (typeof x === "number" && !Number.isFinite(x))) ? "" : String(x);
+  const [v, setV] = useState(fmt(value));
+  useEffect(() => setV(fmt(value)), [value]);
   return (
     <View style={styles.numRow}>
       <Text style={[type.body, { flex: 1 }]}>{label}</Text>
@@ -643,6 +674,7 @@ const styles = StyleSheet.create({
   paramCell: { width: "47.8%", flexGrow: 1, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, padding: spacing.md },
   paramLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" },
   paramValue: { color: colors.text, fontSize: 20, fontWeight: "800", marginTop: 4 },
+  activeScope: { color: colors.textMuted, fontSize: 11, fontFamily: "monospace", marginTop: spacing.sm },
   editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, marginTop: spacing.md },
   editTxt: { color: colors.bg, fontWeight: "800", fontSize: 14 },
   modifyCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, backgroundColor: colors.card, marginBottom: spacing.sm },

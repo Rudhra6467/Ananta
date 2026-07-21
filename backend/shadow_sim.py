@@ -106,8 +106,9 @@ async def watch_shadow_once(db: AsyncIOMotorDatabase) -> int:
     open_docs = await db.shadow_positions.find({}, {"_id": 0}).to_list(200)
     if not open_docs:
         return 0
+    from trading_engine import _safe_settings
     sdoc = await db.settings.find_one({"id": "singleton"}, {"_id": 0})
-    settings = RiskSettings(**sdoc) if sdoc else RiskSettings()
+    settings = _safe_settings(sdoc) if sdoc else RiskSettings()
     closed = 0
 
     # lazy import to avoid a module-load circular import

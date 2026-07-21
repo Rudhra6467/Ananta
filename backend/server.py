@@ -1459,6 +1459,10 @@ async def get_settings(request: Request):
 async def update_settings(update: SettingsUpdate):
     s = await load_settings(db)
     data = update.model_dump(exclude_unset=True)
+    # Drop explicit nulls — Optional update fields use None as "no change". A null must never
+    # overwrite a stored value; a null numeric would poison the settings singleton and 500
+    # every subsequent read (load_settings / position_watcher / portfolio).
+    data = {k: v for k, v in data.items() if v is not None}
 
     # validate trading_mode
     if "trading_mode" in data and data["trading_mode"] not in ("PAPER", "DRY_RUN", "LIVE"):

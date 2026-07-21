@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
     Target, Activity, GitBranch, ShieldCheck, PieChart, TrendingDown, Clock, Wind,
-    Layers, Coins, Globe, Loader2, Play, Rocket, CheckCircle2, FlaskConical, ArrowLeft,
+    Layers, Coins, Globe, Loader2, Play, Rocket, CheckCircle2, FlaskConical, ArrowLeft, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { describeActiveExit } from "@/lib/exitConfig";
 
 const SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const CORE = ["hunter", "squeeze", "continuation"];
@@ -75,6 +76,13 @@ export default function ExitEngineWorkflow() {
     const pick = (m) => { setMethod(m); setCfg({ ...DEFAULTS[m.id], ...savedCfgFor(m.id) }); setResult(null); setStep(3); };
     const reset = () => { setStep(1); setScope(null); setMethod(null); setResult(null); };
     const setF = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
+    // Edit the currently-deployed exit: jump straight into the modify flow for its scope + method.
+    const editActive = () => {
+        const a = describeActiveExit(saved);
+        setScope(a.scope);
+        const m = METHODS.find((x) => x.id === a.method) || METHODS.find((x) => x.id === "structural_trail");
+        pick(m);
+    };
 
     const buildSpec = () => {
         const spec = { kind: "backtest", symbols: SYMBOLS, period: "3m", timeframe: "1h",
@@ -148,6 +156,7 @@ export default function ExitEngineWorkflow() {
 
             {step === 1 && (
                 <Block title="Step 1 — What do you want to modify?" hint="Pick the scope this exit rule will apply to.">
+                    <ActiveExitCard settings={saved} onEdit={editActive} />
                     <div className="grid gap-3">
                         {SCOPES.map((s) => (
                             <Card key={s.id} testId={`scope-${s.id}`} icon={s.icon} name={s.name} desc={s.desc}
@@ -316,6 +325,35 @@ function StepDots({ step }) {
                     </div>
                 );
             })}
+        </div>
+    );
+}
+function ActiveExitCard({ settings, onEdit }) {
+    const a = describeActiveExit(settings);
+    return (
+        <div data-testid="active-exit-card" className="panel rounded-xl p-5 border border-atlas-cyan/40 bg-atlas-cyan/5">
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg grid place-items-center border border-atlas-cyan/40 bg-atlas-cyan/10"><Target className="w-4 h-4 text-atlas-cyan" /></span>
+                    <div>
+                        <div className="font-mono text-[10px] tracking-widest text-atlas-textTertiary">CURRENT ACTIVE EXIT ENGINE</div>
+                        <div className="font-heading text-lg text-atlas-text leading-tight" data-testid="active-exit-type">{a.typeLabel}</div>
+                    </div>
+                </div>
+                <button type="button" data-testid="active-exit-edit" onClick={onEdit}
+                    className="flex items-center gap-1.5 rounded-lg border border-atlas-cyan text-atlas-cyan hover:bg-atlas-cyan/10 font-mono text-[11px] font-bold tracking-widest px-3.5 py-2 transition-colors">
+                    <Pencil className="w-3.5 h-3.5" /> EDIT / MODIFY
+                </button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+                {a.rows.map((r) => (
+                    <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-atlas-border/60">
+                        <span className="font-mono text-[11px] text-atlas-textSecondary">{r.label}</span>
+                        <span className="font-mono text-sm font-bold text-atlas-text tabular-nums" data-testid={`active-exit-val-${r.label.replace(/[^a-z]/gi, "-").toLowerCase()}`}>{r.value}</span>
+                    </div>
+                ))}
+            </div>
+            <div className="font-mono text-[10px] text-atlas-textTertiary mt-3">Scope · <span className="text-atlas-textSecondary">{a.scopeLabel}</span></div>
         </div>
     );
 }
