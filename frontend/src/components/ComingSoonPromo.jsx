@@ -107,12 +107,21 @@ export default function ComingSoonPromo({ variant = "inline", isOwner = false })
         if (!show) return;
         sessionStorage.setItem(SESSION_KEY, "1");
         if (!isOwner) writeState({ ...st, views: st.views + 1 });
+        // Flag while open so the onboarding tour can wait its turn (avoids two
+        // overlapping modals — Radix locks body pointer-events, hanging the tour).
+        sessionStorage.setItem("ananta_promo_active", "1");
         setSheetOpen(true);
     }, [variant, isOwner]);
 
+    const closeSheet = () => {
+        setSheetOpen(false);
+        sessionStorage.removeItem("ananta_promo_active");
+        window.dispatchEvent(new CustomEvent("ananta:promo-closed"));
+    };
+
     if (variant === "sheet") {
         return (
-            <Dialog open={sheetOpen} onOpenChange={setSheetOpen}>
+            <Dialog open={sheetOpen} onOpenChange={(o) => (o ? setSheetOpen(true) : closeSheet())}>
                 <DialogContent className="bg-atlas-panel border-atlas-border max-w-lg p-0 gap-0 overflow-hidden" data-testid="cockpit-welcome-sheet">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Coming Soon to Ananta</DialogTitle>
@@ -122,7 +131,7 @@ export default function ComingSoonPromo({ variant = "inline", isOwner = false })
                         <PromoCard />
                         <Waitlist />
                         <button
-                            type="button" data-testid="welcome-sheet-continue" onClick={() => setSheetOpen(false)}
+                            type="button" data-testid="welcome-sheet-continue" onClick={closeSheet}
                             className="w-full py-2.5 rounded-lg border border-atlas-border text-atlas-textSecondary font-body text-sm font-medium hover:text-atlas-text hover:border-atlas-textTertiary transition-colors"
                         >
                             Continue to Cockpit

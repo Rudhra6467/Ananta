@@ -77,11 +77,23 @@ function Shell() {
 
     // Onboarding tour. Owner: auto-open once per browser session (only AFTER the
     // first-login wizard is done), always re-launchable. Public: gated to the waitlist.
+    // If the Cockpit "Coming Soon" sheet is open, wait for it to close first — two
+    // stacked modals leave the tour buttons unclickable (Radix locks body pointer-events).
     useEffect(() => {
-        if (isOwner && localStorage.getItem("ananta_onboarded") && !sessionStorage.getItem("ananta_tour_seen")) setTourOpen(true);
+        const wantAuto = isOwner && localStorage.getItem("ananta_onboarded") && !sessionStorage.getItem("ananta_tour_seen");
+        let cleanupPromo = () => {};
+        if (wantAuto) {
+            if (sessionStorage.getItem("ananta_promo_active")) {
+                const onPromoClosed = () => setTourOpen(true);
+                window.addEventListener("ananta:promo-closed", onPromoClosed, { once: true });
+                cleanupPromo = () => window.removeEventListener("ananta:promo-closed", onPromoClosed);
+            } else {
+                setTourOpen(true);
+            }
+        }
         const onTour = () => { if (isOwner) setTourOpen(true); else gate("Guided onboarding tour"); };
         window.addEventListener("ananta:tour", onTour);
-        return () => window.removeEventListener("ananta:tour", onTour);
+        return () => { window.removeEventListener("ananta:tour", onTour); cleanupPromo(); };
     }, [isOwner, gate]);
     const closeTour = () => { sessionStorage.setItem("ananta_tour_seen", "1"); setTourOpen(false); };
 

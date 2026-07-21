@@ -1220,3 +1220,9 @@ Testing agent iter 54: web 5/5 + mobile 3/3 green; Ask Ananta E2E LLM response v
 - Web (AccountOverlay.jsx): new Settings row (testID account-coming-up) opens a Dialog rendering <ComingSoonPromo variant="inline" /> (account-coming-up-dialog).
 - Mobile (app/account.tsx): "Coming Up" row (testID account-coming-up, pill "New") opens a bottom-sheet Modal with <ComingSoonPromo variant="inline" /> (account-coming-up-sheet + close).
 - Reuses POST /api/promo/coming-soon/waitlist (verified {waitlist_joined:true}). Lint clean; web compiles.
+
+## Lab toggle + onboarding lag fixes (2026-07)
+- Research Lab: "Use my live Risk Monitor & Exit Engine settings" toggle now shows on Current-Prod AND Presets tracks (gate = `track !== "fresh"`, StrategyValidationPanel.jsx:375). Verified via testing_agent iter75: visible on track-current + track-presets, hidden on track-fresh.
+- Onboarding lag: removed GPU-heavy `backdrop-blur-xl` from OnboardingPipeline overlay (now opaque `bg-atlas-bg`). testing_agent iter75 measured close latency 79-86ms (was 2-3s).
+- Modal race fix (found by iter75): owner saw ComingSoonPromo sheet (Radix, locks body pointer-events) + onboarding tour auto-open on same session, making tour buttons unclickable. Serialized: ComingSoonPromo sets/clears sessionStorage `ananta_promo_active` + dispatches `ananta:promo-closed`; AppShell defers tour auto-open until promo closes (AppShell.jsx tour effect). Manual re-launch (ananta:tour) still immediate. Lint clean.
+- Live-toggle → PDF regime/confidence behavior already covered by tests/test_lab_live_entry_gates.py (5/5, iter74).
