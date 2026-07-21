@@ -454,19 +454,10 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
     return () => clearInterval(t);
   }, []);
 
-  const save = async (k: string, v: string) => {
-    if (!isOwner) return Alert.alert("Owner login required");
-    try { const s = await api.updateSettings({ [k]: parseFloat(v) }); setSettings(s); } catch (e: any) { Alert.alert("Save failed", e?.message); }
-  };
-  const saveBool = async (k: string, v: boolean) => {
-    if (!isOwner) return Alert.alert("Owner login required");
-    try { const s = await api.updateSettings({ [k]: v }); setSettings(s); } catch (e: any) { Alert.alert("Save failed", e?.message); }
-  };
-  const toggleKill = async () => {
-    if (!isOwner) return Alert.alert("Owner login required");
-    const killed = !!settings?.manual_kill_switch;
-    try { const s = await api.updateSettings({ manual_kill_switch: !killed }); setSettings(s); } catch (e: any) { Alert.alert("Failed", e?.message); }
-  };
+  // Field edits update LOCAL state only — nothing persists until the user taps
+  // "Save Settings" (saveAll). No auto-save.
+  const save = (k: string, v: string) => { const n = parseFloat(v); if (!Number.isNaN(n)) setSettings((prev: any) => ({ ...prev, [k]: n })); };
+  const saveBool = (k: string, v: any) => setSettings((prev: any) => ({ ...prev, [k]: v }));
   const [savedFlash, setSavedFlash] = useState(false);
   const saveAll = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
@@ -490,7 +481,6 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
   const engineName = settings.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
   const trailMult = settings.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
   const safe = risk?.status?.overall_safe !== false;
-  const killed = !!settings.manual_kill_switch;
 
   return (
     <View>
@@ -523,13 +513,7 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
 
       {/* SAFEGUARDS — account-level protection */}
       <Card testID="rm-safeguards">
-        <View style={styles.rowBetween}>
-          <SectionLabel>RISK MONITOR · SAFEGUARDS</SectionLabel>
-          <Pressable testID="rm-stop-ananta" onPress={toggleKill} style={[styles.stopBtn, killed && styles.stopBtnOn]}>
-            <Ionicons name="power" size={13} color={colors.red} />
-            <Text style={styles.stopTxt}>{killed ? "RELEASE" : "STOP ANANTA"}</Text>
-          </Pressable>
-        </View>
+        <SectionLabel>RISK MONITOR · SAFEGUARDS</SectionLabel>
         <View style={[styles.rmStatusRow, { marginBottom: spacing.sm }]}>
           <Text style={styles.rmStatusLabel}>RISK STATUS</Text>
           <Text style={[styles.rmStatusVal, { color: safe ? colors.teal : colors.red }]}>{safe ? "Protected ●" : "Alert ●"}</Text>
@@ -545,7 +529,6 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
         <Ionicons name={savedFlash ? "checkmark-circle" : "save-outline"} size={16} color={savedFlash ? colors.green : colors.teal} />
         <Text style={[styles.saveTxt, savedFlash && { color: colors.green }]}>{savedFlash ? "Saved" : "Save Settings"}</Text>
       </Pressable>
-      <Text style={styles.saveHint}>Changes also save automatically</Text>
     </View>
   );
 }

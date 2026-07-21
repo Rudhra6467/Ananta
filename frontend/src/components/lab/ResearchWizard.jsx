@@ -5,6 +5,7 @@ import {
     Award, Layers, Gauge, DoorOpen,
 } from "lucide-react";
 import { useResearchStore } from "@/lib/researchStore";
+import { Switch } from "@/components/ui/switch";
 import { downloadPdf } from "@/lib/pdfRegistry";
 
 const PERIODS = [{ k: "1m", l: "1 Month" }, { k: "3m", l: "3 Months" }, { k: "6m", l: "6 Months" }, { k: "1y", l: "1 Year" }];
@@ -18,9 +19,9 @@ const STEPS = [
 /** Guided, visual backtest+validation flow — Strategy → Dataset → Period → Validation → Run → Results. */
 export default function ResearchWizard() {
     const {
-        step, strategies, assets, strat, showAllStrat, picked, period, timeframes, runMC, exitMethods,
+        step, strategies, assets, strat, showAllStrat, picked, period, timeframes, runMC, exitMethods, useLive,
         phase, progress, runs, metrics,
-        init, setStep, setShowAllStrat, setPeriod, toggleTimeframe, setRunMC, toggleExitMethod,
+        init, setStep, setShowAllStrat, setPeriod, toggleTimeframe, setRunMC, toggleExitMethod, setUseLive,
         toggleAsset, toggleStrat, run, reset,
     } = useResearchStore();
 
@@ -141,9 +142,20 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 4 && (
-                        <StepShell title="Choose validation" hint="Backtest runs by default. Pick your exit engine(s) and add Monte Carlo for a robustness stress-test.">
+                        <StepShell title="Choose validation" hint="Backtest runs by default. Keep live settings on to mirror paper/live, or override the exit to A/B test. Add Monte Carlo for a robustness stress-test.">
                             <div className="space-y-3" data-testid="wizard-validations">
-                                <div>
+                                <label data-testid="wizard-use-live-toggle" className="panel border-atlas-cyan/40 bg-atlas-cyan/5 rounded-xl p-4 flex items-start gap-3 cursor-pointer">
+                                    <Switch data-testid="wizard-use-live-switch" checked={useLive} onCheckedChange={setUseLive} className="mt-0.5" />
+                                    <div className="min-w-0">
+                                        <div className="font-heading text-sm text-atlas-text">Use my live Risk Monitor &amp; Exit Engine settings</div>
+                                        <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">
+                                            {useLive
+                                                ? "Backtest replays through your DEPLOYED config — Allowed Regimes, Min Confidence AND exit method — so the PDF matches paper / live."
+                                                : "Manual override — pick an exit below to A/B test rules (live regime / confidence filters NOT applied)."}
+                                        </div>
+                                    </div>
+                                </label>
+                                <div className={useLive ? "opacity-40 pointer-events-none" : ""} aria-disabled={useLive} data-testid="wizard-exit-strategy-group">
                                     <div className="label-tag mb-2">EXIT STRATEGY</div>
                                     <div className="grid grid-cols-2 gap-3">
                                         {[{ k: "atr", t: "ATR Trailing", d: "Volatility-adaptive trailing stop (default)" }, { k: "fixed", t: "Fixed Target", d: "Fixed $ profit target / stop loss" }].map((em) => {
@@ -183,7 +195,7 @@ export default function ResearchWizard() {
                     <div className="w-full max-w-md h-2 rounded-full bg-atlas-panel overflow-hidden">
                         <div className="h-full bg-atlas-cyan rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframes.join(" · ")} · {exitMethods.map((m) => m.toUpperCase()).join(" + ")} exit</div>
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">{strat.join(", ")} · {picked.map((p) => p.split("/")[0]).join(", ")} · {period} · {timeframes.join(" · ")} · {useLive ? "LIVE SETTINGS" : `${exitMethods.map((m) => m.toUpperCase()).join(" + ")} exit`}</div>
                     <button data-testid="wizard-new-run" onClick={reset}
                         className="flex items-center gap-1.5 rounded-lg border border-atlas-border px-4 py-2 font-mono text-[10px] tracking-widest text-atlas-textSecondary hover:text-atlas-text hover:border-atlas-textTertiary transition-colors">
                         <RotateCcw className="w-3.5 h-3.5" /> NEW RUN

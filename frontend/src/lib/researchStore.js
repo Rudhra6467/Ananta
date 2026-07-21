@@ -7,7 +7,7 @@ import { registerPdf } from "@/lib/pdfRegistry";
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ITERS = 240; // ~8 min per exit-method run
 
-const EXIT_LABELS = { atr: "ATR Trailing", fixed: "Fixed Target" };
+const EXIT_LABELS = { atr: "ATR Trailing", fixed: "Fixed Target", live: "Live Settings" };
 
 /**
  * Research Wizard store — lives outside React so an in-flight validation run
@@ -24,6 +24,7 @@ export const useResearchStore = create((set, get) => ({
     timeframes: ["1h"], // multi-select; 1h is the live-parity baseline
     runMC: true,
     exitMethods: ["atr"], // default ATR; user can add "fixed" (run both)
+    useLive: true, // inherit deployed Risk Monitor + Exit Engine config (regime + confidence gates + exit method)
     phase: "idle", // idle | running | done | error
     progress: 0,
     runs: [], // [{ method, label, result, mc, id }]
@@ -60,6 +61,7 @@ export const useResearchStore = create((set, get) => ({
         return { timeframes: order.filter((t) => next.includes(t)) };
     }),
     setRunMC: (v) => set((st) => ({ runMC: typeof v === "function" ? v(st.runMC) : v })),
+    setUseLive: (v) => set((st) => ({ useLive: typeof v === "function" ? v(st.useLive) : v })),
     toggleAsset: (s) => set((st) => ({ picked: st.picked.includes(s) ? st.picked.filter((x) => x !== s) : [...st.picked, s] })),
     toggleStrat: (k) => set((st) => ({ strat: st.strat.includes(k) ? st.strat.filter((x) => x !== k) : [...st.strat, k] })),
     // At least one exit method must stay selected; default falls back to ATR.
@@ -94,8 +96,8 @@ export const useResearchStore = create((set, get) => ({
     },
 
     run: async () => {
-        const { picked, period, timeframes, strat, runMC, exitMethods } = get();
-        const methods = exitMethods.length ? exitMethods : ["atr"];
+        const { picked, period, timeframes, strat, runMC, exitMethods, useLive } = get();
+        const methods = useLive ? ["live"] : (exitMethods.length ? exitMethods : ["atr"]);
         const tfs = timeframes.length ? timeframes : ["1h"];
         // 1h is the parity baseline the backend always runs; extra TFs turn on the comparison.
         const primaryTf = tfs.includes("1h") ? "1h" : tfs[0];
@@ -107,7 +109,9 @@ export const useResearchStore = create((set, get) => ({
             for (let mi = 0; mi < methods.length; mi++) {
                 const method = methods[mi];
                 set({ _progressBase: (mi / methods.length) * 100, _progressSpan: (1 / methods.length) * 90 });
-                const { id } = await api.labCreateRun({ kind: "backtest", symbols: picked, period, timeframe: primaryTf, compare_timeframes: compareTf, strategies: strat, exit_method: method });
+                const spec = { kind: "backtest", symbols: picked, period, timeframe: primaryTf, compare_timeframes: compareTf, strategies: strat };
+                if (method === "live") spec.use_live_exit_settings = true; else spec.exit_method = method;
+                const { id } = await api.labCreateRun(spec);
                 const result = await get()._pollRun(id);
                 if (get().phase !== "running") return;
                 let mc = null;

@@ -186,10 +186,10 @@ function Validate({ isOwner }: { isOwner: boolean }) {
 
         <View style={styles.liveToggleRow} testID="wiz-live-exit-row">
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={styles.liveToggleTitle}>Use my live Exit Engine settings</Text>
+            <Text style={styles.liveToggleTitle}>Use my live Risk Monitor & Exit Engine settings</Text>
             <Text style={styles.liveToggleDesc}>
               {useLive
-                ? "Backtest runs with your deployed exit config (method + per-strategy & per-coin overrides) — results match paper/live."
+                ? "Backtest replays through your deployed config — Allowed Regimes, Min Confidence AND exit method — so results match paper/live."
                 : "Manual exit override — pick a method to A/B test different exit rules."}
             </Text>
           </View>

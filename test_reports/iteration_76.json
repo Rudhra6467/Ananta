@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only verification of 3 UX fixes on MOBILE (priority per E1 note) plus code-level verification on WEB. All 3 pass on both surfaces. MOBILE (browser-automation, viewport 390x844, owner login → dismissed Coming-Soon promo → skipped tour → Workspace tab → Risk Monitor): ISSUE 1 rm-stop-ananta button is GONE (query returns null both globally and scoped inside rm-safeguards); ee-stop-ananta remains in the page header. ISSUE 2 'save automatically' text is ABSENT (case-insensitive body innerText scan); toggling rm-regime-COMPRESSION triggered ZERO PUT/POST /api/settings requests (auto-save off); tapping rm-save-settings triggered exactly ONE PUT /api/settings with the full patch — persistence gated behind explicit user action. ISSUE 3 (mobile parity — pre-existing): wiz-use-live-exit Switch is present in the Research > Validate wizard, defaults to true (research.tsx:126), and the RUN payload sends use_live_exit_settings:true. WEB (code + prior iter75 report): rm-stop-ananta removed (grep across /app/frontend/src shows 0 occurrences); RiskMonitorPanel.jsx update() only patches local state, only saveAll() (rm-save-settings) calls api.updateSettings — no onBlur/onChange persistence; wizard-use-live-toggle + wizard-use-live-switch present in ResearchWizard.jsx step 4; researchStore.js:100+113 confirm when useLive=true, spec.use_live_exit_settings=true is set and exit_method is NOT included in the /api/lab/runs POST body (matches spec exactly).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Research wizard RUN payload when useLive=true", "platform": "mobile", "issue": "Mobile always sends BOTH `exit_method` and `use_live_exit_settings` in the /api/lab/runs POST regardless of the toggle state (research.tsx:162: `exit_method: exit, use_live_exit_settings: useLive`). Web drops `exit_method` entirely when useLive=true (researchStore.js:113: `if (method === 'live') spec.use_live_exit_settings = true; else spec.exit_method = method;`). Backend prioritises use_live_exit_settings and ignores the stray exit_method, so no functional bug — but the payload shape differs across surfaces which could confuse future backend log/analytics reads. LOW priority.", "expected": "When wiz-use-live-exit is ON, mobile posts { use_live_exit_settings: true } without exit_method (parity with web)", "actual": "Mobile posts { exit_method: 'atr', use_live_exit_settings: true } — exit_method key still present"}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "LOW / parity: in /app/mobile/app/(tabs)/research.tsx:162, only include exit_method when !useLive (mirror web researchStore.js:113 shape) so the /api/lab/runs POST body is identical across surfaces. Purely cosmetic — backend behaviour is already correct because use_live_exit_settings=true takes priority."
+  ],
+  "critical_code_review_comments": [
+    "RiskMonitorPanel.jsx L27: update() = local state only; L29-47 saveAll() is the ONLY caller of api.updateSettings — clean, no auto-save path. Comment on L25-26 explicitly documents the contract.",
+    "workspace.tsx (mobile) L459-460: save() and saveBool() = local setSettings only; L462-477 saveAll() is the ONLY caller of api.updateSettings. HOWEVER L526 still has the stale comment `// Save — changes also auto-save; this gives explicit confirmation` — code is correct but comment now lies. Suggest updating to match RiskMonitorPanel.jsx L91 (`Save — the ONLY thing that persists changes to the backend.`).",
+    "ResearchWizard.jsx L147-157: wizard-use-live-toggle is a Radix `<label>` wrapping the Switch — clicking anywhere on the card flips the switch, good affordance. L158 correctly disables (opacity-40, pointer-events-none, aria-disabled) the exit-strategy selector when useLive=true so the user visibly sees the override taking effect.",
+    "researchStore.js L100 chooses method='live' → L113 sets `spec.use_live_exit_settings=true` and skips `exit_method` — matches the spec `POST use_live_exit_settings:true with no exit_method` exactly.",
+    "Mobile research.tsx L162 sends both keys unconditionally — see parity_issues. Not a regression (matches pre-fix behaviour) but worth aligning."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% — 6/6 checks pass (3 mobile × 2 surfaces)"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — worked on mobile login. Preseeded localStorage ananta_onboarded=1 to skip web-style onboarding; on mobile-web still had to dismiss Coming-Soon promo (Continue) + Skip tour before reaching tab bar.",
+  "seed_data_creation": "None. One PUT /api/settings write was fired by the Save-Settings tap (payload includes allowed_regimes=['REVERSAL'] because we toggled COMPRESSION off). If original state needs restoring, re-add COMPRESSION via the same Risk Monitor UI or the settings API.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile flow to reach Risk Monitor: (1) goto EXPO_PACKAGER_PROXY_URL; (2) localStorage.setItem('ananta_onboarded','1') to be safe; (3) fill email/password → Sign In; (4) dismiss 'Coming Soon to Ananta' modal via Continue (text=Continue); (5) skip guided tour (text=Skip); (6) click bottom-nav testID='tab-workspace'; (7) tap testID='ee-risk-monitor' link at the bottom of the Exit Engine home card. RiskMonitor testIDs are all rm-* (rm-set-<field>, rm-toggle-<field>, rm-regime-<REGIME>, rm-save-settings). Research wizard toggle testID='wiz-use-live-exit'.",
+  "rca of the issue": "Not applicable — this iteration verified 3 already-applied fixes; all 3 pass on the surface that was under test (mobile primary) and pass on web via code inspection + prior iter75 functional verification."
+}

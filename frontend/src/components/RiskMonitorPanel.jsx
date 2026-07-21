@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Power, Target, Shield, SlidersHorizontal, Save, Check } from "lucide-react";
+import { Target, Shield, SlidersHorizontal, Save, Check } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
@@ -22,11 +22,9 @@ export default function RiskMonitorPanel() {
         return () => clearInterval(t);
     }, []);
 
-    const save = async (patch) => {
-        if (!isOwner) { toast.error("Owner login required"); return; }
-        try { const next = await api.updateSettings(patch); setS(next); }
-        catch (e) { toast.error("Save failed", { description: String(e?.response?.data?.detail || e?.message || e) }); }
-    };
+    // Field edits update LOCAL state only — nothing persists until the user clicks
+    // "Save Settings" (saveAll). No auto-save.
+    const update = (patch) => setS((prev) => ({ ...prev, ...patch }));
 
     const saveAll = async () => {
         if (!isOwner) { toast.error("Owner login required"); return; }
@@ -53,19 +51,18 @@ export default function RiskMonitorPanel() {
     const engineName = s.dynamic_trail_enabled === false ? "Fixed-% Stop" : "ATR Trailing Stop";
     const trailMult = s.profile_overrides?.hunter?.trail_atr_mult ?? 2.0;
     const safe = risk?.status?.overall_safe !== false;
-    const killed = !!s.manual_kill_switch;
 
     return (
         <div className="space-y-5" data-testid="risk-monitor-panel">
             {/* ENTRY SETUP */}
             <Card icon={SlidersHorizontal} title="ENTRY SETUP" subtitle="Rules that decide when Ananta opens a new position." testId="rm-entry-setup">
-                <NumField label="Min Confidence" k="min_confidence" value={s.min_confidence} isOwner={isOwner} onSave={save} />
-                <ToggleField label="HTF Trend Filter" desc="Require price > 4h EMA50 > EMA200" k="htf_trend_enabled" value={s.htf_trend_enabled} isOwner={isOwner} onSave={save} />
-                <ToggleField label="Support / Level Entry" desc="Only enter at clean historical support zones" k="level_entry_enabled" value={s.level_entry_enabled} isOwner={isOwner} onSave={save} />
-                <ToggleField label="Adaptive Sizing" desc="Size the lot by setup strength" k="adaptive_sizing_enabled" value={s.adaptive_sizing_enabled} isOwner={isOwner} onSave={save} />
-                <NumField label="Breakout Min Confidence" k="breakout_min_confidence" value={s.breakout_min_confidence} isOwner={isOwner} onSave={save} />
-                <NumField label="Max Open Positions" k="max_concurrent_positions" value={s.max_concurrent_positions} isOwner={isOwner} onSave={save} />
-                <RegimeField value={s.allowed_regimes} isOwner={isOwner} onSave={save} />
+                <NumField label="Min Confidence" k="min_confidence" value={s.min_confidence} isOwner={isOwner} onSave={update} />
+                <ToggleField label="HTF Trend Filter" desc="Require price > 4h EMA50 > EMA200" k="htf_trend_enabled" value={s.htf_trend_enabled} isOwner={isOwner} onSave={update} />
+                <ToggleField label="Support / Level Entry" desc="Only enter at clean historical support zones" k="level_entry_enabled" value={s.level_entry_enabled} isOwner={isOwner} onSave={update} />
+                <ToggleField label="Adaptive Sizing" desc="Size the lot by setup strength" k="adaptive_sizing_enabled" value={s.adaptive_sizing_enabled} isOwner={isOwner} onSave={update} />
+                <NumField label="Breakout Min Confidence" k="breakout_min_confidence" value={s.breakout_min_confidence} isOwner={isOwner} onSave={update} />
+                <NumField label="Max Open Positions" k="max_concurrent_positions" value={s.max_concurrent_positions} isOwner={isOwner} onSave={update} />
+                <RegimeField value={s.allowed_regimes} isOwner={isOwner} onSave={update} />
             </Card>
 
             {/* ACTIVE EXIT ENGINE (read-only) */}
@@ -81,25 +78,17 @@ export default function RiskMonitorPanel() {
 
             {/* SAFEGUARDS */}
             <Card icon={Shield} title="RISK MONITOR · SAFEGUARDS" subtitle="Account-level protection."
-                testId="rm-safeguards"
-                action={
-                    <button data-testid="rm-stop-ananta" onClick={() => save({ manual_kill_switch: !killed })}
-                        className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] font-bold tracking-widest transition-all ${
-                            killed ? "border-atlas-negative bg-atlas-negative/15 text-atlas-negative"
-                                : "border-atlas-negative/40 text-atlas-negative hover:bg-atlas-negative/10"}`}>
-                        <Power className="w-3 h-3" strokeWidth={2.5} />{killed ? "RELEASE" : "STOP ANANTA"}
-                    </button>
-                }>
+                testId="rm-safeguards">
                 <div className="flex items-center justify-between py-2 border-b border-atlas-border">
                     <span className="label-tag text-[9px] text-atlas-textTertiary">RISK STATUS</span>
                     <span className={`font-mono text-sm font-bold ${safe ? "text-atlas-cyan" : "text-atlas-negative"}`} data-testid="rm-risk-status">{safe ? "Protected ●" : "Alert ●"}</span>
                 </div>
-                <NumField label="Daily Loss Cap %" k="max_daily_loss_pct" value={s.max_daily_loss_pct} isOwner={isOwner} onSave={save} />
-                <NumField label="Max Spread %" k="max_spread_pct" value={s.max_spread_pct} isOwner={isOwner} onSave={save} />
-                <NumField label="Normal Lot (USD)" k="normal_lot_usd" value={s.normal_lot_usd} isOwner={isOwner} onSave={save} last />
+                <NumField label="Daily Loss Cap %" k="max_daily_loss_pct" value={s.max_daily_loss_pct} isOwner={isOwner} onSave={update} />
+                <NumField label="Max Spread %" k="max_spread_pct" value={s.max_spread_pct} isOwner={isOwner} onSave={update} />
+                <NumField label="Normal Lot (USD)" k="normal_lot_usd" value={s.normal_lot_usd} isOwner={isOwner} onSave={update} last />
             </Card>
 
-            {/* Save — changes also auto-save; this gives explicit confirmation */}
+            {/* Save — the ONLY thing that persists changes to the backend. */}
             <div className="pt-1">
                 <button
                     data-testid="rm-save-settings"
@@ -109,7 +98,6 @@ export default function RiskMonitorPanel() {
                 >
                     {savedFlash ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save Settings</>}
                 </button>
-                <p className="text-center label-tag text-[9px] text-atlas-textTertiary mt-2">Changes also save automatically</p>
             </div>
         </div>
     );
