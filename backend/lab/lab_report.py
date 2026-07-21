@@ -219,6 +219,168 @@ def _summary_metrics(s, title, summ: dict):
     return flow
 
 
+# ---------------------------------------------------------------------------
+# Strategy-level analytics (Phase 1 report upgrades) — computed directly from the
+# per-trade log already captured by the replay engine. No backtest changes needed.
+# ---------------------------------------------------------------------------
+_STRAT_LABELS = {"hunter": "Hunter", "squeeze": "Squeeze", "continuation": "Continuation"}
+
+
+def _strat_label(code) -> str:
+    if not code:
+        return "—"
+    return _STRAT_LABELS.get(code, str(code).replace("-", " ").replace("_", " ").title())
+
+
+def _group_stats(trades: list) -> dict | None:
+    """Headline stats (n, win%, profit factor, avg return, net P&L) for a trade list."""
+    n = len(trades)
+    if not n:
+        return None
+    wins = sum(1 for t in trades if (t.get("pnl") or 0) > 0)
+    net = sum(t.get("pnl") or 0.0 for t in trades)
+    gw = sum(t["pnl"] for t in trades if (t.get("pnl") or 0) > 0)
+    gl = -sum(t["pnl"] for t in trades if (t.get("pnl") or 0) < 0)
+    pf = round(gw / gl, 2) if gl > 0 else (None if gw == 0 else 999.99)
+    avg_ret = sum(t.get("return_pct") or 0.0 for t in trades) / n
+    return {"n": n, "win_pct": round(wins / n * 100, 1), "net_pnl": round(net, 2),
+            "profit_factor": pf, "avg_return_pct": round(avg_ret, 3)}
+
+
+def _all_trades(res: dict) -> list:
+    """Flatten every per-symbol trade log into one list for cross-symbol analytics."""
+    out: list = []
+    for summ in (res.get("per_symbol") or {}).values():
+        if isinstance(summ, dict) and "error" not in summ:
+            out.extend(summ.get("trade_log") or [])
+    return out
+
+
+def _strategy_summary_flow(s, trades: list):
+    """Section 2 — strategy-wise performance summary (shown inside the Executive Summary)."""
+    by: dict[str, list] = {}
+    for t in trades:
+        by.setdefault(t.get("strategy") or "—", []).append(t)
+    if not by:
+        return []
+    rows = []
+    for st, ts in sorted(by.items(), key=lambda kv: sum(x.get("pnl") or 0 for x in kv[1]), reverse=True):
+        g = _group_stats(ts)
+        rows.append([_strat_label(st), g["n"], f'{g["win_pct"]}%', _pf(g["profit_factor"]),
+                     _fmt(g["avg_return_pct"], "%"), f'{g["net_pnl"]:+.2f}'])
+    return [Paragraph("Strategy-wise Performance Summary", s["h3"]),
+            Paragraph("Every strategy in this run, ranked by net P&amp;L. Compare win rate + profit factor "
+                      "to see which edge is actually carrying the book.", s["subtitle"]),
+            _kv_table(s, ["Strategy", "N", "Win%", "PF", "Avg Ret", "Net P&L"], rows,
+                      [1.9 * inch, 0.55 * inch, 0.75 * inch, 0.6 * inch, 0.8 * inch, 0.95 * inch]),
+            Spacer(1, 12)]
+
+
+def _regime_strategy_matrix_flow(s, trades: list):
+    """Section 3 — Regime × Strategy matrix (cells: net P&L, trade count · win%)."""
+    regimes: list = []
+    strategies: list = []
+    grid: dict = {}
+    for t in trades:
+        rg = t.get("regime_at_entry") or "—"
+        st = t.get("strategy") or "—"
+        if rg not in regimes:
+            regimes.append(rg)
+        if st not in strategies:
+            strategies.append(st)
+        grid.setdefault((st, rg), []).append(t)
+    if not regimes or not strategies:
+        return []
+    regimes.sort()
+    header = ["Strategy"] + regimes
+    rows = []
+    for st in strategies:
+        row = [_strat_label(st)]
+        for rg in regimes:
+            ts = grid.get((st, rg))
+            if ts:
+                g = _group_stats(ts)
+                row.append(f'${g["net_pnl"]:+.1f}<br/>{g["n"]}·{g["win_pct"]:.0f}%')
+            else:
+                row.append("—")
+        rows.append(row)
+    reg_w = (5.0 / len(regimes)) * inch
+    return [Paragraph("Regime × Strategy Performance Matrix", s["h3"]),
+            Paragraph("Net P&amp;L per strategy in each entry regime (trade count · win%). Reads which "
+                      "strategy owns which market condition — set your regime filters accordingly.", s["subtitle"]),
+            _kv_table(s, header, rows, [1.3 * inch] + [reg_w] * len(regimes)),
+            Spacer(1, 12)]
+
+
+def _exit_per_strategy_flow(s, trades: list):
+    """Section 4 — Exit Type performance per strategy."""
+    by: dict = {}
+    for t in trades:
+        by.setdefault((t.get("strategy") or "—", t.get("exit_module") or "—"), []).append(t)
+    if not by:
+        return []
+    rows = []
+    for key in sorted(by.keys(), key=lambda k: (k[0], -sum(x.get("pnl") or 0 for x in by[k]))):
+        st, ex = key
+        g = _group_stats(by[key])
+        rows.append([_strat_label(st), _mod_label(ex), g["n"], f'{g["win_pct"]}%',
+                     _pf(g["profit_factor"]), _fmt(g["avg_return_pct"], "%"), f'{g["net_pnl"]:+.2f}'])
+    return [Paragraph("Exit Type Performance per Strategy", s["h3"]),
+            Paragraph("Which exit module closed each strategy's trades, and how it performed. Pick the "
+                      "exit that genuinely banks the move for each strategy.", s["subtitle"]),
+            _kv_table(s, ["Strategy", "Exit module", "N", "Win%", "PF", "Avg Ret", "Net P&L"], rows,
+                      [1.35 * inch, 1.6 * inch, 0.5 * inch, 0.65 * inch, 0.55 * inch, 0.75 * inch, 0.85 * inch]),
+            Spacer(1, 12)]
+
+
+def _top_setups_flow(s, trades: list, n: int = 5):
+    """Section 5 — Top winning & losing setups (strategy · symbol · regime · exit)."""
+    usable = [t for t in trades if t.get("pnl") is not None]
+    if not usable:
+        return []
+    ranked = sorted(usable, key=lambda t: t.get("pnl") or 0.0)
+    losers = [t for t in ranked[:n] if (t.get("pnl") or 0) < 0]
+    winners = [t for t in reversed(ranked[-n:]) if (t.get("pnl") or 0) > 0]
+
+    def _t(iso):
+        return (iso or "—").replace("T", " ")[:16]
+
+    def _row(t):
+        return [_strat_label(t.get("strategy")), t.get("symbol") or "—",
+                t.get("regime_at_entry") or "—", _mod_label(t.get("exit_module")),
+                _t(t.get("entry_ts")), _fmt(t.get("return_pct"), "%"), f'{(t.get("pnl") or 0):+.2f}']
+
+    widths = [1.15 * inch, 0.95 * inch, 1.15 * inch, 1.35 * inch, 1.1 * inch, 0.7 * inch, 0.7 * inch]
+    header = ["Strategy", "Symbol", "Regime", "Exit", "Entry (UTC)", "Ret", "P&L $"]
+    flow = [Paragraph("Top Winning &amp; Losing Setups", s["h3"]),
+            Paragraph("The best and worst individual trades — the strategy · regime · exit combinations "
+                      "to lean into or design out.", s["subtitle"])]
+    if winners:
+        flow += [Paragraph("Top winning setups", s["body"]),
+                 _kv_table(s, header, [_row(t) for t in winners], widths), Spacer(1, 6)]
+    if losers:
+        flow += [Paragraph("Top losing setups", s["body"]),
+                 _kv_table(s, header, [_row(t) for t in losers], widths), Spacer(1, 6)]
+    flow.append(Spacer(1, 6))
+    return flow
+
+
+def _strategy_analytics_block(s, res: dict):
+    """Combined strategy deep-dive page: matrix (3) + exit-per-strategy (4) + top setups (5)."""
+    trades = _all_trades(res)
+    if not trades:
+        return []
+    flow = [Paragraph("STRATEGY DEEP-DIVE", s["h2"]),
+            Paragraph("Cross-sectional analytics across every symbol in this run — how each strategy "
+                      "performs by regime and exit, plus the standout individual trades.", s["subtitle"]),
+            Spacer(1, 8)]
+    flow += _regime_strategy_matrix_flow(s, trades)
+    flow += _exit_per_strategy_flow(s, trades)
+    flow += _top_setups_flow(s, trades)
+    return flow
+
+
+
 def _trade_log_block(s, summ: dict):
     """Full per-trade log for the report: timestamps, entry/exit fills, position size, P&L."""
     trades = summ.get("trade_log") or []
@@ -238,16 +400,16 @@ def _trade_log_block(s, summ: dict):
     rows = []
     for i, t in enumerate(trades, 1):
         rows.append([
-            str(i), _t(t.get("entry_ts")), _t(t.get("exit_ts")),
+            str(i), _strat_label(t.get("strategy")), _t(t.get("entry_ts")), _t(t.get("exit_ts")),
             _p(t.get("entry_price")), _p(t.get("exit_price")),
             f'{float(t.get("qty", 0)):.4g}', f'{float(t.get("pnl", 0)):+.2f}',
             _mod_label(t.get("exit_module", "—")),
         ])
     return [Paragraph("Full trade log", s["h3"]),
-            Paragraph("Timestamps (UTC), entry/exit fills, position size and net P&amp;L per trade.", s["subtitle"]),
-            _kv_table(s, ["#", "Entry (UTC)", "Exit (UTC)", "Entry", "Exit", "Size", "P&L $", "Exit"], rows,
-                      [0.35 * inch, 1.15 * inch, 1.15 * inch, 0.85 * inch, 0.85 * inch,
-                       0.7 * inch, 0.7 * inch, 0.75 * inch]),
+            Paragraph("Strategy, timestamps (UTC), entry/exit fills, position size and net P&amp;L per trade.", s["subtitle"]),
+            _kv_table(s, ["#", "Strategy", "Entry (UTC)", "Exit (UTC)", "Entry", "Exit", "Size", "P&L $", "Exit"], rows,
+                      [0.3 * inch, 0.95 * inch, 1.05 * inch, 1.05 * inch, 0.72 * inch, 0.72 * inch,
+                       0.58 * inch, 0.62 * inch, 0.9 * inch]),
             Spacer(1, 10)]
 
 
@@ -653,7 +815,9 @@ def _actionable_summary(s, run, res):
     ]
     for label, txt in fixes[:3]:
         flow.append(Paragraph(f"<b>{label}:</b> {txt}", s["body"]))
-    flow.append(Spacer(1, 8))
+    flow.append(Spacer(1, 12))
+    # Section 2 — strategy-wise performance summary, inside the Executive Summary.
+    flow += _strategy_summary_flow(s, _all_trades(res))
     return flow
 
 
@@ -674,6 +838,11 @@ def build_lab_report(run: dict) -> bytes:
     if run.get("kind") == "backtest" and run.get("status") == "DONE" and run.get("result"):
         flow += _actionable_summary(s, run, run["result"])
         flow.append(PageBreak())
+        # Strategy deep-dive: regime × strategy matrix, exit-per-strategy, top setups.
+        _dive = _strategy_analytics_block(s, run["result"])
+        if _dive:
+            flow += _dive
+            flow.append(PageBreak())
     flow += _result_block(s, run)
     doc.build(flow)
     return buf.getvalue()
