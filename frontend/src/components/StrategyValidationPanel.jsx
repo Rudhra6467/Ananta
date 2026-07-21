@@ -374,20 +374,20 @@ export default function StrategyValidationPanel() {
 
                         {track !== "fresh" && (
                             <div className="mt-4 pt-3 border-t border-atlas-border" data-testid="exit-logic-config">
-                                {track === "current" && (
+                                {track !== "fresh" && (
                                     <label data-testid="use-live-exit-toggle" className="flex items-start gap-3 p-3 mb-3 rounded-lg border border-atlas-cyan/40 bg-atlas-cyan/5 cursor-pointer">
                                         <Switch data-testid="use-live-exit-switch" checked={useLive} onCheckedChange={chooseUseLive} className="mt-0.5" />
                                         <span className="flex-1">
-                                            <span className="font-mono text-xs font-bold text-atlas-text">Use my live Exit Engine settings</span>
+                                            <span className="font-mono text-xs font-bold text-atlas-text">Use my live Risk Monitor &amp; Exit Engine settings</span>
                                             <span className="block font-mono text-[10px] text-atlas-textTertiary mt-0.5">
                                                 {useLive
-                                                    ? "Backtest replays through your DEPLOYED exit config (method + per-strategy & per-coin overrides) — results match paper/live."
-                                                    : "Manual override — choose an exit below to A/B test different rules."}
+                                                    ? "Backtest replays through your DEPLOYED config — regime filter, min-confidence AND exit method/overrides — so results match paper/live."
+                                                    : "Manual override — choose an exit below to A/B test different rules (live regime/confidence filters not applied)."}
                                             </span>
                                         </span>
                                     </label>
                                 )}
-                                {!(track === "current" && useLive) && (<>
+                                {!useLive && (<>
                                 <Label className="label-tag text-[10px]">EXIT STRATEGY</Label>
                                 <div className="grid grid-cols-3 gap-2 mt-1.5">
                                     {[
