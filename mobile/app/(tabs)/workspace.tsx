@@ -580,7 +580,7 @@ function NumRow({ label, k, value, isOwner, onSave }: any) {
   return (
     <View style={styles.numRow}>
       <Text style={[type.body, { flex: 1 }]}>{label}</Text>
-      <TextInput testID={`ee-set-${k}`} value={v} onChangeText={setV} editable={isOwner} keyboardType="decimal-pad"
+      <TextInput testID={`ee-set-${k}`} value={v} onChangeText={(x) => { setV(x); onSave(k, x); }} editable={isOwner} keyboardType="decimal-pad"
         onEndEditing={() => onSave(k, v)} style={styles.input} placeholderTextColor={colors.textFaint} />
     </View>
   );

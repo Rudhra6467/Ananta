@@ -1,0 +1,46 @@
+{
+  "summary": "RETEST of NumRow onChangeText commit fix on MOBILE Exit Engine Fixed% flow. THE COMMIT-ON-KEYSTROKE FIX IS STRUCTURALLY CORRECT AND WORKING (workspace.tsx:583 now calls onSave(k,x) on every keystroke), so typed values DO reach the deploy payload — this is a real improvement over iter77. HOWEVER, testing exposed TWO NEW CRITICAL DEFECTS that together make the Fixed%/ATR configure-and-deploy flow still broken end-to-end on mobile: (1) NEW CRITICAL BUG: workspace.tsx:208 does `parseFloat(v)` on every commit. Any transient empty string (e.g. user selects-all + deletes before retyping) → parseFloat('') = NaN → cfg[k] = NaN. The useEffect at line 579 then re-syncs the input to String(NaN) = 'NaN', and subsequent keystrokes append onto 'NaN' → 'NaN6' → parseFloat('NaN6') = NaN. JSON.stringify(NaN) = null → PUT body was `{\"exit_method_pref\":\"fixed_pct\",\"stop_loss_pct\":null,\"fixed_target_pct\":null}`. (2) NEW CRITICAL DB/BACKEND BUG: nulls persisted into db.settings singleton break the entire /api/settings and /api/portfolio endpoints because `RiskSettings(**doc)` at trading_engine.py:137 rejects None for float fields. This causes the Exit Engine screen to spin forever on load, and blocks all Exit Engine testing UI-side. I had to REPAIR the DB manually via mongo (fixed_target_pct=3.0, stop_loss_pct=2.2, exit_method_pref=fixed_pct) before I could even reach the Configure screen. The iter77 UI-driven deploy trail (which sent nulls) is very likely how the DB entered this broken state in the first place. Reload/persistence code was already verified in iter77 and remains structurally intact. Deprecated packages check: expo-av is NOT present (good).",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET/PUT /api/settings, GET /api/portfolio, position_watcher loop", "issue": "load_settings (trading_engine.py:137) uses `RiskSettings(**doc)` — Pydantic rejects None for the required floats stop_loss_pct/fixed_target_pct. If those columns EVER become null in the DB (which the current mobile deploy path can persist, see NumRow NaN bug), every /api/settings call 500s, /api/portfolio 500s, and the position_watcher loop crashes on every iteration. This is a data-integrity failure mode. load_settings must either coerce None→default or the endpoint must repair-on-read. Currently repaired manually via direct mongo write.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [
+        {"component": "workspace.tsx setF (L208) + NumRow useEffect (L579)", "issue": "`const setF = (k, v) => setCfg(c => ({...c, [k]: parseFloat(v)}))` produces NaN whenever v is '' or non-numeric. The useEffect at L579 then re-syncs the input to String(NaN)='NaN', trapping the field in a NaN state. Subsequent typing appends onto 'NaN' → 'NaN6' → still parseFloat=NaN. JSON.stringify(NaN)=null so the deploy PUT body was `{exit_method_pref:'fixed_pct', stop_loss_pct:null, fixed_target_pct:null}`. Reproduced end-to-end: DB seeded to 3/2.2, user clears+retypes, deploy → both fields become null in the payload AND in the DB, which then bricks the whole Settings API (see backend_issues.critical).", "testID": "ee-set-target_pct, ee-set-stop_pct", "priority": "CRITICAL"}
+      ],
+      "integration_issues": [
+        {"flow": "Exit Engine → Global → Fixed% → clear-and-retype 6/3.5 → Deploy", "issue": "PUT /api/settings body captured with both keys set to null (not typed 6/3.5). Backend accepts the null write → subsequent GET /api/settings and any load_settings caller 500s indefinitely.", "affected_testIDs": ["ee-set-target_pct","ee-set-stop_pct","ee-deploy"]}
+      ],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Fixed% deploy — NaN → null persistence", "platform": "mobile", "issue": "Web ExitEngineWorkflow uses a different form pattern and does not exhibit the NaN→null persistence bug.", "expected": "Deploy PUT body should contain the exact numeric values the user typed, and never null; the backend should reject null for required float fields.", "actual": "Mobile deploy PUT body serializes NaN as null; backend accepts null and then all subsequent /api/settings + /api/portfolio requests 500."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "CRITICAL (mobile): Harden workspace.tsx setF (L208) to reject NaN. Recommended: `const setF = (k, v) => { const n = parseFloat(v); setCfg(c => ({...c, [k]: (v === '' || Number.isNaN(n)) ? '' : n})); }`. Also guard NumRow useEffect (L579) to never render 'NaN': `setV(Number.isFinite(value) ? String(value) : '')`. Belt-and-suspenders: deploy() at L241 should refuse to PUT if cfg.target_pct/stop_pct are not finite numbers (Alert.alert instead of writing null).",
+    "CRITICAL (backend): trading_engine.load_settings should coerce None/missing float fields to their RiskSettings defaults (or auto-heal the singleton doc) instead of raising ValidationError. As-is, one bad write from the client bricks every settings-reading endpoint until a manual mongo edit. Suggest: `doc = {**RiskSettings().model_dump(), **{k:v for k,v in doc.items() if v is not None}}` before RiskSettings(**doc).",
+    "HIGH (backend): PUT /api/settings should validate the incoming body and reject null values for numeric fields (400) rather than persisting them and self-poisoning."
+  ],
+  "critical_code_review_comments": [
+    "workspace.tsx:208 — parseFloat('') = NaN is a landmine when combined with commit-on-every-keystroke. Either debounce the parse until user finishes, keep string state until deploy, or short-circuit NaN.",
+    "workspace.tsx:579 — useEffect(() => setV(String(value ?? '')), [value]) will render 'NaN' when value is NaN. Should guard with Number.isFinite.",
+    "workspace.tsx:241 — deploy() should validate cfg.target_pct / cfg.stop_pct are finite before PUT (Alert on invalid), not silently send nulls.",
+    "trading_engine.py:137 — load_settings does not tolerate stale/partial docs. A single bad write bricks the whole Settings/Portfolio API surface. Add defensive coercion or on-load repair.",
+    "workspace.tsx:583 — the onChangeText commit itself is CORRECT and does fix the original iter77 issue (typed values reach cfg on every keystroke). The regression is entirely in the parseFloat/NaN plumbing surrounding it."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only ask; but a critical backend crash was uncovered)", "frontend": "mobile: NumRow commit-on-change fix is in place but a chained NaN bug makes the end-to-end Fixed% deploy flow still broken (payload becomes null)."},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — works.",
+  "seed_data_creation": "Direct mongo update on db.settings singleton to repair {fixed_target_pct: 3.0, stop_loss_pct: 2.2, exit_method_pref:'fixed_pct'} because iter77's mobile deploys had persisted nulls that were 500ing every settings endpoint. Without this repair, the Exit Engine screen cannot even hydrate.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To reproduce the NaN→null chain: login as owner on mobile Expo web preview (viewport 390x844), Exit Engine → Modify Global → Fixed% Target + Stop → Continue to Configure step. FIRST clear one of the numeric inputs (triple-click or fill('')) — the field immediately becomes 'NaN' in the UI (because parseFloat('') → NaN → useEffect re-renders 'NaN'). Then type '6' — the field reads 'NaN6' and cfg.target_pct is NaN. Deploy — PUT body contains `stop_loss_pct:null, fixed_target_pct:null`. That single deploy also poisons the DB and 500s every subsequent /api/settings and /api/portfolio call. Server-side, use `python -c` with motor to reset db.settings singleton to defaults if you get stuck. The commit-on-keystroke change at line 583 is CORRECT; the missing piece is NaN handling in setF (L208), the useEffect string sync (L579), and the deploy validation (L241) — plus a resilient load_settings on the backend.",
+  "rca of the issue": "Iter77 identified that NumRow committed only via onEndEditing → typed values never reached cfg → deploy sent old values. That fix (commit onChangeText) landed correctly at L583. But the surrounding NaN plumbing was never audited, and it silently converts a very normal user gesture (clear-and-retype) into a persistent NaN state which is JSON-serialized as null. The backend then accepts null on write and rejects null on read, self-corrupting the singleton and bricking all settings-reading endpoints (including position_watcher). Net effect from the USER's perspective: 'my Fixed% values still won't save, and now nothing loads' — a strict regression over iter77 even though the NumRow micro-fix is correct."
+}
