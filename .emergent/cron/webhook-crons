@@ -3,6 +3,6 @@ SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 JOB_ID=3843c8a9-6dc6-4505-bea7-0b9b08cc3d66
 WEBHOOK_ENV_FILE=/app/backend/.env
-CRON_API_URL=https://ea-canary.int.apis.emergentagent.com
+CRON_API_URL=https://ea.int.apis.emergentagent.com
 
-* * * * * root JOB_ID=3843c8a9-6dc6-4505-bea7-0b9b08cc3d66 CRON_API_URL=https://ea-canary.int.apis.emergentagent.com /bin/sh /app/.emergent/cron/watch_crons.sh >> /var/log/webhook-cron.log 2>&1
+* * * * * root JOB_ID=3843c8a9-6dc6-4505-bea7-0b9b08cc3d66 CRON_API_URL=https://ea.int.apis.emergentagent.com /bin/sh /app/.emergent/cron/watch_crons.sh >> /var/log/webhook-cron.log 2>&1
