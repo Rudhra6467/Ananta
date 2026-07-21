@@ -159,7 +159,9 @@ function Validate({ isOwner }: { isOwner: boolean }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setPhase("running"); setRuns([]);
     try {
-      const { id } = await api.labCreateRun({ kind: "backtest", symbols: ["BTC/USD"], period, strategies: selected, exit_method: exit, use_live_exit_settings: useLive });
+      const spec: any = { kind: "backtest", symbols: ["BTC/USD"], period, strategies: selected };
+      if (useLive) spec.use_live_exit_settings = true; else spec.exit_method = exit;
+      const { id } = await api.labCreateRun(spec);
       const result = await pollRun(id);
       setRuns([{ method: useLive ? "engine" : exit, label: useLive ? "Live Exit Engine" : (EXIT_LABELS[exit] || exit), result }]);
       setPhase("done");

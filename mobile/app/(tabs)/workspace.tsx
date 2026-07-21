@@ -523,7 +523,7 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
         <NumRow label="Normal Lot (USD)" k="normal_lot_usd" value={settings.normal_lot_usd} isOwner={isOwner} onSave={save} />
       </Card>
 
-      {/* Save — changes also auto-save; this gives explicit confirmation */}
+      {/* Save — the ONLY thing that persists changes to the backend. */}
       <Pressable testID="rm-save-settings" onPress={saveAll} disabled={!isOwner}
         style={[styles.saveBtn, savedFlash && styles.saveBtnDone, !isOwner && { opacity: 0.5 }]}>
         <Ionicons name={savedFlash ? "checkmark-circle" : "save-outline"} size={16} color={savedFlash ? colors.green : colors.teal} />
