@@ -48,14 +48,31 @@ export default function ExitEngineWorkflow() {
     const [coin, setCoin] = useState("BTC/USD");
     const [method, setMethod] = useState(null);
     const [cfg, setCfg] = useState({});
+    const [saved, setSaved] = useState(null); // last-deployed settings (so config shows saved values, not hardcoded defaults)
     const [testing, setTesting] = useState(false);
     const [deploying, setDeploying] = useState(false);
     const [result, setResult] = useState(null);
     const pollRef = useRef(null);
 
     useEffect(() => () => clearInterval(pollRef.current), []);
+    useEffect(() => { api.settings().then(setSaved).catch(() => {}); }, []);
 
-    const pick = (m) => { setMethod(m); setCfg({ ...DEFAULTS[m.id] }); setResult(null); setStep(3); };
+    // Merge the last-deployed values over the method defaults so re-opening the flow
+    // shows what the user actually saved (fixes "always reverts to 3% / 2.2%").
+    const savedCfgFor = (id) => {
+        if (!saved) return {};
+        if (id === "fixed_pct") return {
+            target_pct: saved.fixed_target_pct ?? DEFAULTS.fixed_pct.target_pct,
+            stop_pct: saved.stop_loss_pct ?? DEFAULTS.fixed_pct.stop_pct,
+        };
+        if (id === "atr_trailing") return {
+            trail_arm: saved.trail_arm_pct ?? DEFAULTS.atr_trailing.trail_arm,
+            trail_dist: saved.trail_distance_pct ?? DEFAULTS.atr_trailing.trail_dist,
+        };
+        return {};
+    };
+
+    const pick = (m) => { setMethod(m); setCfg({ ...DEFAULTS[m.id], ...savedCfgFor(m.id) }); setResult(null); setStep(3); };
     const reset = () => { setStep(1); setScope(null); setMethod(null); setResult(null); };
     const setF = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
 
@@ -104,7 +121,7 @@ export default function ExitEngineWorkflow() {
         setDeploying(true);
         try {
             const patch = { exit_method_pref: method.id };
-            if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; }
+            if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; patch.fixed_target_pct = cfg.target_pct; }
             if (method.id === "atr_trailing" || method.id === "chandelier") {
                 patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9;
             }
@@ -116,7 +133,8 @@ export default function ExitEngineWorkflow() {
 
             if (scope === "strategy" && Object.keys(prof).length) patch.profile_overrides = { [strategy]: prof };
             if (scope === "coin") patch.asset_exit_overrides = { [coin]: { method: method.id, ...cfg } };
-            await api.updateSettings(patch);
+            const next = await api.updateSettings(patch);
+            setSaved(next);
             const where = scope === "strategy" ? `strategy "${strategy}"` : scope === "coin" ? coin : "all markets (global)";
             toast.success(`Deployed ${method.name}`, { description: `Applied to ${where}. Live on the next trading cycle.` });
         } catch (e) {

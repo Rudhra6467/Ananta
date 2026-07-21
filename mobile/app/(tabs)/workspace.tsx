@@ -91,7 +91,7 @@ export default function ExitEngine() {
 
         {inWizard && (<>
           <BackHeader onBack={backHome} />
-          <ExitFlow isOwner={isOwner} initialScope={wizardScope} initialStep={view === "edit" || view === "global" ? 2 : 1} onExit={backHome} />
+          <ExitFlow isOwner={isOwner} settings={settings} initialScope={wizardScope} initialStep={view === "edit" || view === "global" ? 2 : 1} onExit={backHome} />
         </>)}
 
         {view === "ai" && (<><BackHeader onBack={() => setView("home")} /><AiAnalysis isOwner={isOwner} trades={trades} /></>)}
@@ -176,7 +176,7 @@ function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
   );
 }
 
-function ExitFlow({ isOwner, initialScope = null, initialStep = 1, onExit }: { isOwner: boolean; initialScope?: string | null; initialStep?: number; onExit?: () => void }) {
+function ExitFlow({ isOwner, settings, initialScope = null, initialStep = 1, onExit }: { isOwner: boolean; settings?: any; initialScope?: string | null; initialStep?: number; onExit?: () => void }) {
   const [step, setStep] = useState(initialStep);
   const [scope, setScope] = useState<string | null>(initialScope);
   const [strategy, setStrategy] = useState("hunter");
@@ -189,7 +189,22 @@ function ExitFlow({ isOwner, initialScope = null, initialStep = 1, onExit }: { i
   const poll = useRef<any>(null);
   useEffect(() => () => clearInterval(poll.current), []);
 
-  const pick = (m: any) => { setMethod(m); setCfg({ ...DEFAULTS[m.id] }); setResult(null); setStep(3); };
+  // Merge the last-deployed values over the method defaults so re-opening the flow shows
+  // what the user actually saved (fixes "always reverts to 3% / 2.2%").
+  const savedCfgFor = (id: string) => {
+    if (!settings) return {};
+    if (id === "fixed_pct") return {
+      target_pct: settings.fixed_target_pct ?? DEFAULTS.fixed_pct.target_pct,
+      stop_pct: settings.stop_loss_pct ?? DEFAULTS.fixed_pct.stop_pct,
+    };
+    if (id === "atr_trailing") return {
+      trail_arm: settings.trail_arm_pct ?? DEFAULTS.atr_trailing.trail_arm,
+      trail_dist: settings.trail_distance_pct ?? DEFAULTS.atr_trailing.trail_dist,
+    };
+    return {};
+  };
+
+  const pick = (m: any) => { setMethod(m); setCfg({ ...DEFAULTS[m.id], ...savedCfgFor(m.id) }); setResult(null); setStep(3); };
   const setF = (k: string, v: string) => setCfg((c: any) => ({ ...c, [k]: parseFloat(v) }));
 
   const buildSpec = () => {
@@ -223,7 +238,7 @@ function ExitFlow({ isOwner, initialScope = null, initialStep = 1, onExit }: { i
     setDeploying(true);
     try {
       const patch: any = { exit_method_pref: method.id };
-      if (method.id === "fixed_pct") patch.stop_loss_pct = cfg.stop_pct;
+      if (method.id === "fixed_pct") { patch.stop_loss_pct = cfg.stop_pct; patch.fixed_target_pct = cfg.target_pct; }
       if (method.id === "atr_trailing" || method.id === "chandelier") { patch.trail_arm_pct = cfg.trail_arm ?? 1.6; patch.trail_distance_pct = cfg.trail_dist ?? 0.9; }
       if (method.id === "breakeven_trail" || method.id === "structural_trail") patch.profit_protection_enabled = true;
       const prof: any = {};

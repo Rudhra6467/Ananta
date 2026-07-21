@@ -328,6 +328,7 @@ class RiskSettings(BaseModel):
     profile_overrides: dict = {}
     # Exit Engine: user's preferred exit method (UI/record) + per-coin exit overrides {SYMBOL: {field: value}}
     exit_method_pref: str = "native"
+    fixed_target_pct: float = 3.0  # take-profit % for the "Fixed % Target + Stop" exit (paired with stop_loss_pct)
     asset_exit_overrides: dict = {}
     dynamic_trail_min_pct: float = 2.0  # floor for the adaptive trailing distance
     dynamic_trail_max_pct: float = 6.0  # ceiling for the adaptive trailing distance

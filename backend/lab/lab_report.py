@@ -51,6 +51,15 @@ def _exit_label(run: dict) -> str:
     return "Native Strategy Exit (Universal Engine)"
 
 
+def _live_exit_desc(run: dict) -> str:
+    """Describe WHICH deployed exit config a live-settings run replayed (answers the user's
+    'is the PDF using my saved Fixed % config?')."""
+    pref = ((run.get("setting_overrides") or {}).get("exit_method_pref")) or "native"
+    names = {"fixed_pct": "Fixed % Target + Stop", "atr_trailing": "ATR Trailing Stop",
+             "chandelier": "Chandelier Exit", "native": "Universal Exit Engine"}
+    return f"Deployed config · {names.get(pref, pref)}"
+
+
 def _exit_params_rows(run: dict):
     """Exit-parameter provenance rows for the config block (position size, targets/%, ATR params)."""
     res = run.get("result") or {}
@@ -108,7 +117,7 @@ def _config_block(s, run: dict):
         ["Symbols", ", ".join(run.get("symbols") or [])],
         ["Period", f'{run.get("period","—")}  ({_date(run.get("start_ms"))} → {_date(run.get("end_ms"))})'],
         ["Exit method", _exit_label(run)],
-        ["Exit settings", "Live Exit Engine (deployed config)"
+        ["Exit settings", _live_exit_desc(run)
             if ((run.get("result") or {}).get("exit_source") or run.get("exit_source")) == "live"
             else "Manual override (selected for this run)"],
         *_exit_params_rows(run),

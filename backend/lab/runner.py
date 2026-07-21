@@ -137,13 +137,26 @@ async def create_run(db, spec: dict) -> dict:
     exit_method = spec.get("exit_method") or "fixed"
     setting_overrides = spec.get("setting_overrides")
     profile_overrides = spec.get("profile_overrides")
+    target_profit = float(spec.get("target_profit", 5.0))
+    target_loss = float(spec.get("target_loss", 4.0))
     if use_live and kind == "backtest":
         sdoc = await db.settings.find_one({"id": "singleton"}) or {}
         sdoc = {k: v for k, v in sdoc.items() if k not in ("_id", "id")}
         setting_overrides = {**sdoc, **(spec.get("setting_overrides") or {})}
         profile_overrides = sdoc.get("profile_overrides") or spec.get("profile_overrides")
-        exit_method = "engine"
         exit_source = "live"
+        # Honor the DEPLOYED exit-method preference so the backtest matches live trading.
+        pref = setting_overrides.get("exit_method_pref") or "native"
+        if pref == "fixed_pct":
+            # "Fixed % Target + Stop" — replay the exact deployed TP%/SL% (as $ on the live lot).
+            lot = float(setting_overrides.get("normal_lot_usd") or 75.0)
+            tp_pct = float(setting_overrides.get("fixed_target_pct") or 3.0)
+            sl_pct = float(setting_overrides.get("stop_loss_pct") or 2.2)
+            exit_method = "fixed"
+            target_profit = round(lot * tp_pct / 100.0, 2)
+            target_loss = round(lot * sl_pct / 100.0, 2)
+        else:
+            exit_method = "engine"
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -161,8 +174,8 @@ async def create_run(db, spec: dict) -> dict:
         "exit_method": exit_method,
         "exit_source": exit_source,
         "use_live_exit_settings": use_live,
-        "target_profit": float(spec.get("target_profit", 5.0)),
-        "target_loss": float(spec.get("target_loss", 4.0)),
+        "target_profit": target_profit,
+        "target_loss": target_loss,
         "atr_params": spec.get("atr_params") or None,
         "status": "QUEUED", "progress_pct": 0.0, "git_hash": git_hash(),
         "created_at": _now(), "started_at": None, "finished_at": None,
@@ -415,7 +428,13 @@ class LabWorker:
         else:
             label = "Native Strategy Exit (Universal Engine)"
         if run.get("exit_source") == "live":
-            label = "Live Exit Engine (deployed config)"
+            # Reflect WHICH deployed exit ran so the PDF shows the user's actual config.
+            if em == "fixed":
+                label = "Live Exit Engine · Fixed %% Target (TP $%g / SL $%g)" % (tp, tl)
+            elif em == "atr":
+                label = "Live Exit Engine · ATR Trailing (×%g stop, %dp)" % (ap["multiplier"], int(ap["period"]))
+            else:
+                label = "Live Exit Engine (deployed config)"
         return {
             "per_symbol": out, "multi_timeframe": multi_tf,
             "exit_comparison": exit_cmp,

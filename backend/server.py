@@ -126,6 +126,7 @@ class SettingsUpdate(BaseModel):
     trail_distance_pct: float | None = None
     profit_protection_enabled: bool | None = None
     exit_method_pref: str | None = None
+    fixed_target_pct: float | None = None
     asset_exit_overrides: dict | None = None
     dynamic_trail_enabled: bool | None = None
     profile_overrides: dict | None = None

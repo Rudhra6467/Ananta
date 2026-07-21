@@ -53,6 +53,31 @@ EXIT_SL = "SL_HIT"
 EXIT_TRAIL = "TRAIL_HIT"
 
 
+def _resolve_exit_method(settings: RiskSettings, symbol: str) -> str:
+    """Effective deployed exit method for a symbol: per-coin override if set, else global."""
+    ov = (getattr(settings, "asset_exit_overrides", None) or {}).get(symbol) or {}
+    return ov.get("method") or getattr(settings, "exit_method_pref", None) or "native"
+
+
+def _fixed_pct_decision(pos: Position, last: float, settings: RiskSettings) -> ExitDecision:
+    """Deployed "Fixed % Target + Stop" exit — exits at a fixed take-profit % or stop-loss %.
+    Mirrors the Lab 'fixed' backtest so live/paper trading matches validation exactly."""
+    entry = pos.avg_cost
+    if entry <= 0 or last <= 0:
+        return ExitDecision(action=ACT_NONE)
+    pnl_pct = (last - entry) / entry * 100.0
+    ov = (getattr(settings, "asset_exit_overrides", None) or {}).get(pos.symbol) or {}
+    tp_pct = float(ov.get("target_pct", getattr(settings, "fixed_target_pct", 3.0)))
+    sl_pct = float(ov.get("stop_pct", getattr(settings, "stop_loss_pct", 2.2)))
+    if pnl_pct <= -sl_pct:
+        return ExitDecision(action=ACT_EXIT_FULL, module="FIXED_SL", exit_reason="FIXED_TARGET_LOSS",
+                            reason=f"Fixed stop-loss hit ({pnl_pct:.2f}% <= -{sl_pct:.2f}%)", confidence=1.0, fraction=1.0)
+    if pnl_pct >= tp_pct:
+        return ExitDecision(action=ACT_EXIT_FULL, module="FIXED_TP", exit_reason="FIXED_TARGET_PROFIT",
+                            reason=f"Fixed take-profit hit ({pnl_pct:.2f}% >= {tp_pct:.2f}%)", confidence=1.0, fraction=1.0)
+    return ExitDecision(action=ACT_NONE)
+
+
 def trail_distance_for(pos: Position, settings: RiskSettings) -> float:
     """Effective trailing pullback distance (%) for a position.
 
@@ -333,10 +358,16 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
 
         decision = evaluate_exit_engine(pos, snap.price, bars_1h, settings, emergency=emergency,
                                          profile_override=profile_for(pos.strategy, settings))
+        # Deployed exit method: "Fixed % Target + Stop" uses a fixed TP/SL (matches the Lab
+        # 'fixed' backtest); everything else runs the Universal Exit Engine. Emergency
+        # (kill-switch) always uses the engine so its KILL module fires.
+        if not emergency and _resolve_exit_method(settings, pos.symbol) == "fixed_pct":
+            decision = _fixed_pct_decision(pos, snap.price, settings)
         # Declarative strategies (Phase B): honor the strategy's OWN exit rule as a secondary
         # trigger — universal safety exits (stops/kill/floors) keep top priority; only when the
-        # engine says "hold" do we consult the strategy's declarative exit spec.
-        if decision.action == ACT_NONE and bars_1h and _is_declarative(pos.strategy):
+        # engine says "hold" do we consult the strategy's declarative exit spec. Skipped in
+        # Fixed-% mode (fixed TP/SL are the only exits).
+        elif decision.action == ACT_NONE and bars_1h and _is_declarative(pos.strategy):
             with contextlib.suppress(Exception):
                 spec = _decl_spec(pos.strategy)
                 if spec and (spec.get("exit")):
