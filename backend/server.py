@@ -2135,6 +2135,62 @@ async def lab_consolidated_report(body: ConsolidatedReportReq):
                     headers={"Content-Disposition": 'attachment; filename="ananta_consolidated_strategies.pdf"'})
 
 
+class DeployExitConfigReq(BaseModel):
+    strategy: str  # hunter | squeeze | continuation
+    method: str = "fixed_pct"  # fixed_pct | atr_trailing | chandelier | native
+    target_pct: float | None = None  # fixed_pct take-profit %
+    stop_pct: float | None = None    # fixed_pct / trailing hard stop %
+    trail_arm: float | None = None   # atr/chandelier trail arm %
+    trail_dist: float | None = None  # atr/chandelier trail distance %
+    set_paper_active: bool = True    # also enable the strategy for PAPER trading
+
+
+@api_router.post("/lab/deploy-exit-config", dependencies=[Depends(require_owner)])
+async def lab_deploy_exit_config(body: DeployExitConfigReq):
+    """One-click: deploy a per-strategy exit config to the live (paper) engine — writes the
+    profile_overrides entry the Exit Engine uses, so a winning Lab config skips the manual step."""
+    valid_strats = {"hunter", "squeeze", "continuation"}
+    if body.strategy not in valid_strats:
+        raise HTTPException(status_code=400, detail=f"strategy must be one of {sorted(valid_strats)}")
+    valid_methods = {"fixed_pct", "atr_trailing", "chandelier", "native"}
+    if body.method not in valid_methods:
+        raise HTTPException(status_code=400, detail=f"method must be one of {sorted(valid_methods)}")
+
+    s = await load_settings(db)
+    overrides = dict(getattr(s, "profile_overrides", {}) or {})
+    if body.method == "native":
+        # "native" == no per-strategy exit override; drop any existing one for this strategy.
+        overrides.pop(body.strategy, None)
+    else:
+        entry = dict(overrides.get(body.strategy) or {})
+        entry["method"] = body.method
+        if body.method == "fixed_pct":
+            if body.target_pct is not None:
+                entry["target_pct"] = float(body.target_pct)
+            if body.stop_pct is not None:
+                entry["stop_pct"] = float(body.stop_pct)
+        else:  # atr_trailing / chandelier
+            if body.trail_arm is not None:
+                entry["trail_arm"] = float(body.trail_arm)
+            if body.trail_dist is not None:
+                entry["trail_dist"] = float(body.trail_dist)
+            if body.stop_pct is not None:
+                entry["stop_pct"] = float(body.stop_pct)
+        overrides[body.strategy] = entry
+    s.profile_overrides = overrides
+    saved = await save_settings(db, s)
+
+    if body.set_paper_active:
+        await db.strategy_meta.update_one(
+            {"key": body.strategy},
+            {"$set": {"key": body.strategy, "enabled": True, "status": "PAPER"}}, upsert=True)
+
+    return {"ok": True, "strategy": body.strategy,
+            "profile_overrides": saved.profile_overrides,
+            "paper_active": body.set_paper_active}
+
+
+
 
 @api_router.post("/lab/runs/{run_id}/propose", dependencies=[Depends(require_owner)])
 async def lab_propose(run_id: str):

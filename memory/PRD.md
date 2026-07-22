@@ -926,3 +926,14 @@ Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
   Squeeze/COMPRESSION entirely; COMPRESSION now lets Squeeze fire, REVERSAL kept so Hunter is still scanned/observed).
 - NOTE: deployed lot is normal_lot_usd=$1000 (grid used $75); exit values are PERCENTAGES so behaviour pattern
   (win%/PF/DD%) is lot-independent. Changes are on PREVIEW — user must Publish to push to production.
+
+## PHASE 3 TUNE + Quick-Deploy feature (2026-07-22)
+- User tuning applied: allowed_regimes ['COMPRESSION','REVERSAL'] → ['COMPRESSION'] only (pure Squeeze focus);
+  normal_lot_usd $1000 → $150 (controlled-risk aggressive paper test). Squeeze fixed_pct 5.0/3.2 (enabled PAPER);
+  Hunter atr_trailing + enabled:false (observation). continuation enabled but regime-blocked (TREND_UP not allowed).
+- NEW: POST /api/lab/deploy-exit-config {strategy, method, target_pct/stop_pct or trail_arm/trail_dist,
+  set_paper_active} — merges per-strategy exit into settings.profile_overrides + optionally enables PAPER.
+  Preserves other strategies' overrides. Owner-gated.
+- NEW web UI: "QUICK-DEPLOY EXIT → PAPER" card in StrategyValidationPanel (Research>Validate>Advanced):
+  strategy + method + TP%/SL% → api.labDeployExitConfig. Verified end-to-end (screenshot: success toast
+  "DEPLOYED TO PAPER · squeeze → Fixed % 5.0% TP / 3.2% SL"). Also "Consolidated Report (N)" multi-select verified.

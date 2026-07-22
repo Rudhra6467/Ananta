@@ -573,6 +573,9 @@ export default function StrategyValidationPanel() {
                 </div>
             </div>
 
+            {/* Quick-deploy a winning per-strategy exit straight to the paper engine */}
+            <QuickDeployExit />
+
             {/* runs */}
             <div className="mt-8">
                 <div className="flex items-center justify-between mb-3">
@@ -671,6 +674,90 @@ export default function StrategyValidationPanel() {
                 </DialogContent>
             </Dialog>
         </section>
+    );
+}
+
+// Quick-Deploy Exit → Paper: apply a per-strategy exit config to the live (paper) engine
+// in one click, so a winning Lab config skips the manual Exit Engine step.
+function QuickDeployExit() {
+    const [strategy, setStrategy] = useState("squeeze");
+    const [method, setMethod] = useState("fixed_pct");
+    const [tp, setTp] = useState("5.0");
+    const [sl, setSl] = useState("3.2");
+    const [busy, setBusy] = useState(false);
+    const [done, setDone] = useState(false);
+
+    const deploy = async () => {
+        setBusy(true); setDone(false);
+        try {
+            const payload = { strategy, method, set_paper_active: true };
+            if (method === "fixed_pct") {
+                payload.target_pct = parseFloat(tp);
+                payload.stop_pct = parseFloat(sl);
+                if (!Number.isFinite(payload.target_pct) || !Number.isFinite(payload.stop_pct)) {
+                    toast.error("INVALID INPUT", { description: "Enter numeric TP% and SL%." });
+                    setBusy(false); return;
+                }
+            }
+            await api.labDeployExitConfig(payload);
+            setDone(true);
+            const label = method === "fixed_pct" ? `Fixed % ${tp}% TP / ${sl}% SL` : "ATR Trailing";
+            toast.success("DEPLOYED TO PAPER", { description: `${strategy} → ${label} is now live in preview.` });
+        } catch (e) {
+            toast.error("DEPLOY FAILED", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="mt-8 border border-atlas-cyan/30 rounded-lg p-4 bg-atlas-panel" data-testid="quick-deploy-exit">
+            <div className="flex items-center gap-2 mb-1">
+                <Rocket className="w-4 h-4 text-atlas-cyan" />
+                <span className="font-heading tracking-wide text-sm text-atlas-text">QUICK-DEPLOY EXIT → PAPER</span>
+            </div>
+            <div className="font-mono text-[10px] text-atlas-textSecondary mb-3">
+                Push a winning per-strategy exit straight to the live paper engine (preview). Skips the manual Exit Engine step.
+            </div>
+            <div className="flex items-end gap-3 flex-wrap">
+                <div>
+                    <Label className="label-tag">STRATEGY</Label>
+                    <select data-testid="qd-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value)}
+                        className="block mt-1 bg-atlas-bg border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text h-[38px]">
+                        <option value="squeeze">Squeeze</option>
+                        <option value="hunter">Hunter</option>
+                        <option value="continuation">Continuation</option>
+                    </select>
+                </div>
+                <div>
+                    <Label className="label-tag">METHOD</Label>
+                    <select data-testid="qd-method" value={method} onChange={(e) => setMethod(e.target.value)}
+                        className="block mt-1 bg-atlas-bg border border-atlas-border rounded px-3 py-2 font-mono text-sm text-atlas-text h-[38px]">
+                        <option value="fixed_pct">Fixed % Target + Stop</option>
+                        <option value="atr_trailing">ATR Trailing Stop</option>
+                    </select>
+                </div>
+                {method === "fixed_pct" && (
+                    <>
+                        <div className="w-24">
+                            <Label className="label-tag">TP %</Label>
+                            <Input data-testid="qd-tp" value={tp} onChange={(e) => setTp(e.target.value)}
+                                className="mt-1 bg-atlas-bg border-atlas-border font-mono text-sm h-[38px]" />
+                        </div>
+                        <div className="w-24">
+                            <Label className="label-tag">SL %</Label>
+                            <Input data-testid="qd-sl" value={sl} onChange={(e) => setSl(e.target.value)}
+                                className="mt-1 bg-atlas-bg border-atlas-border font-mono text-sm h-[38px]" />
+                        </div>
+                    </>
+                )}
+                <Button data-testid="qd-deploy-btn" onClick={deploy} disabled={busy}
+                    className="gap-1.5 h-[38px]">
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : done ? <Check className="w-4 h-4" /> : <Rocket className="w-4 h-4" />}
+                    Deploy to Paper
+                </Button>
+            </div>
+        </div>
     );
 }
 
