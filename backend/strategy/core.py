@@ -148,6 +148,14 @@ def get_schema(key: str, version: str | None = None) -> StrategySchema | None:
     return REGISTRY.get(f"{key}@{v}") if v else None
 
 
+def unregister(key: str) -> None:
+    """Remove ALL versions of a strategy from the registry. Used when a user deletes an
+    imported/cloned strategy so it stops appearing in /strategy/registry. No-op if absent."""
+    for rk in [k for k in REGISTRY if k.rsplit("@", 1)[0] == key]:
+        REGISTRY.pop(rk, None)
+    _LATEST.pop(key, None)
+
+
 def list_schemas() -> list[StrategySchema]:
     """Latest version of every registered strategy."""
     return [s for k in _LATEST if (s := get_schema(k))]

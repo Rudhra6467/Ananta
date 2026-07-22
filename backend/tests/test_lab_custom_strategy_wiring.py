@@ -69,3 +69,20 @@ def test_multi_exit_forwards_custom_overrides(btc_window):
     r = backtest.run_multi_exit("BTC/USD", start_ms, end_ms, strategies=[_CUSTOM_KEY],
                                 timeframe="1h", decl_overrides=overrides)
     assert r.get("entries") and r["entries"] > 0, "custom strategy produced no entries in exit comparison"
+
+
+def test_unregister_imported_removes_from_registry():
+    """Deleting an imported/cloned strategy must remove it from the schema registry so it no
+    longer appears in /strategy/registry (else orphans clutter the Research picker forever)."""
+    from strategy.declarative_defs import register_imported, unregister_imported
+    from strategy.core import get_schema, list_schemas
+
+    key = "clone-unregtest99"
+    register_imported(key, "Unreg Test", "temp", _CUSTOM_SPEC, _CUSTOM_PARAMS)
+    assert get_schema(key) is not None
+    assert key in {s.key for s in list_schemas()}
+
+    unregister_imported(key)
+    assert get_schema(key) is None
+    assert key not in {s.key for s in list_schemas()}
+

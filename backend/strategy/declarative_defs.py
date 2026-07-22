@@ -13,7 +13,7 @@ Their `key` == the Strategy Library entry `id` (engine_key), so the library cata
 """
 from __future__ import annotations
 
-from strategy.core import ParamGroup, ParamSpec, ParamType, StrategyDNA, StrategySchema, register
+from strategy.core import ParamGroup, ParamSpec, ParamType, StrategyDNA, StrategySchema, register, unregister
 
 _T = ParamType
 _G = ParamGroup
@@ -266,6 +266,7 @@ def register_imported(key: str, name: str, description: str, spec: dict,
 
 def unregister_imported(key: str) -> None:
     _IMPORTED.pop(key, None)
+    unregister(key)  # also drop the schema from the registry so it leaves /strategy/registry
 
 
 def imported_keys() -> list[str]:
