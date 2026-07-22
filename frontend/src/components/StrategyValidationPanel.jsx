@@ -70,6 +70,8 @@ export default function StrategyValidationPanel() {
     const [proposal, setProposal] = useState(null);
     const [promoteBusy, setPromoteBusy] = useState(false);
     const [deleting, setDeleting] = useState(null);
+    const [selected, setSelected] = useState([]);  // run ids selected for the consolidated report
+    const [consolidating, setConsolidating] = useState(false);
     const [presets, setPresets] = useState(_labCache.presets || []);
     const [presetId, setPresetId] = useState(_labCache.presets?.[0]?.id || "");
     // Save-winning-config flow (bridge into the Strategy Config engine)
@@ -249,6 +251,28 @@ export default function StrategyValidationPanel() {
             toast.error("PDF UNAVAILABLE", { description: String(e?.response?.data?.detail || e) });
         } finally {
             setDl(null);
+        }
+    };
+
+    const toggleSelect = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+
+    const downloadConsolidated = async () => {
+        if (selected.length < 2) {
+            toast.error("SELECT AT LEAST 2 RUNS", { description: "Tick two or more completed backtest runs to compare." });
+            return;
+        }
+        setConsolidating(true);
+        try {
+            const blob = await api.labConsolidatedReport(selected, "Selected runs");
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "ananta_consolidated_strategies.pdf";
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            toast.error("REPORT UNAVAILABLE", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally {
+            setConsolidating(false);
         }
     };
 
@@ -551,7 +575,16 @@ export default function StrategyValidationPanel() {
 
             {/* runs */}
             <div className="mt-8">
-                <div className="label-tag mb-3">VALIDATION RUNS</div>
+                <div className="flex items-center justify-between mb-3">
+                    <div className="label-tag">VALIDATION RUNS</div>
+                    <Button size="sm" variant="outline" data-testid="download-consolidated-btn"
+                        onClick={downloadConsolidated} disabled={consolidating || selected.length < 2}
+                        title="Select 2+ completed backtest runs (e.g. Hunter + Squeeze) to compare side-by-side"
+                        className="gap-1.5 h-7">
+                        {consolidating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        Consolidated Report{selected.length ? ` (${selected.length})` : ""}
+                    </Button>
+                </div>
                 {runs.length === 0 ? (
                     <div className="p-6 text-center font-mono text-xs text-atlas-textSecondary border border-atlas-border rounded-lg" data-testid="runs-empty">
                         No runs yet. Configure assets and hit RUN VALIDATION.
@@ -560,7 +593,7 @@ export default function StrategyValidationPanel() {
                     <div className="space-y-2" data-testid="runs-list">
                         {runs.map((r) => <RunRow key={r.id} run={r} onDownload={downloadPdf} downloading={dl === r.id}
                             onPromote={promote} promoting={promoteBusy} onDelete={deleteRun} deleting={deleting === r.id}
-                            onSaveConfig={openSave} />)}
+                            onSaveConfig={openSave} selected={selected.includes(r.id)} onToggleSelect={toggleSelect} />)}
                     </div>
                 )}
             </div>
@@ -641,7 +674,7 @@ export default function StrategyValidationPanel() {
     );
 }
 
-function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, deleting, onSaveConfig }) {
+function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, deleting, onSaveConfig, selected, onToggleSelect }) {
     const isDone = run.status === "DONE";
     const isTerminal = isDone || run.status === "FAILED";
     const canPromote = isDone && run.kind !== "backtest";
@@ -668,6 +701,12 @@ function RunRow({ run, onDownload, downloading, onPromote, promoting, onDelete, 
         <div className="border border-atlas-border rounded-lg p-4 bg-atlas-panel" data-testid={`run-row-${run.id.slice(0, 8)}`}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3 min-w-0">
+                    {isDone && run.kind === "backtest" && (
+                        <input type="checkbox" data-testid={`select-run-${run.id.slice(0, 8)}`}
+                            checked={!!selected} onChange={() => onToggleSelect(run.id)}
+                            title="Include in consolidated report"
+                            className="w-4 h-4 accent-atlas-cyan cursor-pointer" />
+                    )}
                     {isDone && run.kind === "backtest" && (
                         <button data-testid={`expand-run-${run.id.slice(0, 8)}`} onClick={toggle}
                             className="text-atlas-textTertiary hover:text-atlas-cyan">

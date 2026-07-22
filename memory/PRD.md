@@ -889,3 +889,40 @@ Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
   (Continuation +$3.44@47%/PF1.38, Squeeze +$2.36@80%). MFE capture 8-15% ⇒ exit is the primary leak.
   Entry edge also thin (fixed & ATR configs net-neg on identical Hunter entries). Recent 3mo w/ Fixed-$ TP:
   Continuation PF 1.86/60%win/+$24.73 ⇒ regime+exit choice flips outcome. Motivates Phase 3.
+
+## PHASE 3 COMPLETE — Optimization sweep (Hunter+Squeeze) + Consolidated report button (2026-07-22)
+- Fixed-% TP/SL grid sweep: TP{4.5,5,5.5,6,6.5}% × SL{2.7,3,3.2}% (15 combos), 12mo, BTC+ETH+SOL, $75 lot,
+  exit-agnostic entries. Ran off-request via parallel ProcessPool script (NOTE: never place run scripts in
+  /app/backend — editing .py there triggers uvicorn --reload which HANGS on the app ProcessPool and kills
+  in-progress Lab runs; run scripts from /tmp or elsewhere).
+- RESULTS: SQUEEZE profitable across the band — best TP6.5/SL3.2 PF1.28/41.7%win/DD1.37%/exp+$0.39;
+  TP5.0/SL3.2 PF1.20/45.8%win/DD1.05% (best win+lowest DD). HUNTER net-negative under EVERY combo
+  (PF0.09-0.20, win 4.5-9.1%) — fixed% caps clip its winners; needs trailing/structural exit, not fixed.
+- FINDING: Lab min_confidence gate is a NO-OP for Hunter/Squeeze (PrimarySignal/SqueezeSignal expose quality
+  via evidence['entry_quality'], not a top-level confidence/score the gate reads). To quantify confidence
+  filtering, wire entry_quality into the entry gate (backend change, not yet done).
+- REGIME: Squeeze fires ONLY in COMPRESSION (the profitable one) → user's "COMPRESSION priority" aligns with data.
+  Hunter fires ONLY in REVERSAL (weak). 
+- NEW web feature: multi-select checkboxes on completed backtest runs + "Consolidated Report (N)" button in
+  Research > Validate > Advanced (StrategyValidationPanel) → api.labConsolidatedReport →
+  POST /api/lab/reports/consolidated. Verified via screenshot + endpoint curl. MOBILE consolidated button
+  DEFERRED (POST+blob+auth via Linking not supported; needs expo-sharing flow).
+
+## PHASE 4 — System Assessment (2026-07-22)
+- Exit Engine/Risk Monitor STABLE (iter81 verified, per-strategy/coin overrides honored web+mobile+backend).
+- Reports upgraded (Phase1 5 sections + consolidated). Lab queue is single-worker (long Health sweep blocks
+  validation; no cancel). uvicorn --reload can interrupt Lab runs in PREVIEW only (prod deploy doesn't reload).
+- Paper-testing (7-10d) rec: deploy ONE Squeeze fixed-% config (TP5.0/SL3.2 stable OR TP6.5/SL3.2 higher PF),
+  regime=COMPRESSION priority, HTF trend ON, Hunter observation-only (ATR trail, min size). PF target 1.4-1.8
+  not yet met (Squeeze ~1.2-1.28); win-rate target 38-48% met. Small samples → directional.
+
+## PHASE 3 DEPLOY — Aggressive Squeeze paper-test config LIVE on preview (2026-07-22)
+- User picked Squeeze TP 5.0% / SL 3.2%. Deployed via PUT /settings profile_overrides:
+  squeeze={method:fixed_pct,target_pct:5.0,stop_pct:3.2}; hunter={method:atr_trailing}.
+- Hunter set to OBSERVATION ONLY: PUT /strategy/hunter/state {enabled:false} → strategy_entry_allowed()
+  returns False (no new positions); exit config ready as ATR trail if re-enabled.
+- Squeeze active: PUT /strategy/squeeze/state {enabled:true,status:PAPER}.
+- allowed_regimes changed ['REVERSAL'] → ['COMPRESSION','REVERSAL'] (REQUIRED — REVERSAL-only was blocking
+  Squeeze/COMPRESSION entirely; COMPRESSION now lets Squeeze fire, REVERSAL kept so Hunter is still scanned/observed).
+- NOTE: deployed lot is normal_lot_usd=$1000 (grid used $75); exit values are PERCENTAGES so behaviour pattern
+  (win%/PF/DD%) is lot-independent. Changes are on PREVIEW — user must Publish to push to production.
