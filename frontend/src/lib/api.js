@@ -211,6 +211,7 @@ export const api = {
     importFormats: () => client.get("/library/import/formats").then((r) => r.data),
     importDetect: (raw_content) => client.post("/library/import/detect", { raw_content }).then((r) => r.data),
     importAnalyze: (payload) => client.post("/library/import/analyze", payload, { timeout: 120000 }).then((r) => r.data),
+    importDirect: (payload) => client.post("/library/import/direct", payload).then((r) => r.data),
     importList: () => client.get("/library/imports").then((r) => r.data),
     importGet: (id) => client.get(`/library/imports/${id}`).then((r) => r.data),
     importUpdate: (id, patch) => client.put(`/library/imports/${id}`, { patch }).then((r) => r.data),

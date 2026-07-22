@@ -35,6 +35,7 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
     const [detected, setDetected] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [draft, setDraft] = useState(null);
+    const [savingDirect, setSavingDirect] = useState(false);
     const detectTimer = useRef(null);
 
     useEffect(() => {
@@ -69,6 +70,21 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
         } finally { setAnalyzing(false); }
     };
 
+    // "Save without AI" — persist the raw definition directly (no LLM). For JSON this maps
+    // structured fields; other formats are saved as an editable blueprint. Lands on Review.
+    const saveDirect = async () => {
+        if (!raw.trim()) { toast.error("Paste your strategy code first"); return; }
+        setSavingDirect(true);
+        try {
+            const d = await api.importDirect({ raw_content: raw, source_format: fmt, name: name || undefined });
+            setDraft(d);
+            setStep("review");
+            toast.success("Saved without AI", { description: "Review & edit the details, then add to your Library." });
+        } catch (e) {
+            toast.error("Could not save", { description: String(e?.response?.data?.detail || e?.message || "For JSON, check the syntax.") });
+        } finally { setSavingDirect(false); }
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="atlas-panel border-atlas-border bg-atlas-bg max-w-3xl p-0 gap-0 max-h-[92vh] overflow-hidden flex flex-col"
@@ -89,7 +105,7 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
 
                 <div className="overflow-y-auto p-5">
                     {step === "input" ? (
-                        <InputStep {...{ formats, fmt, setFmt, name, setName, raw, setRaw, detected, analyzing, analyze }} />
+                        <InputStep {...{ formats, fmt, setFmt, name, setName, raw, setRaw, detected, analyzing, analyze, saveDirect, savingDirect }} />
                     ) : (
                         <ReviewStep draft={draft} setDraft={setDraft}
                             onBack={() => setStep("input")}
@@ -101,7 +117,7 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
     );
 }
 
-function InputStep({ formats, fmt, setFmt, name, setName, raw, setRaw, detected, analyzing, analyze }) {
+function InputStep({ formats, fmt, setFmt, name, setName, raw, setRaw, detected, analyzing, analyze, saveDirect, savingDirect }) {
     return (
         <div className="space-y-4">
             <div>
@@ -149,14 +165,22 @@ function InputStep({ formats, fmt, setFmt, name, setName, raw, setRaw, detected,
             </div>
 
             <div className="flex items-center justify-between pt-1">
-                <div className="font-mono text-[9px] text-atlas-textTertiary max-w-[55%]">
+                <div className="font-mono text-[9px] text-atlas-textTertiary max-w-[45%]">
                     The AI extracts entry/exit logic, risk, indicators &amp; parameters, then flags anything Ananta cannot replicate.
                 </div>
-                <Button data-testid="import-analyze-btn" onClick={analyze} disabled={analyzing || !raw.trim()}
-                    className="bg-atlas-cyan text-atlas-bg hover:bg-cyan-300 font-mono text-xs">
-                    {analyzing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analyzing…</>
-                        : <><Sparkles className="w-3.5 h-3.5 mr-1.5" /> Analyze with AI</>}
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button data-testid="import-direct-btn" onClick={saveDirect} disabled={savingDirect || analyzing || !raw.trim()}
+                        variant="outline"
+                        className="border-atlas-border text-atlas-textSecondary hover:text-atlas-text font-mono text-xs">
+                        {savingDirect ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
+                            : <><FileCode2 className="w-3.5 h-3.5 mr-1.5" /> Save without AI</>}
+                    </Button>
+                    <Button data-testid="import-analyze-btn" onClick={analyze} disabled={analyzing || savingDirect || !raw.trim()}
+                        className="bg-atlas-cyan text-atlas-bg hover:bg-cyan-300 font-mono text-xs">
+                        {analyzing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analyzing…</>
+                            : <><Sparkles className="w-3.5 h-3.5 mr-1.5" /> Analyze with AI</>}
+                    </Button>
+                </div>
             </div>
         </div>
     );

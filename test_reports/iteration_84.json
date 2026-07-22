@@ -1,0 +1,34 @@
+{
+  "summary": "iter84 WEB frontend testing of Strategy Center library sectioning + Import 'Save without AI' button. Code review confirms both fixes are correctly wired: StrategyCenter.jsx (lines 149-171) splits the library grid into two Sections with data-testid 'strategy-section-live' (label 'LIVE / PAPER') and 'strategy-section-test' (label 'TEST & EDIT') using isLiveMetric() logic (mirrors mobile). ImportStrategyModal.jsx (lines 172-183) renders both 'import-direct-btn' (Save without AI) and 'import-analyze-btn' (Analyze with AI) side-by-side with proper mutual busy-disable (savingDirect || analyzing || !raw.trim()). Live UI verification was blocked by a chain of onboarding overlays (Coming Soon waitlist → Welcome to Ananta → Start with Paper Trading → Welcome-to-Ananta provisioning checklist with 'ENTER ANANTA') that I could not fully dismiss inside the browser-automation loop-prevention limit — even after clicking through Continue to Cockpit / Start Exploring / Skip for Now / ENTER ANANTA, the app kept landing on Cockpit rather than the Strategy tab, so the Strategy Center library was never rendered in my run. Owner login itself worked (LOGOUT + OWNER indicator visible in top-right after login). Backend /api/library/import/direct was already verified in iter83 per handoff. Main agent should self-test the WEB UI once (login → dismiss onboarding manually → click STRATEGY tab in bottom nav → verify strategy-section-live + strategy-section-test render, then open Import > Save without AI).",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "First-run onboarding", "issues": ["Multiple sequential onboarding overlays (Coming Soon waitlist, Welcome to Ananta, Start with Paper Trading, Provisioning checklist) fire back-to-back after fresh owner login on the shared preview URL; some do not persist dismissal across owner-login state changes. This makes automated E2E testing brittle. Consider adding an 'owner-mode' bypass or persisting dismissal in localStorage so re-logins don't re-trigger the welcome chain."]}
+      ]
+    }
+  },
+  "parity_issues": [],
+  "code_review_findings": {
+    "strategy_center_split": "VERIFIED via code: StrategyCenter.jsx L149-171 splits lib into `deployed` (isLiveMetric(metricOf(s))) and `rest`, rendering Section with data-testid 'strategy-section-live' (label 'LIVE / PAPER · N') and 'strategy-section-test' (label 'TEST & EDIT · N'). Logic mirrors mobile isLiveMetric (L23). LibraryCard, deploy button, onOpen handler all preserved inside sections. Empty sections auto-hide (items.length === 0 ? null).",
+    "import_direct_button": "VERIFIED via code: ImportStrategyModal.jsx L172-177 renders <Button data-testid='import-direct-btn' onClick={saveDirect} disabled={savingDirect || analyzing || !raw.trim()}> with label 'Save without AI'. saveDirect() (L75-86) calls api.importDirect({raw_content,source_format,name}), sets draft state, transitions setStep('review') on success, shows toast, and never invokes AI. Both buttons use mutual disable during either busy state.",
+    "api_wiring": "VERIFIED: /app/frontend/src/lib/api.js L214 exports importDirect via POST /library/import/direct; libraryDelete (L208) present for cleanup."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Main agent: manually self-test by (a) logging in as owner, (b) dismissing all onboarding overlays, (c) clicking bottom-nav STRATEGY tab, (d) confirming strategy-section-live and strategy-section-test both render with cards, (e) opening Add > Import, pasting sample JSON, clicking 'Save without AI', and (f) verifying transition to import-review with ai_skipped=true in the network response.",
+    "Consider a testing bypass (?skipOnboarding=1 query flag or localStorage default) to make the onboarding overlays dismissable in one shot for automation."
+  ],
+  "critical_code_review_comments": [
+    "Both fixes are correctly wired at the code level; no logical issues detected in StrategyCenter.jsx (sectioning) or ImportStrategyModal.jsx (Save-without-AI button + mutual disable)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "Code-review PASS; Live UI test BLOCKED by onboarding chain"},
+  "seed_data_creation": "None (would have used TEST_DirectImport_JSON with cleanup DELETE /api/library/{id} but couldn't reach the modal)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The public preview repeatedly serves an onboarding chain (Coming Soon waitlist, Welcome to Ananta, Start with Paper Trading, Provisioning checklist ending in 'ENTER ANANTA'). To reach Strategy Center: (1) login owner, (2) click every dismiss button in order — 'Continue to Cockpit' → 'Skip for Now' → 'ENTER ANANTA' — with waits between, (3) THEN click bottom-nav STRATEGY (not the ananta:navigate custom event, which fires before HeaderActionPortal mounts). Data-testids to assert: strategy-section-live, strategy-section-test (labels contain 'LIVE'/'TEST'), import-direct-btn, import-analyze-btn, import-modal, import-review. Cleanup: DELETE /api/library/{id} for any TEST_ prefixed record."
+}

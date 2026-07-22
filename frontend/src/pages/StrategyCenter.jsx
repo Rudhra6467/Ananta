@@ -19,6 +19,8 @@ import MetricExplainer from "@/components/MetricExplainer";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 
 const ICONS = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
+// A strategy is "live" only when its engine metric is actively running (mirrors mobile isLiveMetric).
+const isLiveMetric = (m) => !!m && !!m.enabled && m.status !== "DISABLED" && m.status !== "ERROR";
 const STATUS = {
     LIVE: "text-atlas-positive border-atlas-positive/40 bg-atlas-positive/10",
     PAPER: "text-atlas-cyan border-atlas-cyan/40 bg-atlas-cyan/10",
@@ -144,13 +146,29 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     <button onClick={clearFilters} className="mt-3 font-mono text-[11px] text-atlas-cyan hover:underline">Clear filters</button>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-3 md:gap-5" data-testid="strategy-grid">
-                    {lib.map((s) => (
-                        <LibraryCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner}
-                            onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
-                            onDeploy={load} />
-                    ))}
-                </div>
+                (() => {
+                    const metricOf = (s) => (s.internal || s.wireable) ? metrics?.[s.engine_key] : null;
+                    const deployed = lib.filter((s) => isLiveMetric(metricOf(s)));
+                    const rest = lib.filter((s) => !isLiveMetric(metricOf(s)));
+                    const Section = ({ label, items, testid }) => items.length === 0 ? null : (
+                        <div className="space-y-3" data-testid={testid}>
+                            <div className="label-tag">{label} · {items.length}</div>
+                            <div className="grid grid-cols-2 gap-3 md:gap-5">
+                                {items.map((s) => (
+                                    <LibraryCard key={s.id} s={s} metric={metricOf(s)} isOwner={isOwner}
+                                        onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
+                                        onDeploy={load} />
+                                ))}
+                            </div>
+                        </div>
+                    );
+                    return (
+                        <div className="space-y-5" data-testid="strategy-grid">
+                            <Section label="LIVE / PAPER" items={deployed} testid="strategy-section-live" />
+                            <Section label="TEST & EDIT" items={rest} testid="strategy-section-test" />
+                        </div>
+                    );
+                })()
             )}
 
             <AddStrategyChooser open={addChooser} onOpenChange={setAddChooser}
