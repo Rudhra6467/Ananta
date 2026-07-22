@@ -1,0 +1,54 @@
+{
+  "summary": "iter83 verification of P0 + P1 + P2 across backend + web (mobile validated at code-parity). Backend pytest 10/10 PASS (/app/test_reports/pytest/iter83_results.xml). Web UI PASS on P0 Protective-Exit card + P2 deep-link ('Test in Research Lab' on a cloned strategy detail navigates to Research > Validate with the clone pre-selected — the wizard opens on step 2 with the STRATEGY step already checked, and lab run for that clone returns non-zero trades attributed to it via the same endpoint tested in pytest). Iter82 orphan bug is FIXED: DELETE /api/library/{clone-key} now unregisters from /api/strategy/registry (confirmed by curl + pytest test_delete_removes_from_registry). Cleanup: iter83 test clone (clone-6a13f50a) deleted, registry has zero clone-* orphans at end.\n\nBackend pytest (10/10):\n  P0 - test_all_four_toggles_persist_false PASS — PUT {structural_stop_enabled, ema_trend_loss_enabled, structure_failure_enabled, strat_exit_enabled} all False → GET roundtrips all False.\n  P0 - test_toggles_flip_back_to_true PASS.\n  P0 - test_profile_overrides_carry_regime_and_method PASS — profile_overrides.hunter carries {allowed_regimes:['trending'], method:'atr_trailing', trail_arm_pct:2.1, ...} and GET roundtrips.\n  P0 - test_clear_profile_overrides PASS.\n  P1 - test_import_direct_json_no_ai PASS — POST /api/library/import/direct returns ai_skipped=True + draft id.\n  P1 - test_import_direct_rejects_empty PASS (400).\n  P1 - test_import_direct_rejects_bad_json PASS (422).\n  P2 - test_clone_appears_in_registry PASS.\n  P2 - test_lab_backtest_non_zero_trades PASS — clone-XXXX ran to DONE in ~45s, non-zero trades in per_symbol['BTC/USD'], strategy_breakdown attributed to clone.\n  P2 - test_delete_removes_from_registry PASS — orphan bug from iter82 CONFIRMED FIXED.\n\nWeb UI PASS on: (a) Exit Engine > Risk Monitor: [data-testid='rm-protective-exits'] card renders 4 toggles + Save Settings button; all 4 toggles present with correct data-testid. Screenshot /tmp/iter83_web_riskmonitor.png. (b) P2 deep-link: catalog-test-lab button on clone detail card exists; clicking navigates to /research (Validate wizard); wizard opens on the Dataset step with the STRATEGY step ✓ pre-completed = the clone was pre-selected in step 1. Screenshot /tmp/iter83_web_deeplink.png.\n\nMobile code-parity confirmed by inspection (this iteration re-uses iter82 mobile evidence). /app/mobile/app/(tabs)/workspace.tsx:588-596 renders the same 4 toggles (structural_stop_enabled, ema_trend_loss_enabled, structure_failure_enabled, strat_exit_enabled) under testID rm-protective-exits with the same rm-toggle-{key} pattern + rm-save-settings (line 612). /app/mobile/app/(tabs)/strategy.tsx:146-147 renders sections 'LIVE / PAPER' and 'TEST & EDIT'. /app/mobile/app/strategy/[id].tsx:136 wires testID='detail-test-strategy' → router.push('/(tabs)/research', {strat: id}). /app/mobile/app/library/import.tsx:146-149 wires testID='import-direct-btn' Save-without-AI.\n\nPARITY GAPS FOUND:\n  1. Web Strategy Center does NOT implement the LIVE/PAPER vs TEST & EDIT sectioning that mobile has. StrategyCenter.jsx renders a flat grid at line 147 (grid-cols-2). Mobile /app/mobile/app/(tabs)/strategy.tsx:146-147 correctly groups deployed vs rest. This is a P1 scope item.\n  2. Web ImportStrategyModal has NO 'Save without AI' direct-import button. grep '-rn library/import/direct' /app/frontend/src returned 0 hits. Only /app/frontend/src/components/ImportStrategyModal.jsx uses the AI-analyze path (import-analyze-btn / import-approve-btn). Mobile /app/mobile/app/library/import.tsx:146 has testID='import-direct-btn'. This is a P1 scope item.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "P1 Strategy Center sectioning (web)", "issue": "Web StrategyCenter.jsx has no LIVE/PAPER vs TEST & EDIT section headers — flat grid at line 147. Mobile is correct.", "affected_selectors": ["[data-testid=strategy-grid]"]},
+        {"flow": "P1 Save without AI direct import (web)", "issue": "ImportStrategyModal.jsx does not expose the direct-save-without-AI button. Only Analyze-with-AI path is wired. Endpoint /api/library/import/direct works (see pytest) — just needs a UI button.", "affected_selectors": ["[data-testid=import-analyze-btn]"]}
+      ],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Strategy Center sectioning", "platform": "web", "issue": "Mobile renders LIVE/PAPER and TEST & EDIT section headers; web renders a flat grid.", "expected": "Both surfaces group deployed vs undeployed strategies with section headers.", "actual": "Web /app/frontend/src/pages/StrategyCenter.jsx:147 renders a single flat grid — no section split."},
+    {"flow": "Save without AI direct import", "platform": "web", "issue": "Backend endpoint /api/library/import/direct works, but only the mobile library/import screen exposes a 'Save without AI' button (testID=import-direct-btn). Web ImportStrategyModal lacks this button.", "expected": "Both surfaces expose a Save-without-AI action in the import flow.", "actual": "Web import modal only exposes Analyze-with-AI path."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter83_p0_p1_p2.py",
+    "/app/test_reports/pytest/iter83_results.xml",
+    "/tmp/iter83_web_riskmonitor.png",
+    "/tmp/iter83_web_deeplink.png"
+  ],
+  "action_items": [
+    "P1 web: add LIVE/PAPER vs TEST & EDIT sectioning in /app/frontend/src/pages/StrategyCenter.jsx grid (match mobile strategy.tsx:130-150).",
+    "P1 web: add a 'Save without AI' button to /app/frontend/src/components/ImportStrategyModal.jsx that POSTs to /api/library/import/direct (endpoint confirmed working via pytest). Mirror mobile /app/mobile/app/library/import.tsx:146 testID='import-direct-btn'.",
+    "OPTIONAL LOW: Consider expanding the auto-shown strategy chips in Research > Validate so a pre-selected clone doesn't require 'Load more' to be visible (iter82 comment carried over)."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py:128-131 correctly adds the 4 protective-exit boolean fields to SettingsUpdate — PUT persistence + GET round-trip confirmed.",
+    "/app/backend/server.py:3138-3174 import_direct endpoint uses path '/library/import/direct' (singular 'import') — the review request references '/library/imports/direct' (plural). The plural path does NOT exist. Both mobile client and this iteration's pytest use the singular path — matching the server. No action needed unless docs need aligning.",
+    "/app/frontend/src/pages/StrategyCenter.jsx:147 uses a flat grid — no deployed-vs-rest split. Mobile /app/mobile/app/(tabs)/strategy.tsx:130-150 correctly splits. Web parity gap.",
+    "/app/frontend/src/components/ImportStrategyModal.jsx lacks any call to /api/library/import/direct. Web parity gap.",
+    "/app/backend/models.py:326-329 Settings model correctly defaults all 4 protective-exit toggles to True — safe backward-compat.",
+    "iter82 registry orphan bug is FIXED: /app/backend/strategy/declarative_defs.py:unregister_imported must now also unregister from the schema REGISTRY, since curl+pytest confirm DELETE /api/library/{clone-key} => GET /api/strategy/registry no longer lists the deleted clone."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter83_p0_p1_p2.py"
+  ],
+  "success_rate": {"backend": "100% (10/10 pytest)", "frontend": "web PASS on P0 + P2 deep-link; web MISSING P1 sectioning + P1 Save-without-AI; mobile code-parity confirmed"},
+  "test_credentials": "owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — verified working via login POST + /api/settings PUT + /api/library/*/clone + /api/library/import/direct.",
+  "seed_data_creation": "One clone (clone-6a13f50a) was created for UI verification and DELETEd at the end. Registry confirmed empty of clone-* orphans post-cleanup. Pytest fixture also created + deleted its own clone.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "P0 (protective-exit toggles + per-strategy overrides), P1 mobile (Strategy Center sectioning + Save-without-AI + disable-twice via focus-refetch — confirmed via code inspection; iter82 mobile UI evidence still valid), and P2 (custom-clone Lab deep-link) are all VERIFIED. TWO P1 web parity gaps need main-agent fix: (1) StrategyCenter.jsx grid needs LIVE/PAPER vs TEST & EDIT sectioning; (2) ImportStrategyModal.jsx needs a 'Save without AI' button POSTing to /api/library/import/direct. Backend endpoint already works. Retest pytest with `pytest tests/test_iter83_p0_p1_p2.py -v` (~90s, 10 tests). If retesting mobile, restart 'sudo supervisorctl restart mobile' — Expo does not hot-reload reliably.",
+  "rca of the issue": "N/A — iter82 orphan bug was fixed by the main agent between iter82 and iter83 (curl + pytest confirmed). Two remaining P1 web parity gaps identified above are missing features (never implemented on web), not regressions."
+}
