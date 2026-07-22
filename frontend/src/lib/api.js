@@ -166,6 +166,8 @@ export const api = {
     labConsolidatedReport: (runIds, periodLabel) => client.post("/lab/reports/consolidated",
         { run_ids: runIds, period_label: periodLabel }, { responseType: "blob" }).then((r) => r.data),
     labDeployExitConfig: (payload) => client.post("/lab/deploy-exit-config", payload).then((r) => r.data),
+    configBundleExport: () => client.get("/settings/config-bundle").then((r) => r.data),
+    configBundleImport: (bundle) => client.post("/settings/config-bundle", bundle).then((r) => r.data),
     labPropose: (runId) => client.post(`/lab/runs/${runId}/propose`).then((r) => r.data),
     deleteLabRun: (id) => client.delete(`/lab/runs/${id}`).then((r) => r.data),
     labApplyProposal: (pid) => client.post(`/lab/proposals/${pid}/apply`).then((r) => r.data),

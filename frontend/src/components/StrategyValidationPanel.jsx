@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2, ChevronDown, ChevronRight, Save, Trophy } from "lucide-react";
+import { FlaskConical, Play, Download, Loader2, Sparkles, SlidersHorizontal, Rocket, Check, X, Trash2, ChevronDown, ChevronRight, Save, Trophy, Copy } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -576,6 +576,9 @@ export default function StrategyValidationPanel() {
             {/* Quick-deploy a winning per-strategy exit straight to the paper engine */}
             <QuickDeployExit />
 
+            {/* Copy the full trading config between environments (preview <-> production) */}
+            <ConfigSync />
+
             {/* runs */}
             <div className="mt-8">
                 <div className="flex items-center justify-between mb-3">
@@ -757,6 +760,76 @@ function QuickDeployExit() {
                     Deploy to Paper
                 </Button>
             </div>
+        </div>
+    );
+}
+
+// Config Sync — export the full trading config on one environment and import it on
+// another (preview <-> production). Secrets, trading_mode and the kill-switch are never
+// included by the backend, so importing can't change safety-critical state.
+function ConfigSync() {
+    const [busy, setBusy] = useState(false);
+    const [text, setText] = useState("");
+    const [summary, setSummary] = useState(null);
+
+    const doExport = async () => {
+        setBusy(true);
+        try {
+            const bundle = await api.configBundleExport();
+            const json = JSON.stringify(bundle, null, 2);
+            const blob = new Blob([json], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "ananta-config-bundle.json";
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+            try { await navigator.clipboard.writeText(json); } catch { /* clipboard optional */ }
+            setText(json);
+            toast.success("CONFIG EXPORTED", { description: "Downloaded + copied to clipboard. Import it on production after publishing." });
+        } catch (e) {
+            toast.error("EXPORT FAILED", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally { setBusy(false); }
+    };
+
+    const doImport = async () => {
+        let bundle;
+        try { bundle = JSON.parse(text); }
+        catch { toast.error("INVALID JSON", { description: "Paste a valid exported config bundle." }); return; }
+        setBusy(true); setSummary(null);
+        try {
+            const r = await api.configBundleImport(bundle);
+            setSummary(r);
+            toast.success("CONFIG IMPORTED", { description: `${(r.settings_applied || []).length} settings + ${(r.strategy_states_applied || []).length} strategy toggles applied. Trading mode & keys untouched.` });
+        } catch (e) {
+            toast.error("IMPORT FAILED", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="mt-4 border border-atlas-border rounded-lg p-4 bg-atlas-panel" data-testid="config-sync">
+            <div className="flex items-center gap-2 mb-1">
+                <Copy className="w-4 h-4 text-atlas-cyan" />
+                <span className="font-heading tracking-wide text-sm text-atlas-text">CONFIG SYNC · PREVIEW ⇄ PRODUCTION</span>
+            </div>
+            <div className="font-mono text-[10px] text-atlas-textSecondary mb-3">
+                Export the full trading config here, then paste &amp; import it on the other environment. Exchange keys, trading mode and the kill-switch are never copied.
+            </div>
+            <div className="flex items-center gap-3 mb-3">
+                <Button size="sm" variant="outline" data-testid="config-export-btn" onClick={doExport} disabled={busy} className="gap-1.5 h-8">
+                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Export config
+                </Button>
+                <Button size="sm" data-testid="config-import-btn" onClick={doImport} disabled={busy || !text.trim()} className="gap-1.5 h-8">
+                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />} Import &amp; apply
+                </Button>
+            </div>
+            <textarea data-testid="config-json" value={text} onChange={(e) => setText(e.target.value)}
+                placeholder="Paste an exported config bundle JSON here to import it on this environment…"
+                className="w-full h-28 bg-atlas-bg border border-atlas-border rounded p-2 font-mono text-[10px] text-atlas-text" />
+            {summary && (
+                <div className="mt-2 font-mono text-[10px] text-atlas-textSecondary" data-testid="config-import-summary">
+                    Applied {(summary.settings_applied || []).length} settings · regimes {JSON.stringify(summary.allowed_regimes)} · lot ${summary.normal_lot_usd} · strategies {JSON.stringify(summary.strategy_states_applied)}.
+                </div>
+            )}
         </div>
     );
 }

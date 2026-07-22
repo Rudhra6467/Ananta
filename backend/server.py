@@ -63,7 +63,7 @@ from auth import authenticate, is_owner_request, require_owner, seed_owner, seed
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
 from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
-from models import MarketSnapshot, Portfolio
+from models import MarketSnapshot, Portfolio, RiskSettings
 from news_source import get_cache_info, get_current_summary
 from position_watcher import PositionWatcher
 from research import ResearchResolverLoop, resolve_counterfactuals, summarize_breaker_accuracy, summarize_funnel, summarize_missed_opportunities, summarize_research, summarize_rejections, summarize_rsi_distribution, summarize_strategy_lab, summarize_winner_profile, summarize_zone_effectiveness
@@ -2188,6 +2188,71 @@ async def lab_deploy_exit_config(body: DeployExitConfigReq):
     return {"ok": True, "strategy": body.strategy,
             "profile_overrides": saved.profile_overrides,
             "paper_active": body.set_paper_active}
+
+
+# Fields never included in a portable config bundle: secrets + safety flags + metadata.
+# This keeps import idempotent-safe: it can NEVER flip live/paper, trip the kill-switch,
+# or leak/overwrite exchange API keys across environments.
+_CONFIG_BUNDLE_EXCLUDE = {
+    "id", "updated_at", "trading_mode", "manual_kill_switch",
+    "coinbase_api_key", "coinbase_api_secret", "kraken_api_key", "kraken_api_secret",
+}
+_BUNDLE_STRATS = ["hunter", "squeeze", "continuation"]
+
+
+@api_router.get("/settings/config-bundle", dependencies=[Depends(require_owner)])
+async def export_config_bundle():
+    """Export the portable trading-config bundle (settings + strategy toggles) for copying
+    between environments. Excludes secrets, trading_mode and the kill-switch."""
+    s = await load_settings(db)
+    raw = s.model_dump()
+    settings_out = {k: v for k, v in raw.items() if k not in _CONFIG_BUNDLE_EXCLUDE}
+    states = []
+    for key in _BUNDLE_STRATS:
+        m = await db.strategy_meta.find_one({"key": key}, {"_id": 0, "key": 1, "enabled": 1, "status": 1})
+        if m:
+            states.append({"key": key, "enabled": m.get("enabled", True), "status": m.get("status", "PAPER")})
+    return {"kind": "ananta_config_bundle", "version": 1,
+            "exported_at": datetime.now(UTC).isoformat(),
+            "settings": settings_out, "strategy_states": states}
+
+
+class ConfigBundleIn(BaseModel):
+    kind: str | None = None
+    version: int | None = None
+    settings: dict = {}
+    strategy_states: list[dict] = []
+
+
+@api_router.post("/settings/config-bundle", dependencies=[Depends(require_owner)])
+async def import_config_bundle(bundle: ConfigBundleIn):
+    """Apply a config bundle exported from another environment. Silently drops any excluded
+    keys (secrets / trading_mode / kill-switch) so it can never change safety-critical state."""
+    if bundle.kind and bundle.kind != "ananta_config_bundle":
+        raise HTTPException(status_code=400, detail="not an ananta_config_bundle")
+    s = await load_settings(db)
+    applied = []
+    valid = set(RiskSettings.model_fields.keys())
+    for k, v in (bundle.settings or {}).items():
+        if k in _CONFIG_BUNDLE_EXCLUDE or k not in valid:
+            continue
+        setattr(s, k, v)
+        applied.append(k)
+    saved = await save_settings(db, s)
+    states_applied = []
+    for st in (bundle.strategy_states or []):
+        key = st.get("key")
+        if key not in _BUNDLE_STRATS:
+            continue
+        await db.strategy_meta.update_one(
+            {"key": key},
+            {"$set": {"key": key, "enabled": bool(st.get("enabled", True)),
+                      "status": st.get("status", "PAPER")}}, upsert=True)
+        states_applied.append(key)
+    return {"ok": True, "settings_applied": applied, "strategy_states_applied": states_applied,
+            "allowed_regimes": saved.allowed_regimes, "normal_lot_usd": saved.normal_lot_usd,
+            "profile_overrides": saved.profile_overrides,
+            "note": "trading_mode, kill-switch and exchange keys are intentionally NOT changed by import."}
 
 
 

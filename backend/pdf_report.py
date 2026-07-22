@@ -724,6 +724,7 @@ def build_trades_report(
     start_label: str | None = None,
     end_label: str | None = None,
     summary: dict | None = None,
+    scorecard_strategy: str | None = "squeeze",
 ) -> bytes:
     """Clean, chronological printout of EXECUTED trades over a date range.
 
@@ -763,7 +764,84 @@ def build_trades_report(
     ]
     if summary:
         flow.extend(_trades_summary_block(s, summary))
+    if scorecard_strategy:
+        flow.extend(_scorecard_block(s, ordered, strategy=scorecard_strategy))
     flow.extend(_trades_block(s, ordered))  # already oldest-first
 
     doc.build(flow, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
+
+
+
+# ---------------------------------------------------------------------------
+# Daily paper-test scorecard — tracks a strategy's live paper trades against the
+# user's aggressive targets (win rate 38-48%, profit factor 1.4-1.8) plus Max
+# Drawdown and MFE capture. Renders even with zero trades (shows the targets).
+# ---------------------------------------------------------------------------
+def _band_status(v, lo, hi):
+    if v is None:
+        return "—"
+    if v < lo:
+        return "BELOW TARGET"
+    if v > hi:
+        return "ABOVE TARGET"
+    return "ON TARGET"
+
+
+def _scorecard_block(s, trades: list, strategy: str = "squeeze",
+                     win_target=(38.0, 48.0), pf_target=(1.4, 1.8),
+                     base_equity: float = 1200.0):
+    label = strategy.replace("_", " ").title()
+    sells = [t for t in trades
+             if t.get("side") == "SELL" and (t.get("strategy") or "").lower() == strategy.lower()
+             and (t.get("status", "FILLED") or "FILLED") == "FILLED"]
+    header = ["Metric", "Value", "Target", "Status"]
+    widths = [1.7 * inch, 1.4 * inch, 1.5 * inch, 1.7 * inch]
+    title = [Paragraph(f"{label} Paper-Test Scorecard", s["h2"]),
+             Paragraph("Live paper trades for this strategy vs the aggressive validation targets. "
+                       "Populates as the 7-10 day test accumulates closed trades.", s["subtitle"])]
+    if not sells:
+        rows = [
+            ["Win rate", "no trades yet", f"{win_target[0]:g}-{win_target[1]:g}%", "AWAITING DATA"],
+            ["Profit factor", "no trades yet", f"{pf_target[0]:g}-{pf_target[1]:g}", "AWAITING DATA"],
+            ["Max drawdown", "no trades yet", "lower is better", "AWAITING DATA"],
+            ["MFE capture", "no trades yet", "higher is better", "AWAITING DATA"],
+        ]
+        return title + [_kv_table(s, header, rows, widths),
+                        Paragraph(f"No closed {label} trades in this range yet.", s["italic"]),
+                        Spacer(1, 12)]
+
+    n = len(sells)
+    pnls = [float(t.get("pnl", 0.0) or 0.0) for t in sells]
+    wins = sum(1 for p in pnls if p > 0)
+    gw = sum(p for p in pnls if p > 0)
+    gl = -sum(p for p in pnls if p < 0)
+    win_rate = round(wins / n * 100, 1)
+    pf = round(gw / gl, 2) if gl > 0 else (None if gw == 0 else 999.99)
+    # Max drawdown on the chronological realised-P&L equity curve.
+    eq = base_equity
+    peak = eq
+    maxdd = 0.0
+    for t in sorted(sells, key=lambda x: x.get("timestamp", "")):
+        eq += float(t.get("pnl", 0.0) or 0.0)
+        peak = max(peak, eq)
+        if peak > 0:
+            maxdd = max(maxdd, (peak - eq) / peak * 100.0)
+    maxdd = round(maxdd, 2)
+    # MFE capture: aggregate realised return vs aggregate favourable excursion.
+    tot_mfe = sum(float(t.get("mfe_pct") or 0.0) for t in sells if (t.get("mfe_pct") or 0) > 0)
+    tot_ret = sum(float(t.get("return_pct") or 0.0) for t in sells)
+    capture = round(tot_ret / tot_mfe * 100, 1) if tot_mfe > 0 else None
+
+    pf_disp = ("∞" if (pf and pf >= 999) else (f"{pf:.2f}" if pf is not None else "—"))
+    rows = [
+        ["Win rate", f"{win_rate}%", f"{win_target[0]:g}-{win_target[1]:g}%", _band_status(win_rate, *win_target)],
+        ["Profit factor", pf_disp, f"{pf_target[0]:g}-{pf_target[1]:g}", _band_status(pf, *pf_target)],
+        ["Max drawdown", f"{maxdd}%", "lower is better", ("WATCH" if maxdd >= 10 else "OK")],
+        ["MFE capture", (f"{capture}%" if capture is not None else "—"), "higher is better",
+         ("STRONG" if (capture or 0) >= 40 else "LOW" if capture is not None else "—")],
+    ]
+    note = Paragraph(
+        f"Based on {n} closed {label} trade{'s' if n != 1 else ''}. Small samples are directional; "
+        f"re-read after ~30-40 trades. Drawdown vs a ${base_equity:g} baseline.", s["italic"])
+    return title + [_kv_table(s, header, rows, widths), note, Spacer(1, 12)]

@@ -937,3 +937,22 @@ Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
 - NEW web UI: "QUICK-DEPLOY EXIT → PAPER" card in StrategyValidationPanel (Research>Validate>Advanced):
   strategy + method + TP%/SL% → api.labDeployExitConfig. Verified end-to-end (screenshot: success toast
   "DEPLOYED TO PAPER · squeeze → Fixed % 5.0% TP / 3.2% SL"). Also "Consolidated Report (N)" multi-select verified.
+
+## Daily Paper-Test Scorecard (2026-07-22)
+- Added _scorecard_block in pdf_report.py, wired into build_trades_report (default scorecard_strategy="squeeze").
+  Shows Win rate (target 38-48%), Profit factor (target 1.4-1.8), Max drawdown, MFE capture — each with
+  Value/Target/Status. Renders empty-state ("AWAITING DATA") when no closed strategy trades yet. Appears in
+  GET /api/report/trades.pdf (daily trade report). Verified: empty + synthetic-populated PDFs + live endpoint 200.
+- PROD NOTE: production has a SEPARATE database — publishing pushes CODE, not the preview DB config
+  (profile_overrides / allowed_regimes / normal_lot_usd). User must RE-APPLY the Squeeze config on production
+  after publishing (Quick-Deploy button + regime=COMPRESSION + lot $150) and verify trading_mode=PAPER.
+
+## Config Sync (Preview <-> Production) (2026-07-22)
+- NEW: GET/POST /api/settings/config-bundle (owner). Export returns portable bundle {kind, version,
+  exported_at, settings(73 fields), strategy_states[hunter/squeeze/continuation]}. EXCLUDES secrets
+  (kraken/coinbase keys), trading_mode, manual_kill_switch, id, updated_at. Import applies whitelisted
+  RiskSettings fields + strategy toggles; silently drops excluded keys (verified: injected kraken_api_key/
+  trading_mode=LIVE/kill were IGNORED; trading_mode stayed PAPER). Safe cross-env config copy.
+- NEW web UI: "CONFIG SYNC · PREVIEW ⇄ PRODUCTION" card in StrategyValidationPanel (Research>Validate>Advanced):
+  Export config (download JSON + clipboard) + Import & apply (paste JSON). Verified via screenshot.
+- Mobile: not added (analyst/launch-night desktop workflow).
