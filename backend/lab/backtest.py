@@ -79,6 +79,7 @@ def run_backtest(
     target_loss: float = 4.0,
     atr_params: dict | None = None,
     live_entry_gates: bool = False,
+    decl_overrides: dict | None = None,
 ) -> dict:
     """Replay one symbol over [start_ms, end_ms] on `timeframe` candles.
 
@@ -97,11 +98,19 @@ def run_backtest(
                 setattr(s, k, v)
 
     allowed = {x.lower() for x in strategies} if strategies else set(ALL_STRATEGIES)
-    # Declarative (catalog) strategies selected for this run — evaluated via the shared
-    # declarative engine so they fire real entries in the Lab (parity with the deploy path).
-    # Default params from the catalog definition keep the backtest deterministic.
+    # Declarative strategies selected for this run — evaluated via the shared declarative
+    # engine so they fire real entries in the Lab (parity with the deploy path).
+    #   * catalog strategies → spec + default params from the hardcoded DECLARATIVE registry.
+    #   * CUSTOM (imported / cloned) strategies → spec + resolved params passed in via
+    #     `decl_overrides` (keyed by lowercased engine key), because this backtest runs in an
+    #     isolated worker PROCESS that has no in-memory imported-strategy registry.
     decl_specs: dict[str, tuple] = {}
     for _k in allowed:
+        if decl_overrides and _k in decl_overrides:
+            _ov = decl_overrides[_k]
+            if _ov and (_ov.get("spec") or {}).get("entry"):
+                decl_specs[_k] = (_ov["spec"], _ov.get("params") or {})
+            continue
         _d = DECLARATIVE.get(_k)
         if _d:
             decl_specs[_k] = (_d["spec"], {p.id: p.default for p in _d["params"]})
@@ -562,6 +571,7 @@ def run_multi_exit(
     strategies: list | tuple | set | None = None,
     configs: list[dict] | None = None,
     live_entry_gates: bool = False,
+    decl_overrides: dict | None = None,
 ) -> dict:
     """Replay the (identical) entry set under every exit config and return a comparison
     block: per-config headline metrics + the best engine ranked by return-over-drawdown.
@@ -579,6 +589,7 @@ def run_multi_exit(
             target_loss=cfg.get("target_loss", 4.0),
             atr_params=cfg.get("atr_params"),
             live_entry_gates=live_entry_gates,
+            decl_overrides=decl_overrides,
         )
         if "error" in r:
             rows[cfg["key"]] = {"label": cfg["label"], "error": r["error"]}

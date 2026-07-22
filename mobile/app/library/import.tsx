@@ -53,7 +53,23 @@ export default function ImportStrategy() {
       const d = await api.importAnalyze({ raw_content: raw, source_format: fmt, name: name || undefined });
       setDraft(d); setStep("review");
     } catch (e: any) {
-      Alert.alert("Analysis failed", e?.message || "Could not analyze the strategy");
+      const msg = e?.message || "Could not analyze the strategy";
+      const credits = /credit|budget|quota|402|insufficient/i.test(msg);
+      Alert.alert("Analysis failed", credits
+        ? "AI credits are exhausted. You can still 'Save without AI' and edit the strategy manually."
+        : msg);
+    } finally { setBusy(false); }
+  };
+
+  const saveDirect = async () => {
+    if (!isOwner) return Alert.alert("Owner login required", "Log in as the owner to import strategies.");
+    if (!raw.trim()) return Alert.alert("Paste your strategy code first");
+    setBusy(true);
+    try {
+      const d = await api.importDirect({ raw_content: raw, source_format: fmt, name: name || undefined });
+      setDraft(d); setStep("review");
+    } catch (e: any) {
+      Alert.alert("Could not save", e?.message || "Direct import failed. For JSON, check the syntax.");
     } finally { setBusy(false); }
   };
 
@@ -125,8 +141,16 @@ export default function ImportStrategy() {
           <Pressable testID="import-analyze-btn" onPress={analyze} disabled={busy || !raw.trim()}
             style={[styles.primaryBtn, (busy || !raw.trim()) && { opacity: 0.5 }]}>
             {busy ? <ActivityIndicator color={colors.bg} /> : <Ionicons name="sparkles" size={16} color={colors.bg} />}
-            <Text style={styles.primaryBtnTxt}>{busy ? "Analyzing…" : "Analyze with AI"}</Text>
+            <Text style={styles.primaryBtnTxt}>{busy ? "Working…" : "Analyze with AI"}</Text>
           </Pressable>
+          <Pressable testID="import-direct-btn" onPress={saveDirect} disabled={busy || !raw.trim()}
+            style={[styles.secondaryBtn, (busy || !raw.trim()) && { opacity: 0.5 }]}>
+            <Ionicons name="save-outline" size={15} color={colors.teal} />
+            <Text style={styles.secondaryBtnTxt}>Save without AI</Text>
+          </Pressable>
+          <Text style={[type.small, { textAlign: "center", marginTop: 6, color: colors.textFaint }]}>
+            No credits needed. Best for JSON — you can edit details on the next screen.
+          </Text>
         </>
       ) : (
         <View testID="import-review">
@@ -257,6 +281,8 @@ const styles = StyleSheet.create({
   codeInput: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.sm, padding: spacing.md, color: colors.text, fontSize: 12, minHeight: 180, marginTop: 6, fontFamily: "monospace" },
   primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, marginTop: spacing.lg },
   primaryBtnTxt: { color: colors.bg, fontWeight: "800", fontSize: 14 },
+  secondaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "transparent", borderWidth: 1, borderColor: colors.teal, borderRadius: radius.sm, paddingVertical: 12, marginTop: spacing.sm },
+  secondaryBtnTxt: { color: colors.teal, fontWeight: "800", fontSize: 13 },
   statRow: { flexDirection: "row", gap: spacing.sm },
   statCard: { flex: 1, alignItems: "center", paddingVertical: spacing.md },
   issueRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 },

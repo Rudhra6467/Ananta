@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable, Modal, TextInput, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../src/api";
 import { useAuth } from "../../src/auth";
@@ -11,7 +11,9 @@ import { AddStrategySheet } from "../../src/components/AddStrategySheet";
 import { FirstVisitTip } from "../../src/components/FirstVisitTip";
 import { colors, spacing, type, radius } from "../../src/theme";
 
-const STATUS_TONE: Record<string, any> = { LIVE: "teal", PAPER: "teal", TESTING: "amber", OPTIMIZING: "amber", ERROR: "red", DISABLED: "muted", CATALOG: "neutral" };
+// A strategy counts as "live" (running in paper or live) when enabled and not off/errored —
+// same rule the Research tab uses.
+const isLiveMetric = (m: any) => !!m && !!m.enabled && m.status !== "DISABLED" && m.status !== "ERROR";
 
 const FILTER_FIELDS = [
   { key: "market_regime", label: "Market Regime" },
@@ -68,11 +70,16 @@ export default function StrategyLibrary() {
     return api.libraryList(params).then((d: any) => setLib(d.strategies || [])).catch(() => setLib([]));
   }, [query, favOnly, filters]);
 
-  useEffect(() => { api.libraryFacets().then(setFacets).catch(() => {}); }, []);
-  useEffect(() => { api.strategyMetrics().then((d: any) => setMetrics(d.metrics || {})).catch(() => {}); }, []);
-  useEffect(() => { load(); }, [load]);
+  const loadMetrics = useCallback(() => api.strategyMetrics().then((d: any) => setMetrics(d.metrics || {})).catch(() => {}), []);
 
-  const onRefresh = () => { setRefreshing(true); Promise.all([load(), api.strategyMetrics().then((d: any) => setMetrics(d.metrics || {})).catch(() => {})]).finally(() => setRefreshing(false)); };
+  useEffect(() => { api.libraryFacets().then(setFacets).catch(() => {}); }, []);
+  useEffect(() => { loadMetrics(); }, [loadMetrics]);
+  useEffect(() => { load(); }, [load]);
+  // Refetch when the tab regains focus so a state change made on the detail screen
+  // (e.g. disabling a strategy) is reflected immediately — fixes the "disable twice" bug.
+  useFocusEffect(useCallback(() => { load(); loadMetrics(); }, [load, loadMetrics]));
+
+  const onRefresh = () => { setRefreshing(true); Promise.all([load(), loadMetrics()]).finally(() => setRefreshing(false)); };
   const toggleFilter = (field: string, val: string) => setFilters((f) => {
     const cur = f[field] || [];
     return { ...f, [field]: cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val] };
@@ -120,11 +127,27 @@ export default function StrategyLibrary() {
           <Pressable onPress={clearFilters} testID="library-clear"><Text style={{ color: colors.teal, marginTop: 6, fontWeight: "700" }}>Clear filters</Text></Pressable>
         </View>
       ) : (
-        <View style={styles.grid} testID="strategy-grid">
-          {lib.map((s: any) => (
-            <StrategyCard key={s.id} s={s} metric={(s.internal || s.wireable) ? metrics?.[s.engine_key] : null} isOwner={isOwner} onOpen={() => open(s)} onReload={load} />
-          ))}
-        </View>
+        (() => {
+          const metricOf = (s: any) => (s.internal || s.wireable) ? metrics?.[s.engine_key] : null;
+          const deployed = lib.filter((s: any) => isLiveMetric(metricOf(s)));
+          const rest = lib.filter((s: any) => !isLiveMetric(metricOf(s)));
+          const Section = ({ label, items }: { label: string; items: any[] }) => items.length === 0 ? null : (
+            <View style={{ marginBottom: spacing.md }}>
+              <Text style={styles.sectionHdr}>{label} · {items.length}</Text>
+              <View style={styles.grid}>
+                {items.map((s: any) => (
+                  <StrategyCard key={s.id} s={s} metric={metricOf(s)} isOwner={isOwner} onOpen={() => open(s)} onReload={() => { load(); loadMetrics(); }} />
+                ))}
+              </View>
+            </View>
+          );
+          return (
+            <View testID="strategy-grid">
+              <Section label="LIVE / PAPER" items={deployed} />
+              <Section label="TEST & EDIT" items={rest} />
+            </View>
+          );
+        })()
       )}
 
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
@@ -175,6 +198,8 @@ function StrategyCard({ s, metric, isOwner, onOpen, onReload }: { s: any; metric
   const wired = !!(s.internal || (s.wireable && s.engine_key));
   const status = localStatus || (wired ? (metric?.status || "PAPER") : "CATALOG");
   const deployed = status === "PAPER" || status === "LIVE";
+  // Binary "live" indicator matching the Research tab (enabled & not off/errored).
+  const live = wired && (localStatus ? (localStatus === "PAPER" || localStatus === "LIVE") : isLiveMetric(metric));
 
   const last = metric?.last_trade ? timeAgo(metric.last_trade) : null;
   const activity = wired
@@ -203,7 +228,9 @@ function StrategyCard({ s, metric, isOwner, onOpen, onReload }: { s: any; metric
               <Ionicons name="pencil" size={15} color={colors.textMuted} />
             </Pressable>
           )}
-          <View testID={`card-status-${s.id}`}><Pill label={status} tone={STATUS_TONE[status] || "muted"} dot /></View>
+          {wired ? (
+            <View testID={`card-status-${s.id}`}><Pill label={live ? "LIVE ON" : "LIVE OFF"} tone={live ? "teal" : "muted"} dot /></View>
+          ) : null}
         </View>
       </View>
 
@@ -236,6 +263,7 @@ function StrategyCard({ s, metric, isOwner, onOpen, onReload }: { s: any; metric
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bg },
+  sectionHdr: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1, marginBottom: spacing.sm, textTransform: "uppercase" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   addHeaderBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.teal, alignItems: "center", justifyContent: "center" },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },

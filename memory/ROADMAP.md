@@ -1,5 +1,12 @@
 # Ananta — Unified Roadmap (VALIDATION-FIRST ARCHITECTURE)
 
+> **P2 CLOSED (2026-06, post-launch):** ✅ Custom (imported/cloned) strategies now EXECUTE in the full
+> Research Lab (backtest, exit-comparison, health-sweep) — the last gap. They already ran live + in the
+> standalone import/library backtests. Fix: parent process resolves each selected custom key's declarative
+> spec+params and passes them as picklable `decl_overrides` into the isolated Lab worker process (which had
+> no in-memory imported registry). Verified pytest 3/3 + regression 9/9 + e2e (clone → 29 Lab trades). See CHANGELOG.
+
+
 > **P3 UPDATE (2026-07-09, iter37):** ✅ Phase A — per-strategy engine configs SHIPPED. Engine resolves each
 > strategy's params from its active config (account-level risk stays global); activation no longer clobbers
 > the global RiskSettings. Web + mobile activate/revert UI + backend tested (32/32). See CHANGELOG iter37.

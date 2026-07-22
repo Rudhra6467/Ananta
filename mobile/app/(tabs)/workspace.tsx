@@ -540,6 +540,8 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
       breakout_min_confidence: settings.breakout_min_confidence, max_concurrent_positions: settings.max_concurrent_positions,
       allowed_regimes: Array.isArray(settings.allowed_regimes) ? settings.allowed_regimes : [],
       max_daily_loss_pct: settings.max_daily_loss_pct, max_spread_pct: settings.max_spread_pct, normal_lot_usd: settings.normal_lot_usd,
+      structural_stop_enabled: settings.structural_stop_enabled, ema_trend_loss_enabled: settings.ema_trend_loss_enabled,
+      structure_failure_enabled: settings.structure_failure_enabled, strat_exit_enabled: settings.strat_exit_enabled,
     };
     try {
       const s = await api.updateSettings(patch);
@@ -579,6 +581,19 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
           <Text style={[styles.rmStatusVal, { color: colors.teal }]} testID="rm-active-name">{active.typeLabel} ●</Text>
         </View>
         {active.rows.map((r) => (<SummaryRow key={r.label} label={r.label} value={r.value} />))}
+      </Card>
+
+      {/* PROTECTIVE EXIT CONTROLS — turn off aggressive native-engine exits that close early.
+          Global defaults; per-strategy overrides live in each strategy's exit config. */}
+      <Card testID="rm-protective-exits" style={{ marginBottom: spacing.md }}>
+        <SectionLabel>PROTECTIVE EXIT CONTROLS</SectionLabel>
+        <Text style={[type.small, { marginTop: 4, marginBottom: spacing.sm, lineHeight: 17 }]}>
+          Global on/off for the aggressive native-engine exits. Fixed-% exits are unaffected.
+        </Text>
+        <ToggleRow label="Structural Stop" desc="Exit when a validated support zone breaks. The hard %-stop always stays on." k="structural_stop_enabled" value={settings.structural_stop_enabled !== false} isOwner={isOwner} onSave={saveBool} />
+        <ToggleRow label="EMA Trend-Loss Exit" desc="Exit on a close below the 20-EMA / dead-cross" k="ema_trend_loss_enabled" value={settings.ema_trend_loss_enabled !== false} isOwner={isOwner} onSave={saveBool} />
+        <ToggleRow label="Structure-Failure Exit" desc="Exit on a lower-low with dead momentum" k="structure_failure_enabled" value={settings.structure_failure_enabled !== false} isOwner={isOwner} onSave={saveBool} />
+        <ToggleRow label="Strategy Exit Rule" desc="Honour a strategy's own declarative exit rule (STRAT_EXIT)" k="strat_exit_enabled" value={settings.strat_exit_enabled !== false} isOwner={isOwner} onSave={saveBool} />
       </Card>
 
       {/* SAFEGUARDS — account-level protection */}

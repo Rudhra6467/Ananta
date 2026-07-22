@@ -360,6 +360,37 @@ class LabWorker:
             await self.db.lab_runs.update_one({"id": rid}, {"$set": {
                 "status": "FAILED", "error": str(e), "finished_at": _now()}})
 
+    async def _resolve_custom_specs(self, strategies) -> dict:
+        """Resolve declarative spec + params for any SELECTED custom (imported/cloned) strategy
+        so the worker PROCESS can replay it. The subprocess has no in-memory imported-strategy
+        registry and lab/backtest only knows the hardcoded catalog — so custom specs must be
+        passed in explicitly. Core + catalog strategies return nothing (handled natively in the
+        subprocess). Keyed by lowercased engine key to match run_backtest's `allowed` set."""
+        if not strategies:
+            return {}
+        from strategy.declarative_defs import DECLARATIVE  # noqa: PLC0415
+        from strategy_runtime import resolve_full_params  # noqa: PLC0415
+        core = {"hunter", "squeeze", "continuation"}
+        out: dict = {}
+        for key in strategies:
+            k = str(key).lower()
+            if k in core or k in DECLARATIVE or k in out:
+                continue
+            doc = await self.db.strategy_library.find_one(
+                {"$or": [{"engine_key": key}, {"id": key}],
+                 "declarative_spec": {"$exists": True}}, {"_id": 0})
+            if not doc:
+                continue
+            spec = doc.get("declarative_spec")
+            if not (spec and spec.get("entry")):
+                continue
+            try:
+                params = await resolve_full_params(self.db, key)
+            except Exception:  # noqa: BLE001
+                params = doc.get("engine_params") or {}
+            out[k] = {"spec": spec, "params": params or {}}
+        return out
+
     async def _run_backtest(self, run: dict) -> dict:
         """Orchestrate a backtest cell-by-cell in the parent (accurate progress), while each
         individual replay executes in the worker process. 1h is always run (live parity);
@@ -367,6 +398,9 @@ class LabWorker:
         rid = run["id"]
         symbols = run["symbols"]
         start, end = run.get("start_ms"), run.get("end_ms")
+        # Custom (imported/cloned) strategies must be resolved here in the parent process
+        # (which has DB + the imported registry) and passed into the worker as picklable specs.
+        custom_specs = await self._resolve_custom_specs(run.get("strategies"))
         overrides = dict(setting_overrides=run.get("setting_overrides"),
                          profile_overrides=run.get("profile_overrides"),
                          strategies=run.get("strategies"),
@@ -374,7 +408,8 @@ class LabWorker:
                          target_profit=run.get("target_profit", 5.0),
                          target_loss=run.get("target_loss", 4.0),
                          atr_params=run.get("atr_params"),
-                         live_entry_gates=(run.get("exit_source") == "live"))
+                         live_entry_gates=(run.get("exit_source") == "live"),
+                         decl_overrides=custom_specs)
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
         base_tf = run.get("timeframe") or "1h"
         # Primary execution timeframe the user picked (1h default; 30m/15m optional).
@@ -401,7 +436,8 @@ class LabWorker:
         cmp_overrides = dict(setting_overrides=run.get("setting_overrides"),
                              profile_overrides=run.get("profile_overrides"),
                              strategies=run.get("strategies"),
-                             live_entry_gates=(run.get("exit_source") == "live"))
+                             live_entry_gates=(run.get("exit_source") == "live"),
+                             decl_overrides=custom_specs)
         # Each cell = 1 chosen-config backtest + 1 exit-comparison (5 configs in one task).
         total = (len(symbols) or 1) * len(timeframes) * 2
         step = 0
@@ -503,7 +539,9 @@ class LabWorker:
 
         for sk in strategies:
             per_symbol, multi_tf, exit_cmp = {}, {}, {}
-            base = {"strategies": [sk], "exit_method": "native", "target_profit": 5.0, "target_loss": 4.0}
+            custom_specs = await self._resolve_custom_specs([sk])
+            base = {"strategies": [sk], "exit_method": "native", "target_profit": 5.0,
+                    "target_loss": 4.0, "decl_overrides": custom_specs}
             for sym in symbols:
                 by_tf = {}
                 for tf in tfs:
@@ -521,7 +559,8 @@ class LabWorker:
             # one exit-engine comparison on the primary symbol / 1h → "best exit"
             psym = symbols[0]
             cr = await self._run_cell(_run_multi_exit_one,
-                                      {"symbol": psym, "start_ms": start, "end_ms": end, "timeframe": "1h", "strategies": [sk]},
+                                      {"symbol": psym, "start_ms": start, "end_ms": end, "timeframe": "1h",
+                                       "strategies": [sk], "decl_overrides": custom_specs},
                                       self.EXIT_COMPARISON_BUDGET_S)
             if "error" not in cr:
                 exit_cmp[psym] = {"1h": cr}

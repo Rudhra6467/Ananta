@@ -113,6 +113,7 @@ export const api = {
   importFormats: () => get<any>("/library/import/formats"),
   importDetect: (raw_content: string) => post<any>("/library/import/detect", { raw_content }),
   importAnalyze: (payload: any) => post<any>("/library/import/analyze", payload),
+  importDirect: (payload: any) => post<any>("/library/import/direct", payload),
   importList: () => get<any>("/library/imports"),
   importUpdate: (id: string, patch: any) => put<any>(`/library/imports/${id}`, { patch }),
   importApprove: (id: string) => post<any>(`/library/imports/${id}/approve`, {}),

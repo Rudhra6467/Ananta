@@ -3135,6 +3135,45 @@ async def import_analyze(payload: ImportAnalyzeReq):
     return draft
 
 
+@api_router.post("/library/import/direct", dependencies=[Depends(require_owner)])
+async def import_direct(payload: ImportAnalyzeReq):
+    """Save an imported strategy WITHOUT any AI analysis (consumes no LLM credits). For JSON the
+    parsed object is used directly as the extraction; other formats get a minimal editable draft.
+    Unblocks users with no credits. (Executable-in-engine support is P2.)"""
+    import strategy_import  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+
+    raw = (payload.raw_content or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="raw_content is required")
+    detected = strategy_import.detect_format(raw)
+    fmt = payload.source_format if payload.source_format and payload.source_format != "auto" else detected["best"]
+    if fmt not in strategy_import.ADAPTERS:
+        fmt = detected["best"]
+
+    extraction: dict = {}
+    if fmt == "json":
+        try:
+            parsed = _json.loads(raw)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=422,
+                detail="Invalid JSON — fix the syntax or use Analyze with AI.") from e
+        if isinstance(parsed, dict):
+            extraction = parsed
+    extraction.setdefault("ai_summary", "Imported without AI analysis.")
+    extraction.setdefault("conversion", {
+        "notes": "Saved directly without AI conversion — rules were not auto-validated to the engine.",
+        "confidence_score": 0})
+
+    draft = strategy_import.build_draft(
+        raw_source=raw, source_format=fmt, detected=detected,
+        extraction=extraction, name_override=payload.name)
+    draft["ai_skipped"] = True
+    await db.strategy_imports.insert_one({**draft})
+    draft.pop("_id", None)
+    return draft
+
+
 @api_router.get("/library/imports", dependencies=[Depends(require_owner)])
 async def import_list():
     """List saved import drafts (most recent first)."""
