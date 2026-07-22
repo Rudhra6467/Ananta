@@ -125,6 +125,10 @@ class SettingsUpdate(BaseModel):
     trail_arm_pct: float | None = None
     trail_distance_pct: float | None = None
     profit_protection_enabled: bool | None = None
+    structural_stop_enabled: bool | None = None
+    ema_trend_loss_enabled: bool | None = None
+    structure_failure_enabled: bool | None = None
+    strat_exit_enabled: bool | None = None
     exit_method_pref: str | None = None
     fixed_target_pct: float | None = None
     asset_exit_overrides: dict | None = None

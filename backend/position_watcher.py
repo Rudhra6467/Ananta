@@ -370,8 +370,9 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
         except Exception:
             bars_1h = None
 
+        _prof = profile_for(pos.strategy, settings)
         decision = evaluate_exit_engine(pos, snap.price, bars_1h, settings, emergency=emergency,
-                                         profile_override=profile_for(pos.strategy, settings))
+                                         profile_override=_prof)
         # Deployed exit method: "Fixed % Target + Stop" uses a fixed TP/SL (matches the Lab
         # 'fixed' backtest); everything else runs the Universal Exit Engine. Emergency
         # (kill-switch) always uses the engine so its KILL module fires.
@@ -381,7 +382,7 @@ async def watch_once(db: AsyncIOMotorDatabase) -> list[dict]:
         # trigger — universal safety exits (stops/kill/floors) keep top priority; only when the
         # engine says "hold" do we consult the strategy's declarative exit spec. Skipped in
         # Fixed-% mode (fixed TP/SL are the only exits).
-        elif decision.action == ACT_NONE and bars_1h and _is_declarative(pos.strategy):
+        elif decision.action == ACT_NONE and bars_1h and _is_declarative(pos.strategy) and _prof.strat_exit_enabled:
             with contextlib.suppress(Exception):
                 spec = _decl_spec(pos.strategy)
                 if spec and (spec.get("exit")):

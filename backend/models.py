@@ -321,6 +321,12 @@ class RiskSettings(BaseModel):
     trail_arm_pct: float = 1.6  # arm the trail sooner to protect winners
     trail_distance_pct: float = 0.9  # tighter leash on the static trail fallback
     profit_protection_enabled: bool = True  # Module F breakeven + profit-floor (ON by default)
+    # --- Protective-exit aggressiveness controls (global defaults; override per-strategy via
+    #     profile_overrides[strategy][<same key>]). Turn OFF to stop premature exits. ---
+    structural_stop_enabled: bool = True     # Module A: exit when a validated support zone breaks
+    ema_trend_loss_enabled: bool = True      # Module D: exit on close below 20-EMA / dead-cross
+    structure_failure_enabled: bool = True   # Module S: exit on lower-low + dead momentum
+    strat_exit_enabled: bool = True          # honour a declarative strategy's own exit rule (STRAT_EXIT)
     # volatility-adaptive trailing envelope: dynamic_trail = clamp(k * ATR_percentile, min, max)
     dynamic_trail_enabled: bool = True  # when True (and ATR percentile known) the trail distance flexes with volatility
     dynamic_trail_k: float = 0.06  # slope: ATR percentile 0-100 -> ~0-6% before clamping

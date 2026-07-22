@@ -956,3 +956,19 @@ Verified iter 81 (backend pytest 5/5 + web 3/3 + mobile 3/3, all PASS):
 - NEW web UI: "CONFIG SYNC · PREVIEW ⇄ PRODUCTION" card in StrategyValidationPanel (Research>Validate>Advanced):
   Export config (download JSON + clipboard) + Import & apply (paste JSON). Verified via screenshot.
 - Mobile: not added (analyst/launch-night desktop workflow).
+
+## P0 — Exit-aggressiveness controls + per-strategy regime filter (2026-07-22)
+- Configurable protective exits (global default in RiskSettings + per-strategy via profile_overrides[strat]):
+  structural_stop_enabled (Module A STRUCTURAL_STOP candidate; hard %-stop always stays), ema_trend_loss_enabled
+  (Module D), structure_failure_enabled (Module S / profile.structure_exit), strat_exit_enabled (declarative
+  STRAT_EXIT). Wired: exit_engine.profile_for() layers global→per-strategy; modules gated; position_watcher
+  gates STRAT_EXIT; lab/backtest.py uses profile_for for Lab parity. SettingsUpdate + config-bundle include them.
+- Per-strategy regime filter: profile_overrides[strat]["allowed_regimes"]. trading_engine._per_strategy_regimes
+  + strategy_regime_ok applied at hunter (overrides global allowed_regimes), squeeze, continuation gates.
+- Per-strategy exit method (Global vs Custom) already supported via profile_overrides (Quick-Deploy writes it).
+- Web UI: "PROTECTIVE EXIT CONTROLS" card in Exit Engine > Risk Monitor (4 global toggles, saved via Save Settings).
+- Verified: unit tests (module gating + profile_for layering + regime helper), regression pytest 13/13,
+  PUT/GET /settings round-trip, UI screenshot. Fixed-% strategies (e.g. Squeeze) bypass these natively.
+- DEFERRED to P1 (told user): per-strategy exit-module + regime UI in (mobile) Strategy Details; Strategy Center
+  UX (Live/Paper vs Test/Edit sections, card label "Live On/Off", inconsistent buttons, disable-twice bug);
+  Add-Strategy feedback + remove forced-AI on JSON import. P2 (post-launch): custom strategies executable in Lab+live.

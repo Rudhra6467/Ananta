@@ -35,6 +35,8 @@ export default function RiskMonitorPanel() {
             breakout_min_confidence: s.breakout_min_confidence, max_concurrent_positions: s.max_concurrent_positions,
             allowed_regimes: Array.isArray(s.allowed_regimes) ? s.allowed_regimes : [],
             max_daily_loss_pct: s.max_daily_loss_pct, max_spread_pct: s.max_spread_pct, normal_lot_usd: s.normal_lot_usd,
+            structural_stop_enabled: s.structural_stop_enabled, ema_trend_loss_enabled: s.ema_trend_loss_enabled,
+            structure_failure_enabled: s.structure_failure_enabled, strat_exit_enabled: s.strat_exit_enabled,
         };
         try {
             const next = await api.updateSettings(patch);
@@ -74,6 +76,16 @@ export default function RiskMonitorPanel() {
                 {active.rows.map((r, i) => (
                     <SummaryRow key={r.label} label={r.label} value={r.value} last={i === active.rows.length - 1} />
                 ))}
+            </Card>
+
+            {/* PROTECTIVE EXIT CONTROLS — reduce premature exits on the native Universal Exit Engine.
+                Turn a module OFF to stop it closing trades early. (Per-strategy overrides live in
+                each strategy's exit config; these are the global defaults.) */}
+            <Card icon={Shield} title="PROTECTIVE EXIT CONTROLS" subtitle="Global on/off for the aggressive native-engine exits. Fixed-% exits are unaffected." testId="rm-protective-exits">
+                <ToggleField label="Structural Stop" desc="Exit when a validated support zone breaks (Module A). The hard %-stop always stays on." k="structural_stop_enabled" value={s.structural_stop_enabled !== false} isOwner={isOwner} onSave={update} />
+                <ToggleField label="EMA Trend-Loss Exit" desc="Exit on a close below the 20-EMA / dead-cross (Module D)" k="ema_trend_loss_enabled" value={s.ema_trend_loss_enabled !== false} isOwner={isOwner} onSave={update} />
+                <ToggleField label="Structure-Failure Exit" desc="Exit on a lower-low with dead momentum (Module S)" k="structure_failure_enabled" value={s.structure_failure_enabled !== false} isOwner={isOwner} onSave={update} />
+                <ToggleField label="Strategy Exit Rule (STRAT_EXIT)" desc="Honour a strategy's own declarative exit rule" k="strat_exit_enabled" value={s.strat_exit_enabled !== false} isOwner={isOwner} onSave={update} last />
             </Card>
 
             {/* SAFEGUARDS */}

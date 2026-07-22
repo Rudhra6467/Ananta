@@ -64,6 +64,9 @@ class StrategyProfile:
     breakeven_r: float = 1.0       # lock stop to breakeven once MFE >= this many R (Module F)
     trail_arm_r: float = 2.0       # arm the ATR trail once MFE >= this many R (Module C)
     structure_exit: bool = True    # enable structure-failure exit (Module S)
+    structural_stop_enabled: bool = True  # enable the STRUCTURAL_STOP candidate in Module A
+    ema_trend_loss_enabled: bool = True   # enable Module D (EMA trend-loss exit)
+    strat_exit_enabled: bool = True       # honour the strategy's own declarative exit rule (STRAT_EXIT)
 
 
 PROFILES: dict[str, StrategyProfile] = {
@@ -87,12 +90,26 @@ def get_profile(strategy: str | None) -> StrategyProfile:
 
 
 def profile_for(strategy: str | None, settings=None) -> StrategyProfile:
-    """Base profile patched with any Research-Lab-promoted overrides in settings.
-    Returns the untouched base profile when no overrides exist (live behaviour default)."""
+    """Base profile patched with (1) global protective-exit toggles from settings, then
+    (2) any per-strategy Research-Lab / user overrides in settings.profile_overrides
+    (per-strategy wins over global). Returns the untouched base profile when settings is
+    None and no overrides exist (live behaviour default)."""
     from dataclasses import replace
     prof = get_profile(strategy)
-    ov = getattr(settings, "profile_overrides", None) if settings is not None else None
     key = (strategy or "hunter").lower()
+    # (1) global protective-exit defaults from RiskSettings.
+    if settings is not None:
+        g = {}
+        for pf, sf in (("structural_stop_enabled", "structural_stop_enabled"),
+                       ("ema_trend_loss_enabled", "ema_trend_loss_enabled"),
+                       ("structure_exit", "structure_failure_enabled"),
+                       ("strat_exit_enabled", "strat_exit_enabled")):
+            if hasattr(settings, sf) and getattr(settings, sf) is not None:
+                g[pf] = getattr(settings, sf)
+        if g:
+            prof = replace(prof, **g)
+    # (2) per-strategy overrides win over the global defaults.
+    ov = getattr(settings, "profile_overrides", None) if settings is not None else None
     if ov and ov.get(key):
         valid = {k: v for k, v in ov[key].items() if hasattr(prof, k)}
         if valid:
@@ -184,12 +201,12 @@ def _indicators(bars_4h: list[list[float]] | None) -> dict:
 # ---------------------------------------------------------------------------
 # Module evaluators. Each is pure and returns ExitSignal | None.
 # ---------------------------------------------------------------------------
-def _module_A_structural(pos, last: float, settings) -> ExitSignal | None:
+def _module_A_structural(pos, last: float, settings, prof: StrategyProfile) -> ExitSignal | None:
     """P1 hard-stop bucket: structural stop, % stop, or a locked profit floor breach."""
     sl_pct = eff_setting(settings, pos.symbol, "stop_loss_pct")
     pct_stop = pos.avg_cost * (1.0 - sl_pct / 100.0)
     candidates: list[tuple[float, str, str]] = [(pct_stop, "STOP_LOSS", "Hard %-stop hit")]
-    if pos.structural_stop:
+    if pos.structural_stop and prof.structural_stop_enabled:
         candidates.append((pos.structural_stop, "STRUCTURAL_STOP", "Validated support zone broke"))
     floor = getattr(pos, "locked_profit_floor", None)
     if floor:
@@ -295,7 +312,7 @@ def _module_B_momentum(pos, ind: dict) -> ExitSignal | None:
 
 def _module_D_ema_loss(pos, last: float, ind: dict, prof: StrategyProfile, age_h: float) -> ExitSignal | None:
     """P5: trend health. Close below 20-EMA or a 20/50 dead-cross."""
-    if not ind:
+    if not ind or not prof.ema_trend_loss_enabled:
         return None
     if age_h < prof.ema_settle_hours:
         return None  # don't shake a fresh entry out on entry-bar noise
@@ -389,7 +406,7 @@ def evaluate_exit_engine(
     signals: list[ExitSignal] = []
 
     # P1 — Structural Failure / hard-stop bucket
-    if (s := _module_A_structural(pos, last_price, settings)):
+    if (s := _module_A_structural(pos, last_price, settings, prof)):
         signals.append(s)
     # P2 — Kill Switch / Emergency Stop (injected by the caller)
     if emergency:

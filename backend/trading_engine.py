@@ -177,6 +177,25 @@ def strategy_entry_allowed(states: dict[str, dict], key: str) -> bool:
     return st.get("status") not in ("DISABLED", "ERROR")
 
 
+def _per_strategy_regimes(settings, key: str) -> list | None:
+    """Per-strategy regime allow-list from settings.profile_overrides[key]['allowed_regimes'].
+    Returns None when the strategy has no per-strategy regime override."""
+    ov = getattr(settings, "profile_overrides", None) or {}
+    entry = ov.get((key or "").lower()) or {}
+    regimes = entry.get("allowed_regimes")
+    return regimes if regimes else None
+
+
+def strategy_regime_ok(settings, key: str, regime: str | None) -> bool:
+    """True if the strategy may trade in this regime. Honours a per-strategy override when
+    set; otherwise permissive here (strategy-specific routers still apply their own gate)."""
+    per = _per_strategy_regimes(settings, key)
+    if per is None:
+        return True
+    return regime in per
+
+
+
 async def save_settings(db: AsyncIOMotorDatabase, settings: RiskSettings) -> RiskSettings:
     settings.updated_at = datetime.now(UTC).isoformat()
     await db.settings.replace_one({"id": "singleton"}, settings.model_dump(), upsert=True)
@@ -903,15 +922,16 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         fusion_summary = f"HOLD - Hunter strategy is {_hstate} in the Strategy Center; no new entries."
         decision = "HOLD"
 
-    # --- Global regime filter (opt-in): only open entries in the configured regimes.
-    #     Empty allowed_regimes = trade all (default). Set in Risk Monitor › Entry Setup. ---
-    if decision == "BUY" and settings.allowed_regimes:
+    # --- Regime filter: per-strategy override (profile_overrides[hunter].allowed_regimes)
+    #     wins over the global Risk-Monitor allowed_regimes. Empty = trade all regimes. ---
+    if decision == "BUY":
         _regime = getattr(asset_regime, "regime", None)
-        if _regime not in settings.allowed_regimes:
-            blocked.append(f"REGIME_FILTERED regime={_regime} allowed={settings.allowed_regimes}")
+        _eff = _per_strategy_regimes(settings, "hunter") or settings.allowed_regimes
+        if _eff and _regime not in _eff:
+            blocked.append(f"REGIME_FILTERED regime={_regime} allowed={_eff}")
             fusion_summary = (
                 f"HOLD - current regime {_regime or 'UNKNOWN'} is not in the allowed set "
-                f"{settings.allowed_regimes}; entry filtered by the regime filter."
+                f"{_eff}; entry filtered by the regime filter."
             )
             decision = "HOLD"
 
@@ -1294,6 +1314,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and settings.trading_mode in ("PAPER", "DRY_RUN")
             and strategy_entry_allowed(strategy_states, "squeeze")
             and squeeze_allowed(getattr(asset_regime, "regime", None))
+            and strategy_regime_ok(settings, "squeeze", getattr(asset_regime, "regime", None))
         )
         if squeeze_eligible:
             sq = evaluate_squeeze(bars_1h, vol_expansion_min=squeeze_settings.squeeze_vol_expansion_min)
@@ -1382,6 +1403,7 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             and getattr(settings, "continuation_enabled", True)
             and strategy_entry_allowed(strategy_states, "continuation")
             and continuation_allowed(getattr(asset_regime, "regime", None))
+            and strategy_regime_ok(settings, "continuation", getattr(asset_regime, "regime", None))
         )
         if cont_eligible:
             ct = evaluate_continuation(bars_1h, cont_settings, regime=asset_regime)

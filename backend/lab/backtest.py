@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 from exit_engine import (
     ACT_EXIT_FULL, ACT_EXIT_PARTIAL, ACT_NONE, ACT_TIGHTEN,
-    PARTIAL_FRACTION, evaluate_exit_engine, get_profile,
+    PARTIAL_FRACTION, evaluate_exit_engine, get_profile, profile_for,
 )
 from dataclasses import replace as _dc_replace
 from levels import compute_levels, nearest_support
@@ -342,9 +342,12 @@ def run_backtest(
                     pos = None
             else:
                 # Native Strategy Exit — full Universal Exit Engine (modules A-F, structural, kill).
-                pos_profile = None
+                pos_profile = profile_for(pos.strategy, s)
                 if profile_overrides and pos.strategy in profile_overrides:
-                    pos_profile = _dc_replace(get_profile(pos.strategy), **profile_overrides[pos.strategy])
+                    _valid = {k: v for k, v in profile_overrides[pos.strategy].items()
+                              if hasattr(pos_profile, k)}
+                    if _valid:
+                        pos_profile = _dc_replace(pos_profile, **_valid)
                 d_low = evaluate_exit_engine(pos, bar[_L], window, s, now=now_dt, profile_override=pos_profile)
                 if d_low.action == ACT_EXIT_FULL and d_low.module in ("A", "C", "KILL"):
                     lvl = d_low.stop_price if d_low.stop_price is not None else bar[_L]
