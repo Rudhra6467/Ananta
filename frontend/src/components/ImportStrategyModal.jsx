@@ -79,7 +79,11 @@ export default function ImportStrategyModal({ open, onOpenChange, onImported }) 
             const d = await api.importDirect({ raw_content: raw, source_format: fmt, name: name || undefined });
             setDraft(d);
             setStep("review");
-            toast.success("Saved without AI", { description: "Review & edit the details, then add to your Library." });
+            if (d?.declarable) {
+                toast.success("Executable strategy ready", { description: "Rules compiled to the engine — review, then add to your Library to test & deploy." });
+            } else {
+                toast.success("Saved as a blueprint", { description: "This definition is view-only. Use 'Analyze with AI' (or paste an Ananta rule spec) to make it testable & deployable." });
+            }
         } catch (e) {
             toast.error("Could not save", { description: String(e?.response?.data?.detail || e?.message || "For JSON, check the syntax.") });
         } finally { setSavingDirect(false); }
@@ -165,8 +169,9 @@ function InputStep({ formats, fmt, setFmt, name, setName, raw, setRaw, detected,
             </div>
 
             <div className="flex items-center justify-between pt-1">
-                <div className="font-mono text-[9px] text-atlas-textTertiary max-w-[45%]">
-                    The AI extracts entry/exit logic, risk, indicators &amp; parameters, then flags anything Ananta cannot replicate.
+                <div className="font-mono text-[9px] text-atlas-textTertiary max-w-[45%] leading-relaxed">
+                    <span className="text-atlas-textSecondary">Analyze with AI</span> converts free-form logic into engine rules.
+                    <br /><span className="text-atlas-textSecondary">Save without AI</span> keeps a view-only blueprint — unless your JSON is already in Ananta rule format, then it becomes executable.
                 </div>
                 <div className="flex items-center gap-2">
                     <Button data-testid="import-direct-btn" onClick={saveDirect} disabled={savingDirect || analyzing || !raw.trim()}

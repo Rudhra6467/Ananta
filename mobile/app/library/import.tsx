@@ -68,6 +68,11 @@ export default function ImportStrategy() {
     try {
       const d = await api.importDirect({ raw_content: raw, source_format: fmt, name: name || undefined });
       setDraft(d); setStep("review");
+      if (d?.declarable) {
+        Alert.alert("Executable strategy ready", "Rules compiled to the engine — review, then add to your Library to test & deploy.");
+      } else {
+        Alert.alert("Saved as a blueprint", "This definition is view-only. Use 'Analyze with AI' (or paste an Ananta rule spec) to make it testable & deployable.");
+      }
     } catch (e: any) {
       Alert.alert("Could not save", e?.message || "Direct import failed. For JSON, check the syntax.");
     } finally { setBusy(false); }

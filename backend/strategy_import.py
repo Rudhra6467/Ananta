@@ -204,7 +204,7 @@ def validate_declarative(decl: dict) -> dict:
     claims compilable AND passes the deterministic engine validator."""
     from declarative_engine import validate_spec  # local import avoids cycle at module load
 
-    decl = decl or {}
+    decl = decl if isinstance(decl, dict) else {}
     params = decl.get("params") or {}
     spec = {
         "indicators": decl.get("indicators") or {},
@@ -238,17 +238,23 @@ def build_draft(*, raw_source: str, source_format: str, detected: dict,
     The draft mirrors the library schema (so review/edit uses the same fields) plus import
     provenance + validation. `approve` later copies the library fields into strategy_library."""
     ex = extraction or {}
+    if not isinstance(ex, dict):
+        ex = {}
     now = datetime.now(UTC).isoformat()
-    name = (name_override or ex.get("name") or "Imported Strategy").strip()
+    name = str(name_override or ex.get("name") or "Imported Strategy").strip() or "Imported Strategy"
     health = _clamp(ex.get("ai_health_score"), 0, 100, 55)
     conf = _clamp(ex.get("ai_confidence"), 0, 100, 60)
-    conv = ex.get("conversion") or {}
+    conv = ex.get("conversion") if isinstance(ex.get("conversion"), dict) else {}
     conv_conf = _clamp(conv.get("confidence_score"), 0, 100, conf)
     validation = validate_extraction(ex)
     decl = validate_declarative(ex.get("declarative") or {})
 
     label = ADAPTERS.get(source_format).label if ADAPTERS.get(source_format) else source_format
-    tf = ex.get("timeframe") or (ex.get("timeframes") or ["1H"])[0]
+    _tfs = ex.get("timeframes")
+    if not isinstance(_tfs, list) or not _tfs:
+        _tfs = ["1H"]
+    tf = ex.get("timeframe") or _tfs[0]
+    tf = str(tf) if tf is not None else "1H"
 
     return {
         "id": _slug(name),
@@ -261,7 +267,7 @@ def build_draft(*, raw_source: str, source_format: str, detected: dict,
         "style": ex.get("style") or ex.get("category") or "Trend Following",
         "ideal_market": ex.get("ideal_market") or "",
         "timeframe": tf,
-        "timeframes": ex.get("timeframes") or [tf],
+        "timeframes": _tfs,
         "risk": ex.get("risk") if ex.get("risk") in _ALLOWED_RISK else "Moderate",
         "market_regimes": ex.get("market_regimes") or [],
         "entry_rules": ex.get("entry_rules") or [],

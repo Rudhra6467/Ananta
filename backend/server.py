@@ -3160,16 +3160,68 @@ async def import_direct(payload: ImportAnalyzeReq):
                 detail="Invalid JSON — fix the syntax or use Analyze with AI.") from e
         if isinstance(parsed, dict):
             extraction = parsed
+            # Power-user path: if the JSON already carries an engine-compatible rule spec at the
+            # top level ({indicators:{...}, entry:[...], exit:[...]} in Ananta's declarative format),
+            # lift it into the declarative block so the strategy compiles to the engine WITHOUT AI —
+            # making it deployable + Research/Lab-runnable, not just a view-only blueprint.
+            if ("declarative" not in extraction
+                    and isinstance(extraction.get("indicators"), dict)
+                    and isinstance(extraction.get("entry"), list)):
+                _entry = extraction.get("entry")
+                _exit = extraction.get("exit") if isinstance(extraction.get("exit"), list) else []
+                _ind = extraction.get("indicators")
+                extraction["declarative"] = {
+                    "compilable": True,
+                    "params": extraction.get("params") or extraction.get("parameters") or {},
+                    "indicators": _ind,
+                    "entry": _entry,
+                    "exit": _exit,
+                    "entry_reason": extraction.get("entry_reason") or "Imported strategy entry",
+                }
+                # Present indicators as the library's display list ({name, params}) instead of the
+                # declarative {id: {fn, ...}} map, so the strategy card renders cleanly.
+                extraction["indicators"] = [
+                    {"name": (v.get("fn") or k), "params": {p: val for p, val in v.items() if p != "fn"}}
+                    for k, v in _ind.items() if isinstance(v, dict)
+                ]
+
+                # Human-readable rule bullets so the draft passes review-validation (which
+                # requires at least one entry rule) and reads clearly in the library.
+                def _bullets(conds):
+                    out = []
+                    for c in conds or []:
+                        if isinstance(c, dict) and c.get("lhs") is not None:
+                            rhs = c.get("rhs")
+                            out.append(f"{c['lhs']} {str(c.get('op', '')).replace('_', ' ')}"
+                                       + (f" {rhs}" if rhs is not None else ""))
+                    return out
+                if not extraction.get("entry_rules"):
+                    extraction["entry_rules"] = _bullets(_entry)
+                if not extraction.get("exit_rules"):
+                    extraction["exit_rules"] = _bullets(_exit)
+    if not isinstance(extraction, dict):
+        extraction = {}
     extraction.setdefault("ai_summary", "Imported without AI analysis.")
     extraction.setdefault("conversion", {
         "notes": "Saved directly without AI conversion — rules were not auto-validated to the engine.",
         "confidence_score": 0})
 
-    draft = strategy_import.build_draft(
-        raw_source=raw, source_format=fmt, detected=detected,
-        extraction=extraction, name_override=payload.name)
+    try:
+        draft = strategy_import.build_draft(
+            raw_source=raw, source_format=fmt, detected=detected,
+            extraction=extraction, name_override=payload.name)
+    except Exception as e:  # noqa: BLE001 — never surface a raw 500 for user-pasted content
+        logger.warning("import_direct build_draft failed: %s", e)
+        raise HTTPException(status_code=422, detail=(
+            "This definition could not be structured into a strategy. For a free-form idea, use "
+            "'Analyze with AI'. For a no-AI import, paste valid JSON (optionally with an Ananta "
+            "declarative rule block to make it executable).")) from e
     draft["ai_skipped"] = True
-    await db.strategy_imports.insert_one({**draft})
+    try:
+        await db.strategy_imports.insert_one({**draft})
+    except Exception as e:  # noqa: BLE001
+        logger.error("import_direct insert failed: %s", e)
+        raise HTTPException(status_code=500, detail="Could not save the draft. Please try again.") from e
     draft.pop("_id", None)
     return draft
 
