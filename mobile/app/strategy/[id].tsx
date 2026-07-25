@@ -10,6 +10,7 @@ import { Card, SectionLabel } from "../../src/components/Card";
 import { Pill } from "../../src/components/Pill";
 import { HealthRing } from "../../src/components/HealthRing";
 import { MetricExplainer } from "../../src/components/MetricExplainer";
+import { StrategyConfigSheet } from "../../src/components/StrategyConfigSheet";
 import { LoadingView, ErrorView } from "../../src/components/StateView";
 import { STRATEGY_LESSON, lessonByKey } from "../../src/academy";
 import { colors, spacing, type, radius, pnlColor } from "../../src/theme";
@@ -40,6 +41,8 @@ export default function StrategyDetail() {
   const { isOwner } = useAuth();
   const { data, loading, error, refresh } = useFetch(api.strategyMetrics, [], 0);
   const [lessonOpen, setLessonOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configFocus, setConfigFocus] = useState<"regime" | "exit">("regime");
 
   if (loading && !data) return <View style={styles.fill}><LoadingView /></View>;
   if (error && !data) return <View style={styles.fill}><ErrorView message={error} onRetry={refresh} /></View>;
@@ -137,6 +140,21 @@ export default function StrategyDetail() {
         <Ionicons name="shield-checkmark" size={16} color={colors.teal} />
         <Text style={styles.testTxt}>TEST THIS STRATEGY</Text>
       </Pressable>
+
+      {/* Strategy configuration: regime filter + exit parameters (identity across live + lab) */}
+      <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
+        <Pressable testID="detail-regime-filter" onPress={() => { setConfigFocus("regime"); setConfigOpen(true); }} style={[styles.cfgBtn, { flex: 1 }]}>
+          <Ionicons name="funnel-outline" size={15} color={colors.teal} />
+          <Text style={styles.cfgTxt}>REGIME FILTER</Text>
+        </Pressable>
+        <Pressable testID="detail-exit-params" onPress={() => { setConfigFocus("exit"); setConfigOpen(true); }} style={[styles.cfgBtn, { flex: 1 }]}>
+          <Ionicons name="options-outline" size={15} color={colors.teal} />
+          <Text style={styles.cfgTxt}>EXIT PARAMS</Text>
+        </Pressable>
+      </View>
+
+      <StrategyConfigSheet visible={configOpen} onClose={() => setConfigOpen(false)} strategyKey={id as string}
+        strategyName={s.name} focus={configFocus} isOwner={isOwner} onSaved={refresh} />
 
       {/* Academy lesson deep-link modal */}
       <Modal visible={lessonOpen} transparent animationType="slide" onRequestClose={() => setLessonOpen(false)}>
@@ -271,6 +289,8 @@ const styles = StyleSheet.create({
   learnRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder },
   testBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: spacing.md, borderWidth: 1, borderColor: colors.tealDim, backgroundColor: colors.tealGlow, borderRadius: radius.md, paddingVertical: spacing.sm + 3 },
   testTxt: { color: colors.teal, fontWeight: "800", letterSpacing: 1, fontSize: 13 },
+  cfgBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingVertical: spacing.sm + 1 },
+  cfgTxt: { color: colors.text, fontWeight: "800", letterSpacing: 0.6, fontSize: 12 },
   learnTxt: { flex: 1, color: colors.teal, fontSize: 13, fontWeight: "700" },
   modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   modalCard: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: 40, borderWidth: 1, borderColor: colors.cardBorder },

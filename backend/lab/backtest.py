@@ -220,6 +220,17 @@ def run_backtest(
 
     # ---- PASS 1: exit-agnostic entry scan (rising-edge). Identical for every exit method,
     # so A/B/C runs share the EXACT same entry set and ONLY the exit logic differs. ----
+    def _prof_regime_ok(key, regime_name) -> bool:
+        """Strategy Profile regime filter (parity with the live engine): a strategy only opens
+        entries in its allowed regimes; a disabled profile never fires. Unconfigured == all."""
+        prof = (profile_overrides or {}).get(key) or (profile_overrides or {}).get(str(key).lower()) or {}
+        if prof.get("enabled") is False:
+            return False
+        regimes = prof.get("allowed_regimes")
+        if not regimes:
+            return True
+        return regime_name in regimes
+
     def _scan_entry(i: int):
         bar = bars[i]
         px = bar[_C]
@@ -231,7 +242,7 @@ def run_backtest(
             return None
         strategy = entry_profile = struct_stop = None
         _conf = None
-        if "hunter" in allowed and hunter_allowed(regime.regime):
+        if "hunter" in allowed and _prof_regime_ok("hunter", regime.regime) and hunter_allowed(regime.regime):
             zones = _zones_at(bar[0], window)
             _htf = None
             if s.htf_trend_enabled:
@@ -246,20 +257,23 @@ def run_backtest(
             if sig.triggered:
                 strategy, entry_profile, struct_stop = "hunter", sig.entry_profile, sig.structural_stop
                 _conf = getattr(sig, "confidence", None) or getattr(sig, "score", None)
-        if strategy is None and "squeeze" in allowed and squeeze_allowed(regime.regime):
+        if strategy is None and "squeeze" in allowed and _prof_regime_ok("squeeze", regime.regime) and squeeze_allowed(regime.regime):
             sq = evaluate_squeeze(window)
             if sq.triggered:
                 strategy, entry_profile, struct_stop = "squeeze", sq.entry_profile, sq.stop_20ma
                 _conf = getattr(sq, "confidence", None) or getattr(sq, "score", None)
-        if strategy is None and "continuation" in allowed and s.continuation_enabled and continuation_allowed(regime.regime):
+        if strategy is None and "continuation" in allowed and s.continuation_enabled and _prof_regime_ok("continuation", regime.regime) and continuation_allowed(regime.regime):
             ct = evaluate_continuation(window, s, regime=regime)
             if ct.triggered:
                 strategy, entry_profile, struct_stop = "continuation", ct.entry_profile, ct.structural_stop
                 _conf = getattr(ct, "confidence", None) or getattr(ct, "score", None)
-        # Declarative catalog strategies (ema-cross, supertrend, turtle, vwap-mr, ...) — no regime
-        # gate; entries come from the strategy's own rule spec, exits from the selected exit method.
+        # Declarative catalog + custom strategies (ema-cross, supertrend, turtle, vwap-mr, ...).
+        # Entries come from each strategy's own rule spec, filtered by its Strategy Profile
+        # allowed-regimes (same rule the live engine applies); exits use the selected method.
         if strategy is None and decl_specs:
             for _dk, (_spec, _params) in decl_specs.items():
+                if not _prof_regime_ok(_dk, regime.regime):
+                    continue
                 try:
                     _dsig = _decl_evaluate(_spec, window, _params)
                 except Exception:

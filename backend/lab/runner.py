@@ -391,6 +391,30 @@ class LabWorker:
             out[k] = {"spec": spec, "params": params or {}}
         return out
 
+    async def _effective_profiles(self, run: dict) -> tuple[dict, dict | None]:
+        """Merge the SAVED per-strategy Strategy Profiles into a run so the Lab honours each
+        strategy's assigned regimes + exit by DEFAULT (run-level overrides still win). For a
+        SINGLE-strategy run it also adopts that strategy's exit method so the Lab answers
+        'how would this exact live strategy perform?'. Returns (profile_overrides, exit_default)."""
+        import strategy_profiles as sp  # noqa: PLC0415
+        doc = await self.db.settings.find_one({"id": "singleton"}, {"_id": 0, "profile_overrides": 1})
+        saved = (doc or {}).get("profile_overrides") or {}
+        merged = {**saved, **(run.get("profile_overrides") or {})}
+        exit_default = None
+        strats = run.get("strategies") or []
+        if len(strats) == 1:
+            prof = sp.normalize_profile(merged.get(strats[0]) or merged.get(str(strats[0]).lower()))
+            method = prof.get("exit_method")
+            if method in ("atr", "fixed"):
+                ep = prof.get("exit_params") or {}
+                exit_default = {"exit_method": method,
+                                "target_profit": ep.get("target_profit", 5.0),
+                                "target_loss": ep.get("target_loss", 4.0)}
+                if method == "atr" and ep.get("atr_multiplier"):
+                    exit_default["atr_params"] = {"multiplier": float(ep["atr_multiplier"]), "period": 14,
+                                                  "trail_activation_pct": 3.0, "trail_distance": 2.0}
+        return merged, exit_default
+
     async def _run_backtest(self, run: dict) -> dict:
         """Orchestrate a backtest cell-by-cell in the parent (accurate progress), while each
         individual replay executes in the worker process. 1h is always run (live parity);
@@ -401,13 +425,14 @@ class LabWorker:
         # Custom (imported/cloned) strategies must be resolved here in the parent process
         # (which has DB + the imported registry) and passed into the worker as picklable specs.
         custom_specs = await self._resolve_custom_specs(run.get("strategies"))
+        prof_overrides, exit_default = await self._effective_profiles(run)
         overrides = dict(setting_overrides=run.get("setting_overrides"),
-                         profile_overrides=run.get("profile_overrides"),
+                         profile_overrides=prof_overrides,
                          strategies=run.get("strategies"),
-                         exit_method=run.get("exit_method", "fixed"),
-                         target_profit=run.get("target_profit", 5.0),
-                         target_loss=run.get("target_loss", 4.0),
-                         atr_params=run.get("atr_params"),
+                         exit_method=(exit_default or {}).get("exit_method", run.get("exit_method", "fixed")),
+                         target_profit=(exit_default or {}).get("target_profit", run.get("target_profit", 5.0)),
+                         target_loss=(exit_default or {}).get("target_loss", run.get("target_loss", 4.0)),
+                         atr_params=(exit_default or {}).get("atr_params", run.get("atr_params")),
                          live_entry_gates=(run.get("exit_source") == "live"),
                          decl_overrides=custom_specs)
         timeframes = ["1h"] + (COMPARE_TIMEFRAMES if run.get("compare_timeframes") else [])
@@ -434,7 +459,7 @@ class LabWorker:
         out, multi_tf, exit_cmp = {}, {}, {}
         tf_results: dict[str, dict] = {}
         cmp_overrides = dict(setting_overrides=run.get("setting_overrides"),
-                             profile_overrides=run.get("profile_overrides"),
+                             profile_overrides=prof_overrides,
                              strategies=run.get("strategies"),
                              live_entry_gates=(run.get("exit_source") == "live"),
                              decl_overrides=custom_specs)

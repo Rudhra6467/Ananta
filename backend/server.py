@@ -64,6 +64,7 @@ from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
 from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
 from models import MarketSnapshot, Portfolio, RiskSettings
+import strategy_profiles as sprofiles
 from news_source import get_cache_info, get_current_summary
 from position_watcher import PositionWatcher
 from research import ResearchResolverLoop, resolve_counterfactuals, summarize_breaker_accuracy, summarize_funnel, summarize_missed_opportunities, summarize_research, summarize_rejections, summarize_rsi_distribution, summarize_strategy_lab, summarize_winner_profile, summarize_zone_effectiveness
@@ -2528,6 +2529,90 @@ async def strategy_set_state(key: str, payload: StrategyState):
     await db.strategy_meta.update_one({"key": key}, {"$set": {"key": key, **updates}}, upsert=True)
     doc = await db.strategy_meta.find_one({"key": key}, {"_id": 0})
     return doc
+
+
+# ---------------------------------------------------------------------------
+# Strategy Profile — the per-strategy identity (allowed regimes + default exit) applied
+# identically across Live, Paper and the Research Lab. Stored in settings.profile_overrides.
+# ---------------------------------------------------------------------------
+class StrategyProfileIn(BaseModel):
+    enabled: bool = True
+    allowed_regimes: list[str] = []
+    exit_method: str = "native"
+    exit_params: dict = {}
+
+
+def _current_profile(settings, key: str) -> dict | None:
+    ov = getattr(settings, "profile_overrides", None) or {}
+    raw = ov.get(key) or ov.get(key.lower())
+    if not raw:
+        return None
+    # Only treat it as a configured profile when it actually carries profile fields.
+    if not any(k in raw for k in ("enabled", "allowed_regimes", "exit_method", "exit_params")):
+        return None
+    return sprofiles.normalize_profile(raw)
+
+
+@api_router.get("/strategy/{key}/profile")
+async def get_strategy_profile(key: str):
+    """Effective Strategy Profile + the shipped recommendation + selectable regimes/exit methods."""
+    if not get_schema(key):
+        raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
+    s = await load_settings(db)
+    current = _current_profile(s, key)
+    eff = current or {"enabled": True, "allowed_regimes": [], "exit_method": "native",
+                      "exit_params": {}, "source": "default"}
+    return {"key": key, "profile": eff, "configured": current is not None,
+            "recommended": sprofiles.recommended_profile(key),
+            "regimes": sprofiles.REGIMES, "exit_methods": sprofiles.EXIT_METHODS,
+            "status": sprofiles.profile_status(current)}
+
+
+def _write_profile(ov: dict, key: str, prof: dict) -> dict:
+    """Merge a normalized profile into profile_overrides[key], preserving any existing
+    exit-engine field patches (structural_stop_enabled, trail_arm_r, …) already stored there."""
+    existing = dict(ov.get(key) or {})
+    existing.update(prof)
+    ov = dict(ov)
+    ov.pop(key.lower(), None)
+    ov[key] = existing
+    return ov
+
+
+@api_router.put("/strategy/{key}/profile", dependencies=[Depends(require_owner)])
+async def put_strategy_profile(key: str, body: StrategyProfileIn):
+    if not get_schema(key):
+        raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
+    prof = sprofiles.normalize_profile(body.model_dump())
+    s = await load_settings(db)
+    s.profile_overrides = _write_profile(dict(getattr(s, "profile_overrides", {}) or {}), key, prof)
+    await save_settings(db, s)
+    return {"ok": True, "key": key, "profile": prof, "status": sprofiles.profile_status(prof)}
+
+
+@api_router.post("/strategy/{key}/profile/apply-recommended", dependencies=[Depends(require_owner)])
+async def apply_recommended_profile(key: str):
+    rec = sprofiles.recommended_profile(key)
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"no recommended profile for '{key}'")
+    prof = sprofiles.normalize_profile(rec)
+    s = await load_settings(db)
+    s.profile_overrides = _write_profile(dict(getattr(s, "profile_overrides", {}) or {}), key, prof)
+    await save_settings(db, s)
+    return {"ok": True, "key": key, "profile": prof, "status": sprofiles.profile_status(prof)}
+
+
+@api_router.post("/strategy/{key}/profile/reset", dependencies=[Depends(require_owner)])
+async def reset_strategy_profile(key: str):
+    """Clear the user's profile so the strategy reverts to defaults (trades all regimes, native exit)."""
+    s = await load_settings(db)
+    ov = dict(getattr(s, "profile_overrides", {}) or {})
+    ov.pop(key, None)
+    ov.pop(key.lower(), None)
+    s.profile_overrides = ov
+    await save_settings(db, s)
+    return {"ok": True, "key": key, "profile": None, "status": sprofiles.profile_status(None)}
+
 
 
 

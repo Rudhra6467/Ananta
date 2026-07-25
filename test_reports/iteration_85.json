@@ -1,0 +1,55 @@
+{
+  "summary": "iter85 CROSS-PLATFORM code review of the new Strategy Profile feature (per-strategy regime filter + default exit method, applied across Live/Paper/Lab). Verified all required data-testids/testIDs are wired correctly on WEB and MOBILE. Backend was already confirmed by main agent (pytest tests/test_strategy_profiles.py 4/4: unconfigured=35 entries, TREND_UP-only=1 entry, disabled=0 entries; curl confirmed apply-recommended/reset and 6 regimes exposed). Live UI verification via browser automation was BLOCKED by two independent issues that both surfaced during this run: (1) the same onboarding-overlay chain documented in iter84 (Coming Soon waitlist -> Welcome -> Provisioning) still fires and cannot be dismissed reliably inside the browser-automation loop-prevention limit; (2) the public ingress at hunter-squeeze-labs.preview.emergentagent.com returned intermittent 502s to browser fetch()/curl during this run (a 'Network issue - retrying shortly' toast surfaced in the app itself), even though backend supervisor logs show 200 OK for /api/auth/login and /api/strategy/*/profile calls from other sessions. Backend service is RUNNING and healthy on 127.0.0.1:8001 (verified via supervisor + logs). Code-review pass on the new UI components is clean and matches the backend contract on both surfaces.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        { "screen": "First-run onboarding", "issues": ["The Coming-Soon/Welcome/Provisioning overlay chain still fires on every fresh session and is hard to dismiss for automated E2E tests. Same finding as iter84 - please expose a ?skipOnboarding=1 URL flag or persist dismissal for owner sessions."] }
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "code_review_findings": {
+    "web_detail_actions": "VERIFIED /app/frontend/src/pages/StrategyCenter.jsx L651-674: StrategyDetail bottom-actions grid now renders FIVE buttons - detail-test-strategy, detail-deploy-manage, detail-regime-filter (new), detail-exit-params (new), detail-edit-parameters. New buttons open StrategyConfigModal via setConfigFocus('regime'|'exit') + setConfigOpen(true). Existing regression testids untouched.",
+    "web_config_modal": "VERIFIED /app/frontend/src/components/StrategyConfigModal.jsx: Dialog with data-testid=strategy-config-modal (L93). All required inner testids present: config-status (L107), config-apply-recommended (L111), config-reset (L114), config-enabled-toggle (L127), config-regimes wrap (L134), config-regime-${r} chips iterated from data.regimes (L142), config-exit wrap (L152), config-exit-${m} chips (L156), config-atr-mult (L163), config-tp (L167), config-sl (L168), config-save (L173). Status label switches to 'Disabled' when enabled=false. Apply Recommended calls api.strategyProfileApplyRecommended and hydrates chips + exit_method. Reset calls api.strategyProfileReset and clears to {enabled:true, allowed_regimes:[], exit_method:'native'}. Save calls api.strategyProfileSave with the full payload then closes.",
+    "mobile_detail_actions": "VERIFIED /app/mobile/app/strategy/[id].tsx: L139 detail-test-strategy preserved, L146 detail-regime-filter (new), L150 detail-exit-params (new), L156 StrategyConfigSheet mounted with visible/strategyKey/focus/isOwner/onSaved props. NOTE: mobile does NOT use detail-deploy-manage/detail-edit-parameters testids - it uses the existing set-state-${key} buttons inside strategy-edit-card (L125-130) and the inline strategy-configs-card (L223) for deploy/state changes and per-strategy config activation. This is the pre-existing mobile pattern and matches the review-request's 'regression: existing detail actions still work' expectation for mobile.",
+    "mobile_config_sheet": "VERIFIED /app/mobile/src/components/StrategyConfigSheet.tsx: Modal wraps a View with testID=strategy-config-sheet (L77). All required testIDs present: config-close (L80), config-status (L90), config-apply-recommended (L95), config-reset (L97), config-enabled-toggle (L104), config-regimes wrap (L115), config-regime-${r} pressables iterated from data.regimes (L122), config-exit wrap (L132), config-exit-${m} pressables (L136), config-atr-mult (L142), config-tp (L145), config-sl (L146), config-save (L151). Same hydrate/apply-recommended/reset/save flow as web using api.strategyProfile*/api.strategyProfileSave/api.strategyProfileApplyRecommended/api.strategyProfileReset from /app/mobile/src/api.ts.",
+    "engine_wiring_and_disabled_state": "PARITY note - StrategyConfigModal.jsx L49 and StrategyConfigSheet.tsx L48 both compute statusLabel identically: disabled -> 'Disabled', enabled+no regimes -> 'Enabled - all regimes', otherwise -> 'Enabled'. Recommended matrix + engine gating is covered by backend pytest 4/4 (per handoff).",
+    "regression_testids_web": "detail-test-strategy (L652), detail-deploy-manage (L656), detail-edit-parameters (L670) all still present and functional in StrategyDetail. No change to existing behaviour."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_strategy_profiles.py",
+    "/app/frontend/src/components/StrategyConfigModal.jsx",
+    "/app/mobile/src/components/StrategyConfigSheet.tsx",
+    "/app/frontend/src/pages/StrategyCenter.jsx (L651-676)",
+    "/app/mobile/app/strategy/[id].tsx (L139-156)"
+  ],
+  "action_items": [
+    "Main agent: self-test the WEB Strategy Configuration modal end-to-end once the preview ingress stabilises (login owner -> dismiss onboarding chain -> STRATEGY tab -> open a wired strategy detail (e.g., ema-cross via library-card) -> click detail-regime-filter -> verify strategy-config-modal opens with 6 regime chips + status badge -> click config-apply-recommended -> verify TREND_UP + COMPRESSION chips highlight and exit switches to ATR -> click config-save -> re-open and verify saved -> click config-reset to cleanup).",
+    "Main agent: self-test the MOBILE Strategy Configuration sheet end-to-end (Expo preview /strategy/ema-cross -> tap detail-regime-filter -> verify strategy-config-sheet opens with same controls -> Apply Recommended -> Save -> Reset to cleanup).",
+    "Ingress: investigate the intermittent 502 responses that the app's own UI surfaced as 'Network issue - retrying shortly' during this test run (backend service itself is healthy per supervisor + logs).",
+    "Onboarding chain still blocks E2E automation - add a ?skipOnboarding=1 flag or persist dismissal for owner-authenticated sessions (repeated finding from iter84)."
+  ],
+  "critical_code_review_comments": [
+    "Web + mobile config components are correctly wired at the code level with matching testids, matching state model, and matching API calls. No issues found in the new components.",
+    "Both components correctly gate write actions on isOwner (Alert/toast if not owner) - matches the owner-only backend policy.",
+    "The 'Disabled' status computation (enabled === false regardless of allowed_regimes) matches the backend semantic and the pytest expectation (off -> zero entries)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (already verified by main agent, 4/4 pytest per handoff)", "frontend": "Code-review PASS on both web + mobile; live UI E2E BLOCKED (onboarding chain + intermittent ingress 502s)" },
+  "test_credentials": "Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (verified against /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Any profile mutations during future testing must be followed by POST /api/strategy/{key}/profile/reset for ema-cross AND rsi-momentum to restore defaults (so live trading isn't left regime-restricted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest 4/4 was already green per iter84 handoff. New feature adds two web buttons (detail-regime-filter, detail-exit-params) opening strategy-config-modal, and two mobile buttons with the same testIDs opening strategy-config-sheet. All inner testids/testIDs verified via code (see code_review_findings). For live UI testing you MUST first dismiss the onboarding overlay chain (Coming Soon waitlist -> Continue to Cockpit; Welcome -> Skip; Provisioning -> ENTER ANANTA) before clicking bottom-nav STRATEGY. Watch out for intermittent ingress 502s (they were flaky during my run - the app surfaces this as 'Network issue - retrying shortly'). Cleanup after any profile mutation: POST /api/strategy/{key}/profile/reset for BOTH the key you touched AND rsi-momentum if you touched it.",
+  "rca of the issue": "N/A - no bug identified; code review passed."
+}

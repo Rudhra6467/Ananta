@@ -186,9 +186,22 @@ def _per_strategy_regimes(settings, key: str) -> list | None:
     return regimes if regimes else None
 
 
+def strategy_profile_disabled(settings, key: str) -> bool:
+    """True when the user has explicitly benched a strategy in its profile (enabled == False).
+    A disabled strategy is never evaluated for entries in any regime."""
+    ov = getattr(settings, "profile_overrides", None) or {}
+    entry = ov.get((key or "").lower()) or {}
+    return entry.get("enabled") is False
+
+
 def strategy_regime_ok(settings, key: str, regime: str | None) -> bool:
-    """True if the strategy may trade in this regime. Honours a per-strategy override when
-    set; otherwise permissive here (strategy-specific routers still apply their own gate)."""
+    """True if the strategy may OPEN an entry in this regime, per its Strategy Profile:
+      * disabled profile        -> never
+      * no regimes configured   -> allowed (unconfigured == trade all, backward compatible)
+      * regimes configured      -> only when the current regime is in the allow-list
+    Applied identically LIVE and in the Research Lab so a strategy behaves the same everywhere."""
+    if strategy_profile_disabled(settings, key):
+        return False
     per = _per_strategy_regimes(settings, key)
     if per is None:
         return True
@@ -923,7 +936,12 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         decision = "HOLD"
 
     # --- Regime filter: per-strategy override (profile_overrides[hunter].allowed_regimes)
-    #     wins over the global Risk-Monitor allowed_regimes. Empty = trade all regimes. ---
+    #     wins over the global Risk-Monitor allowed_regimes. Empty = trade all regimes.
+    #     A disabled Hunter profile (enabled == False) blocks all new entries. ---
+    if decision == "BUY" and strategy_profile_disabled(settings, "hunter"):
+        blocked.append("STRATEGY_PROFILE_DISABLED hunter")
+        fusion_summary = "HOLD - Hunter is disabled in its Strategy Profile (no active regimes)."
+        decision = "HOLD"
     if decision == "BUY":
         _regime = getattr(asset_regime, "regime", None)
         _eff = _per_strategy_regimes(settings, "hunter") or settings.allowed_regimes
@@ -1477,6 +1495,10 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                 if trade_doc is not None:
                     break
                 if not strategy_entry_allowed(strategy_states, _dkey):
+                    continue
+                # Strategy Profile regime filter (parity with the Lab): a declarative strategy
+                # only opens entries in its allowed regimes; disabled profiles never fire.
+                if not strategy_regime_ok(settings, _dkey, getattr(asset_regime, "regime", None)):
                     continue
                 spec = get_declarative_spec(_dkey)
                 dparams = await resolve_full_params(db, _dkey)

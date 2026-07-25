@@ -181,6 +181,10 @@ export const api = {
     strategyRegistry: () => client.get("/strategy/registry").then((r) => r.data),
     strategyMetrics: () => client.get("/strategy/metrics").then((r) => r.data),
     strategySetState: (key, payload) => client.put(`/strategy/${key}/state`, payload).then((r) => r.data),
+    strategyProfile: (key) => client.get(`/strategy/${key}/profile`).then((r) => r.data),
+    strategyProfileSave: (key, payload) => client.put(`/strategy/${key}/profile`, payload).then((r) => r.data),
+    strategyProfileApplyRecommended: (key) => client.post(`/strategy/${key}/profile/apply-recommended`).then((r) => r.data),
+    strategyProfileReset: (key) => client.post(`/strategy/${key}/profile/reset`).then((r) => r.data),
     strategySchema: (key) => client.get(`/strategy/${key}/schema`).then((r) => r.data),
     strategyArchitectChat: (message, sessionId, history) =>
         client.post("/strategy/architect/chat", { message, session_id: sessionId, history }).then((r) => r.data),

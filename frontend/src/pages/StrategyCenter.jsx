@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     Boxes, TrendingUp, Zap, Activity, Plus, ArrowLeft, Copy, Download, Power, Search,
     Loader2, Star, ShieldCheck, BarChart3, Brain, Layers, FileJson, GitBranch, Sparkles,
-    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload, ChevronDown, Trash2,
+    CheckCircle2, Circle, Clock, HeartPulse, Pencil, SlidersHorizontal, Heart, X, Upload, ChevronDown, Trash2, Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -16,6 +16,7 @@ import ImportStrategyModal from "@/components/ImportStrategyModal";
 import { useAuth } from "@/context/AuthContext";
 import { useResearchStore } from "@/lib/researchStore";
 import MetricExplainer from "@/components/MetricExplainer";
+import { StrategyConfigModal } from "@/components/StrategyConfigModal";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 
 const ICONS = { hunter: TrendingUp, squeeze: Zap, continuation: Activity };
@@ -467,6 +468,8 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
     const [showParams, setShowParams] = useState(false);
     const [showManage, setShowManage] = useState(false);
     const [deploying, setDeploying] = useState(false);
+    const [configOpen, setConfigOpen] = useState(false);
+    const [configFocus, setConfigFocus] = useState("regime");
     const paramsRef = useRef(null);
     const Icon = ICONS[sKey] || Boxes;
     const grade = schema?.ai_grade || metric?.grade;
@@ -645,7 +648,7 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
             )}
 
             {/* bottom actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1" data-testid="detail-actions">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1" data-testid="detail-actions">
                 <button data-testid="detail-test-strategy" onClick={testStrategy}
                     className="flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan font-mono text-[12px] font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/20 active:scale-[0.99] transition-all">
                     <ShieldCheck className="w-4 h-4" /> TEST IN RESEARCH LAB
@@ -656,11 +659,21 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                     {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" strokeWidth={2.5} />}
                     {deployed ? "MANAGE IN PAPER" : "DEPLOY TO PAPER"}
                 </button>
+                <button data-testid="detail-regime-filter" onClick={() => { setConfigFocus("regime"); setConfigOpen(true); }}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
+                    <Filter className="w-4 h-4" /> REGIME FILTER
+                </button>
+                <button data-testid="detail-exit-params" onClick={() => { setConfigFocus("exit"); setConfigOpen(true); }}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
+                    <SlidersHorizontal className="w-4 h-4" /> EXIT PARAMETERS
+                </button>
                 <button data-testid="detail-edit-parameters" onClick={openParams}
                     className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
                     <Pencil className="w-4 h-4" /> EDIT PARAMETERS
                 </button>
             </div>
+            <StrategyConfigModal open={configOpen} onClose={() => setConfigOpen(false)} strategyKey={sKey}
+                strategyName={schema?.name || sKey} focus={configFocus} isOwner={isOwner} onSaved={onChanged} />
         </div>
     );
 }
