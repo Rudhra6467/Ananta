@@ -103,3 +103,11 @@ frontend/node_modules/.cache/default-development/6.pack
 credentials.json
 *.key
 .credentials
+
+# SQLite runtime databases (written at runtime / rebuilt on startup — must NOT be tracked)
+backend/data/historical_candles.db
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
