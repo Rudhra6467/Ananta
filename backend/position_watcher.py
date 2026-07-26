@@ -42,10 +42,12 @@ from trading_engine import (
     load_portfolio,
     load_settings,
     log_friction_tally,
+    list_active_tenants,
     process_pending_orders,
     save_portfolio,
     set_symbol_cooldown,
 )
+from tenant_ctx import current_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -427,6 +429,16 @@ class PositionWatcher:
             try:
                 await process_pending_orders(self.db)  # resolve resting maker orders first
                 await watch_once(self.db)
+                # Per-tenant books: resolve resting orders + manage exits for every user.
+                for _tid in await list_active_tenants(self.db):
+                    _tok = current_tenant.set(_tid)
+                    try:
+                        await process_pending_orders(self.db)
+                        await watch_once(self.db)
+                    except Exception as _te:  # noqa: BLE001
+                        logger.warning("tenant watcher %s failed: %s", _tid, _te)
+                    finally:
+                        current_tenant.reset(_tok)
                 settings = await load_settings(self.db)
                 interval = max(5, int(settings.position_watcher_interval_seconds or self.default_interval))
             except Exception as e:

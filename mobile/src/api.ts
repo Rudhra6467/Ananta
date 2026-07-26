@@ -42,6 +42,10 @@ export const api = {
   login: (email: string, password: string) =>
     post<{ token: string; email: string; role: string }>("/auth/login", { email, password }),
   me: () => get<{ email: string; role: string }>("/auth/me"),
+  logout: () => post<any>("/auth/logout"),
+  googleSession: (session_id: string) =>
+    post<{ session_token: string; user: { user_id: string; email: string; role: string; name?: string; picture?: string } }>(
+      "/auth/google/session", { session_id }),
 
   // market + portfolio
   marketSnapshots: () => get<any>("/market/snapshots"),

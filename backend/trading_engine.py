@@ -1585,6 +1585,102 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     }
 
 
+async def list_active_tenants(db: AsyncIOMotorDatabase) -> list[str]:
+    """Every provisioned per-user paper book (tenant_<id> portfolio doc)."""
+    ids: list[str] = []
+    async for doc in db.portfolio.find({"id": {"$regex": "^tenant_"}}, {"_id": 0, "id": 1}):
+        ids.append(str(doc["id"]).removeprefix("tenant_"))
+    return ids
+
+
+async def _apply_buys_for_tenant(db: AsyncIOMotorDatabase, buys: list[dict]) -> None:
+    """Mirror the house engine's BUY decisions into ONE tenant's book, gated by that
+    tenant's own settings (strategy selection, regime allow-list, slot cap, sizing,
+    kill-switch, cooldowns). No market/LLM calls — reuses the already-computed signal.
+    Assumes the caller has set the tenant context var."""
+    settings = await load_settings(db)
+    if settings.manual_kill_switch:
+        return
+    portfolio = _ensure_day_start(await load_portfolio(db))
+    slots_used = sum(1 for p in portfolio.positions if p.quantity > 0)
+    changed = False
+
+    for tr in buys:
+        symbol = tr.get("symbol")
+        if not symbol:
+            continue
+        strategy = tr.get("strategy") or "hunter"
+        regime = tr.get("regime_at_entry")
+        if any(p.symbol == symbol and p.quantity > 0 for p in portfolio.positions):
+            continue
+        if slots_used >= settings.max_concurrent_positions:
+            break
+        if strategy_profile_disabled(settings, strategy):
+            continue
+        if not strategy_regime_ok(settings, strategy, regime):
+            continue
+        if await get_symbol_cooldown(db, symbol):
+            continue
+
+        price = float(tr.get("price") or 0.0)
+        if price <= 0:
+            continue
+        if settings.adaptive_sizing_enabled:
+            lot = max(1.0, float(settings.normal_lot_usd))
+        else:
+            lot = max(1.0, portfolio.cash * float(settings.position_size_pct_max) / 100.0)
+        if lot <= 0 or lot > portfolio.cash:
+            continue
+        qty = lot / price
+        notional, fee = _execute_buy(portfolio, symbol, qty, price, settings.taker_fee_pct)
+        if notional <= 0:
+            continue
+
+        stop_pct = float(getattr(settings, "stop_loss_pct", 2.2)) / 100.0
+        newpos = next((p for p in portfolio.positions if p.symbol == symbol), None)
+        if newpos is not None:
+            newpos.strategy = strategy
+            newpos.regime_at_entry = regime
+            newpos.structural_stop = round(price * (1 - stop_pct), 8)
+            newpos.sector = tr.get("sector")
+            newpos.entry_attribution = tr.get("entry_attribution") or {}
+        mirror = TradeLog(
+            symbol=symbol, side="BUY", quantity=qty, price=price, notional=notional,
+            mode="PAPER", confidence=float(tr.get("confidence") or 0.0), fee_usd=fee,
+            slippage_usd=0.0, strategy=strategy, regime_at_entry=regime,
+            sector=tr.get("sector"), note=f"[MIRROR {strategy}]",
+            entry_attribution=tr.get("entry_attribution") or {},
+        )
+        await db.trades.insert_one(mirror.model_dump())
+        slots_used += 1
+        changed = True
+
+    if changed:
+        await save_portfolio(db, portfolio)
+
+
+async def mirror_to_tenants(db: AsyncIOMotorDatabase, results: list[dict]) -> None:
+    """After the house cycle, copy any BUY entries into every active user book.
+    One shared signal -> many isolated accounts (credit-free copy-trading model)."""
+    buys = [
+        r["trade"] for r in results
+        if isinstance(r.get("trade"), dict)
+        and r["trade"].get("side") == "BUY"
+        and r["trade"].get("tenant_id", OWNER_TENANT) in (OWNER_TENANT, None)
+    ]
+    if not buys:
+        return
+    tenants = await list_active_tenants(db)
+    for tid in tenants:
+        token = current_tenant.set(tid)
+        try:
+            await _apply_buys_for_tenant(db, buys)
+        except Exception:  # noqa: BLE001
+            logger.exception("mirror to tenant %s failed", tid)
+        finally:
+            current_tenant.reset(token)
+
+
 async def evaluate_all(db: AsyncIOMotorDatabase) -> list[dict]:
     settings = await load_settings(db)
     global _SCAN_CYCLE
@@ -1601,6 +1697,9 @@ async def evaluate_all(db: AsyncIOMotorDatabase) -> list[dict]:
         except Exception as e:
             logger.exception("evaluate_symbol failed for %s: %s", sym, e)
             results.append({"symbol": sym, "error": str(e)})
+    # Fan the house decisions out to every isolated user book (credit-free).
+    with contextlib.suppress(Exception):
+        await mirror_to_tenants(db, results)
     return results
 
 

@@ -142,6 +142,7 @@ export const api = {
     onboardingPaperSetup: (cfg) => client.post("/onboarding/paper-setup", cfg).then((r) => r.data),
     logout: () => client.post("/auth/logout").then((r) => r.data),
     me: () => client.get("/auth/me").then((r) => r.data),
+    googleSession: (session_id) => client.post("/auth/google/session", { session_id }).then((r) => r.data),
     researchShadow: () => client.get("/research/shadow").then((r) => r.data),
     researchSummary: () => client.get("/research/summary").then((r) => r.data),
     researchRejections: (sinceHours) =>

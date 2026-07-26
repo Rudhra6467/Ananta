@@ -17,13 +17,14 @@ import { Logo } from "../src/components/Logo";
 import { colors, spacing, radius, type } from "../src/theme";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const { gate } = useAccessGate();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [gbusy, setGbusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -36,6 +37,19 @@ export default function Login() {
       setError(e?.message || "Login failed");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const google = async () => {
+    if (gbusy) return;
+    setGbusy(true);
+    setError(null);
+    try {
+      await loginWithGoogle();
+    } catch (e: any) {
+      setError(e?.message || "Google sign-in failed");
+    } finally {
+      setGbusy(false);
     }
   };
 
@@ -53,6 +67,28 @@ export default function Login() {
         </View>
 
         <View style={styles.form}>
+          <Pressable
+            testID="google-signin-btn"
+            onPress={google}
+            disabled={gbusy}
+            style={({ pressed }) => [styles.googleBtn, (gbusy || pressed) && { opacity: 0.85 }]}
+          >
+            {gbusy ? (
+              <ActivityIndicator color="#1f1f1f" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={18} color="#1f1f1f" />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+
+          <View style={styles.divider}>
+            <View style={styles.line} />
+            <Text style={styles.dividerTxt}>or owner login</Text>
+            <View style={styles.line} />
+          </View>
+
           <Text style={type.label}>Email</Text>
           <TextInput
             testID="login-email-input"
@@ -151,6 +187,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   submitText: { color: colors.bg, fontWeight: "800", fontSize: 16 },
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.pill,
+    paddingVertical: spacing.md + 2,
+    marginTop: spacing.sm,
+  },
+  googleText: { color: "#1f1f1f", fontWeight: "800", fontSize: 15 },
+  divider: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginVertical: spacing.lg },
+  line: { flex: 1, height: 1, backgroundColor: colors.cardBorder },
+  dividerTxt: { color: colors.textFaint, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
   requestBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: spacing.lg, paddingVertical: spacing.sm },
   requestTxt: { color: colors.teal, fontWeight: "700", fontSize: 13 },
 });
