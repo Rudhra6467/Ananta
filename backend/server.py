@@ -60,6 +60,8 @@ logger = logging.getLogger(__name__)
 from analytics import compute_performance, graduation_readiness, regime_insight, sector_exposure
 import ai_analyst
 from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo, _valid_owner_payload
+import tenancy
+from tenant_ctx import OWNER_TENANT, current_tenant, tenant_trade_filter
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
 from live_execution import live_status as live_execution_status
 from market_data import fetch_snapshot, fetch_snapshots, fetch_snapshots_cached, get_cached_snapshot, warm_snapshots
@@ -91,6 +93,31 @@ api_router = APIRouter(prefix="/api")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ---------- multi-tenant request context ----------
+async def tenant_context(request: Request) -> dict:
+    """Require ANY authenticated principal (owner/demo JWT or Google session) and
+    bind the active tenant for this request so the persistence layer isolates data.
+    403 for anonymous public visitors."""
+    p = await tenancy.resolve_principal(request, db)
+    if not p:
+        raise HTTPException(status_code=403, detail="Authentication required.")
+    current_tenant.set(p["tenant_id"])
+    if p["tenant_id"] != OWNER_TENANT:
+        await tenancy.ensure_provisioned(db, p["tenant_id"])
+    return p
+
+
+async def optional_tenant(request: Request) -> dict | None:
+    """Bind the tenant for read endpoints: authenticated users see THEIR book;
+    anonymous visitors (and owner/demo) fall back to the shared owner/house book."""
+    p = await tenancy.resolve_principal(request, db)
+    tid = p["tenant_id"] if p else OWNER_TENANT
+    current_tenant.set(tid)
+    if p and tid != OWNER_TENANT:
+        await tenancy.ensure_provisioned(db, tid)
+    return p
 
 # background trading loop + faster position watcher
 trading_loop = TradingLoop(db, interval_seconds=90)
@@ -305,7 +332,7 @@ async def market_snapshot(symbol_base: str):
 
 
 @api_router.get("/portfolio")
-async def get_portfolio():
+async def get_portfolio(_t: dict | None = Depends(optional_tenant)):
     portfolio = await load_portfolio(db)
     settings = await load_settings(db)
     # compute live equity using latest prices
@@ -354,8 +381,8 @@ async def get_portfolio():
     }
 
 
-@api_router.post("/portfolio/reset", dependencies=[Depends(require_owner)])
-async def portfolio_reset():
+@api_router.post("/portfolio/reset")
+async def portfolio_reset(_t: dict = Depends(tenant_context)):
     fresh = await reset_portfolio(db)
     return {"ok": True, "portfolio": fresh.model_dump()}
 
@@ -368,20 +395,24 @@ class PaperSetup(BaseModel):
 
 
 @api_router.post("/onboarding/paper-setup")
-async def onboarding_paper_setup(cfg: PaperSetup, auth: dict = Depends(require_owner)):
-    """First-run Paper Trading wizard → drives the existing paper engine.
+async def onboarding_paper_setup(cfg: PaperSetup, auth: dict = Depends(tenant_context)):
+    """First-run Paper Trading wizard → drives the tenant's paper engine.
 
     1. Virtual Capital  → fresh paper book at the chosen starting balance.
     2. Per-Trade Allocation → position-sizing settings (fixed USD lot or % of portfolio).
     3. Strategy Selection → enable the chosen strategies for PAPER execution.
-    Kept as one endpoint so the wizard→engine mapping lives server-side (clean seam
-    for a future multi-user migration)."""
-    # 1. virtual capital
+    Fully tenant-scoped: each user configures their OWN isolated book + settings."""
+    from tenant_ctx import tenant_doc_id  # noqa: PLC0415
+    tenant_id = auth["tenant_id"]
+    pid = tenant_doc_id(tenant_id)
+
+    # 1. virtual capital → fresh tenant book
     cap = max(100.0, float(cfg.capital))
     fresh = Portfolio(starting_balance=cap, cash=cap, day_start_equity=cap)
-    await db.portfolio.replace_one({"id": "singleton"}, fresh.model_dump(), upsert=True)
-    await db.trades.delete_many({})
-    await db.reasoning.delete_many({})
+    fresh.id = pid
+    await db.portfolio.replace_one({"id": pid}, fresh.model_dump(), upsert=True)
+    await db.trades.delete_many(tenant_trade_filter(tenant_id))
+    await db.pending_orders.delete_many(tenant_trade_filter(tenant_id))
 
     # 2. per-trade allocation → sizing
     s = await load_settings(db)
@@ -397,19 +428,28 @@ async def onboarding_paper_setup(cfg: PaperSetup, auth: dict = Depends(require_o
         s.normal_lot_usd = lot
         s.strong_lot_usd = lot
         s.breakout_lot_usd = lot
+
+    # 3. strategy selection → per-tenant enable/disable via profile_overrides.
+    enabled = []
+    selected = {k for k in cfg.strategies if get_schema(k)}
+    if selected:
+        overrides = dict(s.profile_overrides or {})
+        for key in [sch.key for sch in list_schemas()]:
+            entry = dict(overrides.get(key.lower()) or {})
+            entry["enabled"] = key in selected
+            overrides[key.lower()] = entry
+            if key in selected:
+                enabled.append(key)
+        s.profile_overrides = overrides
+        # Owner keeps the global strategy_meta lifecycle in sync (house engine).
+        if tenant_id == OWNER_TENANT:
+            for key in selected:
+                await db.strategy_meta.update_one(
+                    {"key": key}, {"$set": {"key": key, "enabled": True, "status": "PAPER"}}, upsert=True,
+                )
     await save_settings(db, s)
 
-    # 3. enable selected strategies (PAPER)
-    enabled = []
-    for key in cfg.strategies:
-        if get_schema(key):
-            await db.strategy_meta.update_one(
-                {"key": key}, {"$set": {"key": key, "enabled": True, "status": "PAPER"}}, upsert=True,
-            )
-            enabled.append(key)
-
-    # Demo / App-Review account → overlay a realistic 3–7 day paper history on the
-    # freshly-configured book so reviewers land on a populated dashboard immediately.
+    # Demo / App-Review account → overlay a realistic paper history on the fresh book.
     if auth.get("role") == "demo":
         import demo_seed  # noqa: PLC0415
         await demo_seed.seed_demo_history(db, cap, enable_strategies=False)
@@ -417,11 +457,11 @@ async def onboarding_paper_setup(cfg: PaperSetup, auth: dict = Depends(require_o
     return {"ok": True, "portfolio": fresh.model_dump(), "strategies_enabled": enabled}
 
 
-@api_router.post("/positions/{base}/close", dependencies=[Depends(require_owner)])
-async def manual_close_position(base: str):
-    """Manual Emergency Exit (owner-only): immediately market-close a single open
-    position. Routes a real sell in LIVE/DRY_RUN, simulates the fill in PAPER —
-    the same path the position watcher uses. Tags the trade `exit_reason=MANUAL_EXIT`."""
+@api_router.post("/positions/{base}/close")
+async def manual_close_position(base: str, _t: dict = Depends(tenant_context)):
+    """Manual Emergency Exit: immediately market-close a single open position in
+    the caller's own book. Routes a real sell in LIVE/DRY_RUN, simulates the fill
+    in PAPER — the same path the position watcher uses. Tags `exit_reason=MANUAL_EXIT`."""
     from trading_engine import _execute_sell, _record_live_sell, set_symbol_cooldown, save_portfolio
     from position_watcher import _route_executor
     from models import TradeLog, AIReasoning, compute_return_and_hold
@@ -503,11 +543,11 @@ class ManualOrderReq(BaseModel):
     fraction: float | None = None      # partial SELL, 0..1 (PAPER)
 
 
-@api_router.post("/orders/manual", dependencies=[Depends(require_owner)])
-async def place_manual_order(order: ManualOrderReq):
-    """Owner manual order — real paper BUY/SELL (market or limit); routes a live
-    order in LIVE/DRY_RUN once the exchange gate is armed. Reuses the same sizing
-    and execution primitives as the engine so fills/fees/P&L stay consistent."""
+@api_router.post("/orders/manual")
+async def place_manual_order(order: ManualOrderReq, _t: dict = Depends(tenant_context)):
+    """Manual order — real paper BUY/SELL (market or limit) against the caller's own
+    book; routes a live order in LIVE/DRY_RUN once the exchange gate is armed. Reuses
+    the same sizing and execution primitives as the engine so fills/fees/P&L stay consistent."""
     from trading_engine import (
         _execute_buy, _execute_sell, _execute_partial_sell,
         _record_live_buy, _record_live_sell, save_portfolio,
@@ -636,15 +676,13 @@ async def place_manual_order(order: ManualOrderReq):
     return {"ok": True, "resting": False, "trade": trade_doc}
 
 
-@api_router.post("/history/clear", dependencies=[Depends(require_owner)])
-async def clear_history(also_reset_portfolio: bool = False):
-    """Wipe trade + reasoning history. Optionally reset portfolio too."""
-    trades_del = await db.trades.delete_many({})
-    reasoning_del = await db.reasoning.delete_many({})
+@api_router.post("/history/clear")
+async def clear_history(also_reset_portfolio: bool = False, _t: dict = Depends(tenant_context)):
+    """Wipe the caller's own trade history. Optionally reset their portfolio too."""
+    trades_del = await db.trades.delete_many(tenant_trade_filter())
     result = {
         "ok": True,
         "trades_deleted": trades_del.deleted_count,
-        "reasoning_deleted": reasoning_del.deleted_count,
     }
     if also_reset_portfolio:
         fresh = await reset_portfolio(db)
@@ -728,8 +766,8 @@ async def admin_demo_reset():
 
 
 @api_router.get("/trades")
-async def get_trades(limit: int = Query(50, le=500)):
-    cursor = db.trades.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
+async def get_trades(limit: int = Query(50, le=500), _t: dict | None = Depends(optional_tenant)):
+    cursor = db.trades.find(tenant_trade_filter(), {"_id": 0}).sort("timestamp", -1).limit(limit)
     docs = await cursor.to_list(limit)
     return {"items": docs, "count": len(docs)}
 
@@ -753,9 +791,12 @@ async def get_reasoning(
 
 
 @api_router.get("/cooldowns")
-async def get_cooldowns():
-    """List active per-symbol cooldown locks (SL/TRAIL)."""
-    docs = await db.cooldowns.find({}, {"_id": 1, "unlock_at": 1, "reason": 1, "started_at": 1}).to_list(50)
+async def get_cooldowns(_t: dict | None = Depends(optional_tenant)):
+    """List active per-symbol cooldown locks (SL/TRAIL) for the caller's book."""
+    docs = await db.cooldowns.find(
+        {"tenant": current_tenant.get()},
+        {"_id": 1, "symbol": 1, "unlock_at": 1, "reason": 1, "started_at": 1},
+    ).to_list(50)
     now = datetime.now(UTC)
     out = []
     for d in docs:
@@ -767,7 +808,7 @@ async def get_cooldowns():
         except Exception:
             remaining = 0
         out.append({
-            "symbol": d["_id"],
+            "symbol": d.get("symbol") or str(d["_id"]).split(":", 1)[-1],
             "unlock_at": d["unlock_at"],
             "reason": d.get("reason"),
             "started_at": d.get("started_at"),
@@ -808,7 +849,7 @@ async def market_candles(
 
 
 @api_router.get("/risk/status")
-async def risk_status():
+async def risk_status(_t: dict | None = Depends(optional_tenant)):
     settings = await load_settings(db)
     portfolio = await load_portfolio(db)
     # use latest reasoning to estimate macro confidence; fallback to settings.min_confidence
@@ -844,14 +885,14 @@ async def risk_status():
 
 
 @api_router.get("/pending_orders")
-async def pending_orders():
+async def pending_orders(_t: dict | None = Depends(optional_tenant)):
     """Resting Post-Only maker BUY orders (PAPER) awaiting fill or cancellation."""
-    docs = await db.pending_orders.find({}, {"_id": 0}).sort("placed_at", 1).to_list(100)
+    docs = await db.pending_orders.find(tenant_trade_filter(), {"_id": 0}).sort("placed_at", 1).to_list(100)
     return {"items": docs, "count": len(docs)}
 
 
 @api_router.get("/analytics/performance")
-async def analytics_performance(exclude_synthetic: bool = Query(False)):
+async def analytics_performance(exclude_synthetic: bool = Query(False), _t: dict | None = Depends(optional_tenant)):
     """Quantitative metrics over the trade log (Phase A research layer).
 
     Returns Statistical Expectancy, Profit Factor, friction (fees + slippage),
@@ -869,12 +910,13 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
 
     # Optional synthetic filter: exclude DEMO_SEED docs from every window.
     synthetic_filter = {"note": {"$ne": "DEMO_SEED"}} if exclude_synthetic else {}
+    tf = tenant_trade_filter()
 
     rolling_trades = await db.trades.find(
-        {"timestamp": {"$gte": rolling_cutoff}, **synthetic_filter}, {"_id": 0},
+        {"timestamp": {"$gte": rolling_cutoff}, **synthetic_filter, **tf}, {"_id": 0},
     ).sort("timestamp", 1).to_list(800)
     calendar_trades = await db.trades.find(
-        {"timestamp": {"$gte": calendar_cutoff}, **synthetic_filter}, {"_id": 0},
+        {"timestamp": {"$gte": calendar_cutoff}, **synthetic_filter, **tf}, {"_id": 0},
     ).sort("timestamp", 1).to_list(800)
 
     portfolio = await load_portfolio(db)
@@ -883,7 +925,7 @@ async def analytics_performance(exclude_synthetic: bool = Query(False)):
 
     # all-time closed trades power the "Best Regime to Trade" insight
     all_sells = await db.trades.find(
-        {"side": "SELL", "status": "FILLED", **synthetic_filter}, {"_id": 0},
+        {"side": "SELL", "status": "FILLED", **synthetic_filter, **tf}, {"_id": 0},
     ).sort("timestamp", 1).to_list(1000)
     insight = regime_insight(all_sells)
 
@@ -1108,12 +1150,12 @@ async def lab_monte_carlo(req: MonteCarloRequest):
 
 
 @api_router.get("/analytics/graduation")
-async def analytics_graduation():
+async def analytics_graduation(_t: dict | None = Depends(optional_tenant)):
     """Objective 10-gate paper→live graduation scorecard. Proves the system has
     a repeatable edge that survives fees, slippage and different regimes — NOT
     mere profitability. Excludes synthetic DEMO_SEED trades."""
     trades = await db.trades.find(
-        {"note": {"$ne": "DEMO_SEED"}}, {"_id": 0},
+        {"note": {"$ne": "DEMO_SEED"}, **tenant_trade_filter()}, {"_id": 0},
     ).sort("timestamp", 1).to_list(1500)
 
     portfolio = await load_portfolio(db)
@@ -1414,15 +1456,60 @@ async def auth_login(body: LoginRequest, request: Request):
     return {"token": token, "email": p.get("sub"), "role": p.get("role", "owner")}
 
 
+class GoogleSessionReq(BaseModel):
+    session_id: str
+
+
+@api_router.post("/auth/google/session")
+async def auth_google_session(body: GoogleSessionReq, response: Response):
+    """Exchange an Emergent OAuth session_id for a persistent session. Upserts the
+    Google user (role='user', own isolated tenant), stores the session, sets the
+    httpOnly cookie (web) AND returns the session_token (mobile)."""
+    sid = (body.session_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    try:
+        out = await tenancy.exchange_session_id(db, sid)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("google session exchange failed: %s", e)
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    principal, token = out["principal"], out["session_token"]
+    # web transport: httpOnly cookie
+    response.set_cookie(
+        key="session_token", value=token, httponly=True, secure=True,
+        samesite="none", path="/", max_age=tenancy.SESSION_TTL_DAYS * 24 * 3600,
+    )
+    return {
+        "session_token": token,  # mobile stores this (Bearer)
+        "user": {
+            "user_id": principal["user_id"], "email": principal["email"],
+            "role": principal["role"], "name": principal.get("name"),
+            "picture": principal.get("picture"),
+        },
+    }
+
+
 @api_router.post("/auth/logout")
-async def auth_logout():
-    # Stateless Bearer tokens — client discards the token. Endpoint exists for symmetry.
+async def auth_logout(request: Request, response: Response):
+    bearer, cookie = tenancy._bearer_and_cookie(request)
+    # only delete a session_token (not an owner JWT); owner JWT is stateless.
+    for tok in (cookie, bearer):
+        if tok and not _valid_owner_payload(tok):
+            await tenancy.logout_session(db, tok)
+    response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
 
 @api_router.get("/auth/me")
-async def auth_me(_owner: dict = Depends(require_owner)):
-    return {"email": _owner.get("sub"), "role": _owner.get("role")}
+async def auth_me(request: Request):
+    p = await tenancy.resolve_principal(request, db)
+    if not p:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {
+        "email": p.get("email"), "role": p.get("role"),
+        "user_id": p.get("user_id"), "name": p.get("name"),
+        "picture": p.get("picture"), "tenant_id": p.get("tenant_id"),
+    }
 
 
 # ---------- mobile push notifications ----------
@@ -1449,7 +1536,7 @@ async def test_push():
 
 
 @api_router.get("/settings")
-async def get_settings(request: Request):
+async def get_settings(request: Request, _t: dict | None = Depends(optional_tenant)):
     s = await load_settings(db)
     d = s.model_dump()
     # Redact exchange credentials for non-owners (api keys AND secrets).
@@ -1460,8 +1547,8 @@ async def get_settings(request: Request):
     return d
 
 
-@api_router.put("/settings", dependencies=[Depends(require_owner)])
-async def update_settings(update: SettingsUpdate):
+@api_router.put("/settings")
+async def update_settings(update: SettingsUpdate, _t: dict = Depends(tenant_context)):
     s = await load_settings(db)
     data = update.model_dump(exclude_unset=True)
     # Drop explicit nulls — Optional update fields use None as "no change". A null must never
@@ -3721,6 +3808,11 @@ async def _deferred_startup():
             await seed_owner(db)
             await seed_demo(db)
             await db.users.create_index("email", unique=True)
+            with contextlib.suppress(Exception):
+                await db.users.create_index("user_id", unique=True)
+                await db.user_sessions.create_index("session_token", unique=True)
+                await db.user_sessions.create_index("user_id")
+                await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
             await _seed_library_if_empty()
             await _bootstrap_declarative()
             await _purge_orphan_import_drafts()

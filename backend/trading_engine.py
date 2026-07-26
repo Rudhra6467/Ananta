@@ -45,6 +45,7 @@ from strategy_runtime import overlay_settings, resolve_active_params, resolve_fu
 from declarative_engine import evaluate as decl_evaluate
 from strategy.declarative_defs import all_declarative_keys, get_declarative_spec
 from circuit_breaker import evaluate_breaker
+from tenant_ctx import OWNER_TENANT, cooldown_id, current_tenant, tenant_doc_id, tenant_trade_filter
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +85,9 @@ _SCAN_CYCLE = 0
 # ---------- per-symbol cooldown helpers ----------
 async def get_symbol_cooldown(db: AsyncIOMotorDatabase, symbol: str) -> dict | None:
     """Returns the cooldown doc if active, else None.
-    Auto-deletes expired entries."""
-    doc = await db.cooldowns.find_one({"_id": symbol})
+    Auto-deletes expired entries. Scoped per-tenant."""
+    cid = cooldown_id(symbol)
+    doc = await db.cooldowns.find_one({"_id": cid})
     if not doc:
         return None
     try:
@@ -96,7 +98,7 @@ async def get_symbol_cooldown(db: AsyncIOMotorDatabase, symbol: str) -> dict | N
         return None
     if datetime.now(UTC) >= unlock:
         # cooldown expired - clear so future BUYs are not falsely blocked
-        await db.cooldowns.delete_one({"_id": symbol})
+        await db.cooldowns.delete_one({"_id": cid})
         return None
     # return a freshly-built dict (never the raw Mongo doc) for JSON safety
     return {
@@ -111,10 +113,12 @@ async def set_symbol_cooldown(
 ) -> None:
     if seconds <= 0:
         return
+    cid = cooldown_id(symbol)
     unlock_at = datetime.now(UTC) + timedelta(seconds=int(seconds))
     await db.cooldowns.replace_one(
-        {"_id": symbol},
-        {"_id": symbol, "unlock_at": unlock_at.isoformat(), "reason": reason,
+        {"_id": cid},
+        {"_id": cid, "tenant": current_tenant.get(), "symbol": symbol,
+         "unlock_at": unlock_at.isoformat(), "reason": reason,
          "started_at": datetime.now(UTC).isoformat()},
         upsert=True,
     )
@@ -122,16 +126,19 @@ async def set_symbol_cooldown(
 
 # ---------- persistence helpers ----------
 async def load_settings(db: AsyncIOMotorDatabase) -> RiskSettings:
-    """Load the `settings` singleton — the ONLY config the live engine reads.
+    """Load the tenant's `settings` doc — the ONLY config the live engine reads.
 
     All engine modules (trading_engine, exit_engine, risk_engine, position_watcher,
     shadow_sim, levels, backtest) receive their configuration exclusively via the
     RiskSettings returned here. Do not add engine reads from other collections
     (e.g. strategy_configs); route new tunables through RiskSettings instead.
+    Tenant-scoped: owner -> "singleton", each user -> "tenant_<id>".
     """
-    doc = await db.settings.find_one({"id": "singleton"}, {"_id": 0})
+    sid = tenant_doc_id()
+    doc = await db.settings.find_one({"id": sid}, {"_id": 0})
     if not doc:
         s = RiskSettings()
+        s.id = sid
         await db.settings.insert_one(s.model_dump())
         return s
     return _safe_settings(doc)
@@ -211,43 +218,55 @@ def strategy_regime_ok(settings, key: str, regime: str | None) -> bool:
 
 async def save_settings(db: AsyncIOMotorDatabase, settings: RiskSettings) -> RiskSettings:
     settings.updated_at = datetime.now(UTC).isoformat()
-    await db.settings.replace_one({"id": "singleton"}, settings.model_dump(), upsert=True)
+    sid = tenant_doc_id()
+    settings.id = sid
+    await db.settings.replace_one({"id": sid}, settings.model_dump(), upsert=True)
     return settings
 
 
 async def load_portfolio(db: AsyncIOMotorDatabase) -> Portfolio:
-    doc = await db.portfolio.find_one({"id": "singleton"}, {"_id": 0})
+    pid = tenant_doc_id()
+    doc = await db.portfolio.find_one({"id": pid}, {"_id": 0})
     if not doc:
         p = Portfolio()
+        p.id = pid
         await db.portfolio.insert_one(p.model_dump())
         return p
     p = Portfolio(**doc)
+    p.id = pid
     # ensure day rollover even when no trading cycle has run
     today = datetime.now(UTC).date().isoformat()
     if p.day_start_date != today:
         equity = p.cash + sum(pos.cost_basis for pos in p.positions)
         p.day_start_equity = equity
         p.day_start_date = today
-        await db.portfolio.replace_one({"id": "singleton"}, p.model_dump(), upsert=True)
+        await db.portfolio.replace_one({"id": pid}, p.model_dump(), upsert=True)
     return p
 
 
 async def save_portfolio(db: AsyncIOMotorDatabase, portfolio: Portfolio) -> Portfolio:
     portfolio.updated_at = datetime.now(UTC).isoformat()
-    await db.portfolio.replace_one({"id": "singleton"}, portfolio.model_dump(), upsert=True)
+    pid = tenant_doc_id()
+    portfolio.id = pid
+    await db.portfolio.replace_one({"id": pid}, portfolio.model_dump(), upsert=True)
     return portfolio
 
 
 async def reset_portfolio(db: AsyncIOMotorDatabase) -> Portfolio:
+    t = current_tenant.get()
+    pid = tenant_doc_id(t)
     fresh = Portfolio()
-    await db.portfolio.replace_one({"id": "singleton"}, fresh.model_dump(), upsert=True)
-    await db.trades.delete_many({})
-    await db.reasoning.delete_many({})
-    # Fresh start: clear resting orders, cooldowns and cached performance so new
-    # validations/paper runs reflect current logic cleanly (no stale-state bleed).
-    await db.pending_orders.delete_many({})
-    await db.cooldowns.delete_many({})
-    await db.strategy_health.delete_many({})
+    fresh.id = pid
+    await db.portfolio.replace_one({"id": pid}, fresh.model_dump(), upsert=True)
+    await db.trades.delete_many(tenant_trade_filter(t))
+    await db.pending_orders.delete_many(tenant_trade_filter(t))
+    await db.cooldowns.delete_many({"tenant": t})
+    # Global market/research logs are only wiped on an owner reset (they describe
+    # the shared engine, not a single user's book).
+    if t == OWNER_TENANT:
+        await db.reasoning.delete_many({})
+        await db.strategy_health.delete_many({})
+        await db.cooldowns.delete_many({"_id": {"$not": {"$regex": ":"}}})  # legacy un-namespaced
     return fresh
 
 
@@ -328,7 +347,7 @@ async def process_pending_orders(db: AsyncIOMotorDatabase) -> list[dict]:
 
     Filled maker entries pay the lower maker fee.
     """
-    pendings = await db.pending_orders.find({}).to_list(100)
+    pendings = await db.pending_orders.find(tenant_trade_filter()).to_list(100)
     if not pendings:
         return []
 

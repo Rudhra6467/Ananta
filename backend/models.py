@@ -10,6 +10,12 @@ from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from tenant_ctx import current_tenant
+
+
+def _active_tenant() -> str:
+    return current_tenant.get()
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -110,6 +116,7 @@ class TradeLog(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str = Field(default_factory=_new_id)
+    tenant_id: str = Field(default_factory=_active_tenant)  # multi-tenant owner of this trade
     timestamp: str = Field(default_factory=_utc_now_iso)
     symbol: str
     side: Literal["BUY", "SELL"]
@@ -210,6 +217,7 @@ class PendingOrder(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str = Field(default_factory=_new_id)
+    tenant_id: str = Field(default_factory=_active_tenant)  # multi-tenant owner of this resting order
     symbol: str
     side: str = "BUY"
     quantity: float
