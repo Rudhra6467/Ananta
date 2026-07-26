@@ -11,13 +11,13 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ananta.app",
+      "bundleIdentifier": "com.rudhra.ananta",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to unlock your Ananta cockpit."
       }
     },
     "android": {
-      "package": "com.ananta.app",
+      "package": "com.rudhra.ananta",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -32,6 +32,17 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
