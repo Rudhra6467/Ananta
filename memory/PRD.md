@@ -7,6 +7,18 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+
+### 2026-07-26 (later) — iOS/GitHub-readiness + login polish
+- **ROOT CAUSE of iOS "Network request failed":** all `.env` files are git-ignored (root .gitignore),
+  so a GitHub clone → local Xcode build had NO `EXPO_PUBLIC_BACKEND_URL` → `API="undefined/api"`.
+  Fix: added committed `app.json` `expo.extra.backendUrl` (currently the preview URL) and `mobile/src/api.ts`
+  now resolves `EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig.extra.backendUrl` (env still wins for
+  preview/Publish). For App Store, point extra.backendUrl at the DEPLOYED backend (or Publish injects it).
+- Mobile login logo now uses the gold trident (removed grey override) to match the cockpit logo.
+- Generic email placeholder `you@example.com` (mobile + web); web email no longer defaults to owner@ananta.ai.
+- Web: full reload after Google login so the user's OWN isolated book/settings load (fixes "no reflection").
+- NOTE (open, cross-platform): web header uses AnantaLogo (A+arrow) vs mobile trident — unify later if desired.
+
 ### 2026-07-26 — MULTI-TENANT Google Sign-In (Option B, full isolation) SHIPPED (backend + web + mobile, tested iter86)
 User chose FULL multi-tenancy: every Google user self-registers and gets a fully ISOLATED paper
 account; owner/demo keep the shared "house" book. Real Google OAuth redirect can't be automated E2E

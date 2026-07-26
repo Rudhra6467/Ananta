@@ -60,7 +60,7 @@ export default function Login() {
     >
       <View style={[styles.container, { paddingTop: insets.top + spacing.xxl }]}>
         <View style={styles.brand}>
-          <Logo size={56} showWord color="#D2D6DC" />
+          <Logo size={56} showWord />
           <Text style={[type.bodyMuted, { marginTop: spacing.md, textAlign: "center" }]}>
             The operator&apos;s cockpit. Monitor the algorithm, manage positions, stay in control.
           </Text>
@@ -94,7 +94,7 @@ export default function Login() {
             testID="login-email-input"
             value={email}
             onChangeText={setEmail}
-            placeholder="owner@ananta.ai"
+            placeholder="you@example.com"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             keyboardType="email-address"
@@ -141,7 +141,7 @@ export default function Login() {
         </View>
 
         <Text style={[type.small, { textAlign: "center", marginTop: spacing.xl }]}>
-          Single-operator access · sessions secured on-device
+          Secure sign-in · sessions stored on-device
         </Text>
 
         <Pressable testID="request-access-btn" onPress={() => gate("Full Ananta access")} style={styles.requestBtn}>

@@ -38,14 +38,15 @@ export function AuthProvider({ children }) {
         if (sessionId) {
             api.googleSession(sessionId)
                 .then((res) => {
-                    if (!active) return;
                     localStorage.setItem(TOKEN_KEY, res.session_token);
                     sessionStorage.removeItem("ananta_welcome_shown");
-                    setOwner(res.user);
-                    toast.success(`Signed in as ${res.user?.email || "your Google account"}.`);
+                    // Full reload (to a clean URL) so every data fetch re-runs with the
+                    // new session token → the user's OWN isolated book/settings load.
+                    window.location.replace(window.location.pathname);
                 })
-                .catch(() => { if (active) toast.error("Google sign-in failed. Please try again."); })
-                .finally(() => { if (active) { cleanAuthUrl(); setReady(true); } });
+                .catch(() => {
+                    if (active) { toast.error("Google sign-in failed. Please try again."); cleanAuthUrl(); setReady(true); }
+                });
             return () => { active = false; };
         }
 

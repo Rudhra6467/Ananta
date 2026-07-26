@@ -17,7 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function OwnerAuthControl() {
     const { isOwner, owner, login, loginWithGoogle, logout } = useAuth();
     const [open, setOpen] = useState(false);
-    const [email, setEmail] = useState("owner@ananta.ai");
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -108,6 +108,7 @@ export default function OwnerAuthControl() {
                             data-testid="owner-email-input"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@example.com"
                             autoComplete="username"
                             className="font-mono text-sm bg-atlas-panel border-atlas-border"
                         />

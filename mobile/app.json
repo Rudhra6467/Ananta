@@ -68,6 +68,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "backendUrl": "https://hunter-squeeze-labs.preview.emergentagent.com"
     }
   }
 }

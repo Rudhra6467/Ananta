@@ -1,9 +1,27 @@
 // Ananta.AI mobile API client. Reuses the shared FastAPI /api backend.
+import Constants from "expo-constants";
 import { getItem, deleteItem } from "./storage";
 
 export const TOKEN_KEY = "ananta_owner_token";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+// Backend URL resolution order:
+//  1. EXPO_PUBLIC_BACKEND_URL — injected at build time by the Emergent preview /
+//     Publish flow (and by a local `mobile/.env`).
+//  2. app.json `extra.backendUrl` — committed to git so a GitHub clone + local
+//     Xcode build still has a backend URL even though `.env` is git-ignored.
+//     (For a production App Store build, point this at your DEPLOYED backend.)
+const BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  (Constants.expoConfig?.extra as any)?.backendUrl;
+
+if (!BACKEND_URL) {
+  // Fail loud & clear instead of the cryptic "Network request failed".
+  console.error(
+    "[Ananta] No backend URL configured. Set EXPO_PUBLIC_BACKEND_URL (mobile/.env) " +
+      "or expo.extra.backendUrl in app.json before building.",
+  );
+}
+
 export const API = `${BACKEND_URL}/api`;
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
