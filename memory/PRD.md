@@ -7,6 +7,42 @@ Emphasis on explainable AI, layered signal fusion, defensive architecture, and e
 Not about "guaranteed profits" - about robustness and capital preservation.
 
 
+### 2026-07-26 — MULTI-TENANT Google Sign-In (Option B, full isolation) SHIPPED (backend + web + mobile, tested iter86)
+User chose FULL multi-tenancy: every Google user self-registers and gets a fully ISOLATED paper
+account; owner/demo keep the shared "house" book. Real Google OAuth redirect can't be automated E2E
+(external) — buttons + client wiring verified; user-scoped endpoints tested via seeded session_token.
+**Integration:** Emergent-managed Google Auth (playbook). Web transport = Bearer session_token in
+localStorage (same key as owner JWT — backend accepts JWT OR session_token on `Authorization: Bearer`);
+mobile = Bearer via SecureStore; httpOnly cookie also set for web but Bearer is the primary path.
+**Architecture — tenant ContextVar (`backend/tenant_ctx.py`):** a request/engine-scoped ContextVar
+carries the active tenant so the low-level I/O layer isolates data with minimal endpoint churn.
+  - owner/demo → tenant "owner" → portfolio/settings doc id "singleton" (100% backward compatible; the
+    existing 25000 book is untouched). Google user → tenant = user_id → doc id "tenant_<id>".
+  - `trades`/`pending_orders` gain `tenant_id` (default_factory reads the ContextVar); reads filter by it
+    (owner also matches legacy null-tenant rows). Cooldowns keyed `"<tenant>:<symbol>"`.
+  - `load/save/reset_portfolio` + `load/save_settings` (trading_engine) resolve the doc id from the ContextVar.
+**Auth (`backend/tenancy.py`):** `resolve_principal` unifies owner/demo JWT + Google session_token into
+one principal {user_id,email,role,tenant_id}. `POST /api/auth/google/session` exchanges an Emergent
+session_id (server-side call to demobackend `/auth/v1/env/oauth/session-data`), upserts the user by email
+(role=user), stores a 7-day session in `user_sessions`, sets cookie + returns token. `/api/auth/me` +
+`/api/auth/logout` are principal-based. New tenants are lazily provisioned with a fresh 1200 PAPER book.
+**Endpoints made tenant-scoped** (require_owner → `tenant_context`/`optional_tenant`): /portfolio(+reset),
+/onboarding/paper-setup, /positions/{base}/close, /orders/manual, /history/clear, /trades, /settings(GET/PUT),
+/risk/status, /pending_orders, /cooldowns, /analytics/performance, /analytics/graduation. Admin/lab/watchlist/
+cycle/environment/research stay owner/house-only (backend-guarded; Google users get 403). Public/anon reads
+still show the owner house book.
+**Auto-trading (credit-free copy model):** the house background engine remains the SIGNAL GENERATOR
+(unchanged; zero extra LLM calls). `trading_engine.mirror_to_tenants` fans each cycle's BUY decisions into
+every active user book gated by that user's settings (strategy selection via profile_overrides, regime,
+slot cap, sizing, kill-switch, cooldowns); the PositionWatcher now manages exits per tenant too.
+**Frontend:** web `OwnerAuthControl` + `AuthContext` and mobile `login.tsx` + `src/auth.tsx` gained
+"Continue with Google" (redirect to auth.emergentagent.com, session_id exchange on return, native
+WebBrowser.openAuthSessionAsync + cold-start deep link on mobile). `isOwner` now = any authed principal
+(controls its OWN book); `isHouseOwner` (owner/demo) reserved for house/admin features (follow-up: hide
+house-only buttons from Google users in the UI — currently backend-enforced only).
+**Tested:** `tests/test_multi_tenant_auth.py` 12/12 + web + mobile all green (iter86). Owner regression clean.
+
+
 ### 2026-07-11 — Launch-Hardening pass: Ask Ananta on-chip toggle + P2 TTL cleanup + console cleanup
 **Ask Ananta inline switch (web + mobile, tested):** the copilot chip now renders for the owner even when
 disabled, with a small slide switch (right=on / left=off, default OFF) directly on the chip AND in the open

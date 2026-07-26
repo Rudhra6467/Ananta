@@ -493,7 +493,7 @@ async def manual_close_position(base: str, _t: dict = Depends(tenant_context)):
         )
         trade_doc = await _record_live_sell(
             db, portfolio, symbol, result, reasoning,
-            macro_confidence=0.0, fusion_summary="MANUAL EXIT (owner)",
+            macro_confidence=0.0, fusion_summary="MANUAL EXIT",
             mode=trade_mode, exit_reason="MANUAL_EXIT", expected_trigger_price=snap.bid,
         )
     else:
@@ -504,7 +504,7 @@ async def manual_close_position(base: str, _t: dict = Depends(tenant_context)):
         trade = TradeLog(
             symbol=symbol, side="SELL", quantity=qty, price=snap.bid, notional=notional,
             mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, pnl=realized, fee_usd=fee,
-            slippage_usd=0.0, note="MANUAL EXIT (owner)", exit_reason="MANUAL_EXIT",
+            slippage_usd=0.0, note="MANUAL EXIT", exit_reason="MANUAL_EXIT",
             sector=pos.sector, atr_at_entry=pos.atr_at_entry,
             atr_percentile_at_entry=pos.atr_percentile_at_entry,
             volatility_regime=pos.volatility_regime, entry_extension_pct=pos.entry_extension_pct,
@@ -613,7 +613,7 @@ async def place_manual_order(order: ManualOrderReq, _t: dict = Depends(tenant_co
             )
             trade_doc = await _record_live_buy(
                 db, portfolio, symbol, result, reasoning,
-                macro_confidence=0.0, fusion_summary="MANUAL BUY (owner)", mode=trade_mode,
+                macro_confidence=0.0, fusion_summary="MANUAL BUY", mode=trade_mode,
             )
         else:
             fill_price = snap.ask
@@ -623,7 +623,7 @@ async def place_manual_order(order: ManualOrderReq, _t: dict = Depends(tenant_co
             trade = TradeLog(
                 symbol=symbol, side="BUY", quantity=qty, price=fill_price, notional=notional,
                 mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, fee_usd=fee,
-                slippage_usd=0.0, note="MANUAL BUY (owner)", strategy="manual",
+                slippage_usd=0.0, note="MANUAL BUY", strategy="manual",
             )
             await db.trades.insert_one(trade.model_dump())
             await save_portfolio(db, portfolio)
@@ -651,7 +651,7 @@ async def place_manual_order(order: ManualOrderReq, _t: dict = Depends(tenant_co
         )
         trade_doc = await _record_live_sell(
             db, portfolio, symbol, result, reasoning,
-            macro_confidence=0.0, fusion_summary="MANUAL SELL (owner)",
+            macro_confidence=0.0, fusion_summary="MANUAL SELL",
             mode=trade_mode, exit_reason="MANUAL_ORDER", expected_trigger_price=snap.bid,
         )
     else:
@@ -665,7 +665,7 @@ async def place_manual_order(order: ManualOrderReq, _t: dict = Depends(tenant_co
         trade = TradeLog(
             symbol=symbol, side="SELL", quantity=qty, price=snap.bid, notional=notional,
             mode="PAPER", confidence=0.0, reasoning_id=reasoning.id, pnl=realized, fee_usd=fee,
-            slippage_usd=0.0, note="MANUAL SELL (owner)", exit_reason="MANUAL_ORDER",
+            slippage_usd=0.0, note="MANUAL SELL", exit_reason="MANUAL_ORDER",
             strategy=pos.strategy, sector=pos.sector, entry_price=pos.avg_cost,
             entry_timestamp=pos.entry_timestamp, return_pct=_ret, hold_seconds=_hold,
             trade_result=("WIN" if realized > 0 else "LOSS" if realized < 0 else "BREAKEVEN"),
