@@ -74,7 +74,7 @@ export default function StrategyCenter() {
 
     return (
         <>
-            <StrategyLibrary metrics={metrics} isOwner={isOwner}
+            <StrategyLibrary metrics={metrics} isOwner={isOwner} registry={registry}
                 onOpenInternal={setSelected} onOpenCatalog={setCatalogId}
                 onImport={() => setImportOpen(true)} onBuild={() => setAddOpen(true)} />
             <StrategyArchitect open={addOpen} onOpenChange={setAddOpen} registry={registry} isOwner={isOwner}
@@ -96,7 +96,7 @@ const FILTER_FIELDS = [
 ];
 
 /* ---------------- Library view ---------------- */
-function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onImport, onBuild }) {
+function StrategyLibrary({ metrics, isOwner, registry, onOpenInternal, onOpenCatalog, onImport, onBuild }) {
     const [lib, setLib] = useState(null);
     const [facets, setFacets] = useState({});
     const [query, setQuery] = useState("");
@@ -125,6 +125,14 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
     });
     const clearFilters = () => { setFilters({}); setFavOnly(false); };
 
+    // Route a library card tap: built-in engines AND wireable strategies that have an engine
+    // schema open the redesigned StrategyDetail (clean Live/Off + Edit Strategy). Only pure
+    // catalog/custom entries without an engine schema fall back to CatalogDetail.
+    const routeOpen = (s) => {
+        if (s.internal || (s.wireable && s.engine_key && registry?.[s.engine_key])) onOpenInternal(s.engine_key);
+        else onOpenCatalog(s.id);
+    };
+
     return (
         <div className="space-y-5" data-testid="strategy-center">
             {/* Search + Add live in the scroll-through top header, next to the title */}
@@ -151,7 +159,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
                     const metricOf = (s) => (s.internal || s.wireable) ? metrics?.[s.engine_key] : null;
                     const deployed = lib.filter((s) => isLiveMetric(metricOf(s)));
                     const rest = lib.filter((s) => !isLiveMetric(metricOf(s)));
-                    const common = { metricOf, isOwner, onOpenInternal, onOpenCatalog, onDeploy: load };
+                    const common = { metricOf, isOwner, onOpen: routeOpen, onDeploy: load };
                     return (
                         <div className="space-y-5" data-testid="strategy-grid">
                             <LibrarySection label="LIVE / PAPER" items={deployed} testid="strategy-section-live" {...common} />
@@ -177,7 +185,7 @@ function StrategyLibrary({ metrics, isOwner, onOpenInternal, onOpenCatalog, onIm
             {searchOpen && (
                 <SearchScreen lib={lib} query={query} setQuery={setQuery} activeCount={activeCount}
                     onOpenFilters={() => { setSearchOpen(false); setShowFilter(true); }}
-                    onOpen={(s) => { setSearchOpen(false); (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id)); }}
+                    onOpen={(s) => { setSearchOpen(false); routeOpen(s); }}
                     onClose={() => setSearchOpen(false)} />
             )}
         </div>
@@ -355,7 +363,7 @@ function timeAgo(ts) {
     return `${Math.floor(d / 86400)}d ago`;
 }
 
-function LibrarySection({ label, items, testid, metricOf, isOwner, onOpenInternal, onOpenCatalog, onDeploy }) {
+function LibrarySection({ label, items, testid, metricOf, isOwner, onOpen, onDeploy }) {
     if (!items.length) return null;
     return (
         <div className="space-y-3" data-testid={testid}>
@@ -363,7 +371,7 @@ function LibrarySection({ label, items, testid, metricOf, isOwner, onOpenInterna
             <div className="grid grid-cols-2 gap-3 md:gap-5">
                 {items.map((s) => (
                     <LibraryCard key={s.id} s={s} metric={metricOf(s)} isOwner={isOwner}
-                        onOpen={() => (s.internal ? onOpenInternal(s.engine_key) : onOpenCatalog(s.id))}
+                        onOpen={() => onOpen(s)}
                         onDeploy={onDeploy} />
                 ))}
             </div>
