@@ -45,7 +45,7 @@ export function StrategyConfigSheet({ visible, onClose, strategyKey, strategyNam
   const toggleRegime = (r: string) =>
     setRegimes((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]));
 
-  const statusLabel = !enabled ? "Disabled" : regimes.length === 0 ? "Enabled — all regimes" : "Enabled";
+  const statusLabel = !enabled ? "Disabled" : regimes.length === 0 ? "Disabled — no regimes" : "Enabled";
 
   const applyRecommended = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
@@ -56,7 +56,7 @@ export function StrategyConfigSheet({ visible, onClose, strategyKey, strategyNam
   const resetDefaults = async () => {
     if (!isOwner) return Alert.alert("Owner login required");
     setSaving(true);
-    try { await api.strategyProfileReset(strategyKey); hydrate({ enabled: true, allowed_regimes: [], exit_method: "native", exit_params: {} }); onSaved?.(); }
+    try { const r = await api.strategyProfileReset(strategyKey); hydrate(r.profile || { enabled: false, allowed_regimes: [], exit_method: "fixed", exit_params: {} }); onSaved?.(); }
     catch (e: any) { Alert.alert("Reset failed", e?.message || ""); } finally { setSaving(false); }
   };
   const save = async () => {
@@ -114,7 +114,7 @@ export function StrategyConfigSheet({ visible, onClose, strategyKey, strategyNam
               {/* regimes */}
               <View style={{ opacity: enabled ? 1 : 0.4, marginBottom: spacing.md }} pointerEvents={enabled ? "auto" : "none"} testID="config-regimes">
                 <Text style={[type.small, { color: colors.textMuted, fontWeight: "700", marginBottom: 6 }]}>REGIME FILTER {focus === "regime" ? "•" : ""}</Text>
-                <Text style={[type.small, { color: colors.textMuted, marginBottom: 8 }]}>Market conditions this strategy may trade. None = all regimes.</Text>
+                <Text style={[type.small, { color: colors.textMuted, marginBottom: 8 }]}>Market conditions this strategy may trade. None selected = disabled (benched).</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                   {(data?.regimes || []).map((r: string) => {
                     const on = regimes.includes(r);

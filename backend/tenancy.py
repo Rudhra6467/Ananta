@@ -179,8 +179,13 @@ async def ensure_provisioned(db, tenant_id: str) -> None:
         p.id = pid
         await db.portfolio.insert_one(p.model_dump())
     if not await db.settings.find_one({"id": pid}, {"_id": 0, "id": 1}):
+        import strategy_profiles as sprofiles  # noqa: PLC0415
         s = RiskSettings()
         s.id = pid
         s.trading_mode = "PAPER"  # users are PAPER-only; LIVE is house/owner
+        # Seed the validated Recommended Matrix so a fresh account ships with sensible
+        # per-strategy regime + exit defaults (only proven strategies enabled).
+        s.profile_overrides = sprofiles.apply_matrix({})
+        s.recommended_matrix_version = sprofiles.MATRIX_VERSION
         await db.settings.insert_one(s.model_dump())
     _provisioned_cache.add(tenant_id)

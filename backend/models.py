@@ -340,6 +340,9 @@ class RiskSettings(BaseModel):
     dynamic_trail_k: float = 0.06  # slope: ATR percentile 0-100 -> ~0-6% before clamping
     # Research-Lab-promoted exit-profile overrides {strategy: {field: value}} (manual approval gate)
     profile_overrides: dict = {}
+    # Recommended-Matrix seeding marker: when != strategy_profiles.MATRIX_VERSION, the account gets
+    # (re-)seeded with the shipped regime + exit defaults once (owner on startup, users on provision).
+    recommended_matrix_version: str = ""
     # Exit Engine: user's preferred exit method (UI/record) + per-coin exit overrides {SYMBOL: {field: value}}
     exit_method_pref: str = "native"
     fixed_target_pct: float = 3.0  # take-profit % for the "Fixed % Target + Stop" exit (paired with stop_loss_pct)

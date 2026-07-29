@@ -222,13 +222,14 @@ def run_backtest(
     # so A/B/C runs share the EXACT same entry set and ONLY the exit logic differs. ----
     def _prof_regime_ok(key, regime_name) -> bool:
         """Strategy Profile regime filter (parity with the live engine): a strategy only opens
-        entries in its allowed regimes; a disabled profile never fires. Unconfigured == all."""
+        entries in its allowed regimes; a disabled profile never fires. Empty/absent regimes ==
+        benched (2026-07-26 change), so a strategy trades ONLY where its profile permits."""
         prof = (profile_overrides or {}).get(key) or (profile_overrides or {}).get(str(key).lower()) or {}
         if prof.get("enabled") is False:
             return False
         regimes = prof.get("allowed_regimes")
         if not regimes:
-            return True
+            return False
         return regime_name in regimes
 
     def _scan_entry(i: int):

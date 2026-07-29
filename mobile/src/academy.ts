@@ -26,3 +26,33 @@ export const STRATEGY_LESSON: Record<string, string> = {
 
 export const lessonByKey = (key?: string): Lesson | undefined =>
   LESSONS.find((l) => l.key === key);
+
+// Per-strategy plain-English guide powering the Strategy Detail page ("How it Works" + "Best Used In").
+export type StrategyGuide = { how: string; purpose: string; worksBest: string; avoid: string };
+
+export const STRATEGY_GUIDE: Record<string, StrategyGuide> = {
+  hunter: { how: "Hunts high-conviction reversals: price tests structural support after a momentum reset, with a volatility-contraction base and a confirming higher-timeframe trend. Exits via ATR trailing stop + profit floors.", purpose: "Buy fear at support with confirmation", worksBest: "Reversals & strong uptrends", avoid: "Falling knives with no base" },
+  squeeze: { how: "Finds tight, coiled ranges; when volume expands and price breaks the range, it enters in the breakout direction.", purpose: "Trade the expansion out of a squeeze", worksBest: "Compression → expansion", avoid: "Choppy, low-volume ranges" },
+  continuation: { how: "Rides an established trend: waits for a shallow pullback inside a confirmed uptrend, then enters as momentum resumes. Cuts quickly if trend structure breaks.", purpose: "Buy dips inside a confirmed uptrend", worksBest: "Strong, orderly trends", avoid: "Deep pullbacks / trend breaks (falling knives)" },
+  "ema-cross": { how: "Enters when a fast EMA crosses a slower EMA in the trade direction, filtered to its edge regimes. Fixed take-profit / stop-loss.", purpose: "Momentum shift via moving-average cross", worksBest: "Compression & range breakouts", avoid: "Whipsaw trends (chop)" },
+  "time-series-momentum": { how: "Buys when recent returns are positive and persistent; exits on a fixed target/stop once momentum fades.", purpose: "Follow persistent short-term momentum", worksBest: "Compression", avoid: "Trend-down & noisy ranges" },
+  "stochastic-momentum": { how: "Times entries with a stochastic momentum oscillator inside its allowed regimes; fixed TP/SL.", purpose: "Momentum timing with oscillator", worksBest: "Compression & range", avoid: "Strong trend-down" },
+  supertrend: { how: "Follows the Supertrend line; flips direction with the band. Best kept to compression here.", purpose: "Trend rider via ATR band", worksBest: "Compression", avoid: "Noisy trend flips" },
+  "donchian-breakout": { how: "Enters on a breakout of the N-period high/low channel.", purpose: "Channel breakout", worksBest: "Compression", avoid: "Trend-up chop (false breaks)" },
+  "keltner-breakout": { how: "Breakout of the Keltner (ATR) channel around an EMA.", purpose: "Volatility-band breakout", worksBest: "Range", avoid: "Trending markets" },
+  "atr-breakout": { how: "Enters when price expands beyond an ATR-scaled threshold.", purpose: "Volatility-expansion breakout", worksBest: "Trend-down", avoid: "Quiet, low-ATR conditions" },
+  "rsi-momentum": { how: "Momentum entries from RSI thresholds. No proven edge in the last validation — off by default.", purpose: "RSI momentum", worksBest: "Under redesign", avoid: "All regimes (no edge yet)" },
+  "macd-trend": { how: "Trend entries confirmed by MACD. No proven edge in the last validation — off by default.", purpose: "MACD trend confirmation", worksBest: "Under redesign", avoid: "All regimes (no edge yet)" },
+  "bollinger-mr": { how: "Mean-reversion at Bollinger band extremes. Off by default.", purpose: "Band mean-reversion", worksBest: "Under redesign", avoid: "All regimes (no edge yet)" },
+  "vwap-mr": { how: "Mean-reversion toward VWAP. Off by default.", purpose: "VWAP mean-reversion", worksBest: "Under redesign", avoid: "All regimes (no edge yet)" },
+  turtle: { how: "Classic Donchian trend-following breakout system. Off by default pending re-validation.", purpose: "Trend-following breakout", worksBest: "Under redesign", avoid: "All regimes (no edge yet)" },
+};
+
+export const guideByKey = (key?: string): StrategyGuide => {
+  return (key && STRATEGY_GUIDE[key]) || {
+    how: "A rules-based strategy that decides when to enter and exit based on its indicators and regime filter.",
+    purpose: "Rules-based entries & exits",
+    worksBest: "Its configured regimes",
+    avoid: "Regimes outside its edge",
+  };
+};

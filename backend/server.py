@@ -2641,7 +2641,7 @@ def _current_profile(settings, key: str) -> dict | None:
 
 
 @api_router.get("/strategy/{key}/profile")
-async def get_strategy_profile(key: str):
+async def get_strategy_profile(key: str, _t: dict | None = Depends(optional_tenant)):
     """Effective Strategy Profile + the shipped recommendation + selectable regimes/exit methods."""
     if not get_schema(key):
         raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
@@ -2666,8 +2666,8 @@ def _write_profile(ov: dict, key: str, prof: dict) -> dict:
     return ov
 
 
-@api_router.put("/strategy/{key}/profile", dependencies=[Depends(require_owner)])
-async def put_strategy_profile(key: str, body: StrategyProfileIn):
+@api_router.put("/strategy/{key}/profile")
+async def put_strategy_profile(key: str, body: StrategyProfileIn, _t: dict = Depends(tenant_context)):
     if not get_schema(key):
         raise HTTPException(status_code=404, detail=f"strategy '{key}' not found")
     prof = sprofiles.normalize_profile(body.model_dump())
@@ -2677,8 +2677,8 @@ async def put_strategy_profile(key: str, body: StrategyProfileIn):
     return {"ok": True, "key": key, "profile": prof, "status": sprofiles.profile_status(prof)}
 
 
-@api_router.post("/strategy/{key}/profile/apply-recommended", dependencies=[Depends(require_owner)])
-async def apply_recommended_profile(key: str):
+@api_router.post("/strategy/{key}/profile/apply-recommended")
+async def apply_recommended_profile(key: str, _t: dict = Depends(tenant_context)):
     rec = sprofiles.recommended_profile(key)
     if not rec:
         raise HTTPException(status_code=404, detail=f"no recommended profile for '{key}'")
@@ -2689,16 +2689,32 @@ async def apply_recommended_profile(key: str):
     return {"ok": True, "key": key, "profile": prof, "status": sprofiles.profile_status(prof)}
 
 
-@api_router.post("/strategy/{key}/profile/reset", dependencies=[Depends(require_owner)])
-async def reset_strategy_profile(key: str):
-    """Clear the user's profile so the strategy reverts to defaults (trades all regimes, native exit)."""
+@api_router.post("/strategy/profiles/apply-recommended")
+async def apply_recommended_matrix(_t: dict = Depends(tenant_context)):
+    """Bulk 'Apply Recommended Matrix' — seed the caller's book with the full validated matrix
+    (enabled/regimes/exit per strategy). Preserves any extra per-strategy exit-engine patches."""
+    s = await load_settings(db)
+    s.profile_overrides = sprofiles.apply_matrix(dict(getattr(s, "profile_overrides", {}) or {}))
+    s.recommended_matrix_version = sprofiles.MATRIX_VERSION
+    await save_settings(db, s)
+    applied = {k: sprofiles.profile_status(v) for k, v in sprofiles.recommended_matrix().items()}
+    return {"ok": True, "matrix_version": sprofiles.MATRIX_VERSION, "applied": applied}
+
+
+@api_router.post("/strategy/{key}/profile/reset")
+async def reset_strategy_profile(key: str, _t: dict = Depends(tenant_context)):
+    """Reset one strategy to its Recommended default (regimes + exit + enabled state)."""
+    rec = sprofiles.recommended_profile(key)
     s = await load_settings(db)
     ov = dict(getattr(s, "profile_overrides", {}) or {})
     ov.pop(key, None)
     ov.pop(key.lower(), None)
+    if rec:
+        ov[key] = sprofiles.normalize_profile(rec)
     s.profile_overrides = ov
     await save_settings(db, s)
-    return {"ok": True, "key": key, "profile": None, "status": sprofiles.profile_status(None)}
+    prof = ov.get(key)
+    return {"ok": True, "key": key, "profile": prof, "status": sprofiles.profile_status(prof)}
 
 
 
@@ -2707,6 +2723,56 @@ async def reset_strategy_profile(key: str):
 async def strategy_registry():
     """All built-in strategies with their DNA + full parameter schema (latest version each)."""
     return {"strategies": [s.model_dump() for s in list_schemas()]}
+
+
+_AUDIT_POOL = None
+
+
+def _audit_pool():
+    """Lazy spawn-based process pool for the CPU-bound regime audit so it never holds the GIL /
+    blocks the API event loop. Spawn (not fork) avoids fork-with-threads hazards under uvicorn."""
+    global _AUDIT_POOL
+    if _AUDIT_POOL is None:
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+        _AUDIT_POOL = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+    return _AUDIT_POOL
+
+
+async def _run_regime_audit(symbol: str, timeframe: str, stride: int) -> dict:
+    import functools  # noqa: PLC0415
+    from lab import regime_audit  # noqa: PLC0415
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _audit_pool(), functools.partial(regime_audit.audit, symbol, timeframe, None, None, stride),
+    )
+
+
+@api_router.get("/lab/regime-audit", dependencies=[Depends(require_owner)])
+async def lab_regime_audit(symbol: str = "BTC/USD", timeframe: str = "1h",
+                           stride: int = 6, include_rows: bool = False):
+    """Regime-classification audit: per-candle classify_regime labels + standard proxies
+    (ADX, ATR%, Bollinger bandwidth %, Efficiency Ratio) with distribution, average duration
+    and a transition matrix. Runs in a separate PROCESS (CPU-bound) so it never blocks the API.
+    Set include_rows=true for the raw per-candle array (large)."""
+    res = await _run_regime_audit(symbol, timeframe, max(1, stride))
+    out = {"symbol": symbol, "timeframe": timeframe,
+           "coverage": res["coverage"], "summary": res["summary"]}
+    if include_rows:
+        out["rows"] = res["rows"]
+    return out
+
+
+@api_router.get("/lab/regime-audit.csv", dependencies=[Depends(require_owner)])
+async def lab_regime_audit_csv(symbol: str = "BTC/USD", timeframe: str = "1h", stride: int = 1):
+    """Downloadable per-candle regime CSV (timestamp, OHLCV, regime, features + proxies) for an
+    external accuracy audit of classify_regime. Runs in a separate process."""
+    from lab import regime_audit  # noqa: PLC0415
+    res = await _run_regime_audit(symbol, timeframe, max(1, stride))
+    csv_text = regime_audit.to_csv(res["rows"])
+    fname = f"regime_audit_{symbol.replace('/', '')}_{timeframe}.csv"
+    return Response(content=csv_text, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @api_router.get("/strategy/{key}/schema")
@@ -3807,6 +3873,16 @@ async def _deferred_startup():
             await load_portfolio(db)
             await seed_owner(db)
             await seed_demo(db)
+            # One-time: seed the owner/house book with the validated Recommended Matrix so the
+            # live engine + Lab immediately enforce per-strategy regimes + exits (new entries only;
+            # existing positions are untouched). Re-runs only when MATRIX_VERSION bumps.
+            with contextlib.suppress(Exception):
+                _os = await load_settings(db)  # owner context (default tenant)
+                if getattr(_os, "recommended_matrix_version", "") != sprofiles.MATRIX_VERSION:
+                    _os.profile_overrides = sprofiles.apply_matrix(dict(getattr(_os, "profile_overrides", {}) or {}))
+                    _os.recommended_matrix_version = sprofiles.MATRIX_VERSION
+                    await save_settings(db, _os)
+                    logger.info("Seeded owner book with Recommended Matrix %s", sprofiles.MATRIX_VERSION)
             await db.users.create_index("email", unique=True)
             with contextlib.suppress(Exception):
                 await db.users.create_index("user_id", unique=True)

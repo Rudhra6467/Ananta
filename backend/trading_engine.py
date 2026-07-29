@@ -203,15 +203,17 @@ def strategy_profile_disabled(settings, key: str) -> bool:
 
 def strategy_regime_ok(settings, key: str, regime: str | None) -> bool:
     """True if the strategy may OPEN an entry in this regime, per its Strategy Profile:
-      * disabled profile        -> never
-      * no regimes configured   -> allowed (unconfigured == trade all, backward compatible)
-      * regimes configured      -> only when the current regime is in the allow-list
-    Applied identically LIVE and in the Research Lab so a strategy behaves the same everywhere."""
+      * disabled profile           -> never
+      * no regimes configured       -> never (empty allowed_regimes == benched; 2026-07-26 change)
+      * regimes configured          -> only when the current regime is in the allow-list
+    Applied identically LIVE and in the Research Lab so a strategy behaves the same everywhere.
+    Every catalog strategy is seeded with the Recommended Matrix, so "no regimes" is an explicit
+    OFF (never an accidental trade-everything)."""
     if strategy_profile_disabled(settings, key):
         return False
     per = _per_strategy_regimes(settings, key)
-    if per is None:
-        return True
+    if not per:
+        return False
     return regime in per
 
 

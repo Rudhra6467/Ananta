@@ -476,6 +476,35 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
     const stars = metric?.stars ?? Math.round((metric?.health ?? 0) / 20);
     const deployed = status === "PAPER" || status === "LIVE";
 
+    // Live/Off is driven by the Strategy Profile `enabled` flag (regime/exit gating handled in Edit).
+    const [profile, setProfile] = useState(null);
+    const [live, setLive] = useState(null);
+    const [savingLive, setSavingLive] = useState(false);
+    useEffect(() => {
+        let active = true;
+        api.strategyProfile(sKey).then((d) => { if (active) { setProfile(d.profile); setLive(d.profile?.enabled !== false); } }).catch(() => {});
+        return () => { active = false; };
+    }, [sKey]);
+    const toggleLive = async (v) => {
+        if (!isOwner || savingLive || live === v) return;
+        setLive(v);
+        setSavingLive(true);
+        try {
+            await api.strategyProfileSave(sKey, {
+                enabled: v,
+                allowed_regimes: profile?.allowed_regimes || [],
+                exit_method: profile?.exit_method || "native",
+                exit_params: profile?.exit_params || {},
+            });
+            const d = await api.strategyProfile(sKey);
+            setProfile(d.profile);
+            onChanged?.();
+        } catch (e) {
+            setLive(!v);
+            toast.error(isOwner ? "Update failed" : "Sign in to change this");
+        } finally { setSavingLive(false); }
+    };
+
     const setState = async (patch) => {
         if (!isOwner) { toast.error("Owner login required"); return; }
         try {
@@ -536,9 +565,22 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         {grade && <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${GRADE_CLS[grade] || GRADE_CLS.C}`} data-testid="detail-grade">Grade {grade}</span>}
-                        <span className={`flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase px-2.5 py-1.5 rounded-lg border ${STATUS[status]}`} data-testid="detail-status">
-                            <span className="w-1.5 h-1.5 rounded-full bg-current" /> {status}
-                        </span>
+                        <div className="flex items-center rounded-xl border border-atlas-border bg-atlas-panel p-0.5" data-testid="strategy-live-toggle" style={{ opacity: (!isOwner || savingLive) ? 0.6 : 1 }}>
+                            {[{ v: true, label: "Live" }, { v: false, label: "Off" }].map(({ v, label }) => {
+                                const active = live === v;
+                                return (
+                                    <button key={label} data-testid={`toggle-${label.toLowerCase()}`} disabled={!isOwner || savingLive}
+                                        onClick={() => toggleLive(v)}
+                                        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide transition-all ${
+                                            active && v ? "bg-atlas-positive/15 text-atlas-positive border border-atlas-positive/60"
+                                            : active && !v ? "bg-atlas-panel2 text-atlas-textSecondary border border-atlas-border"
+                                            : "text-atlas-textTertiary border border-transparent hover:text-atlas-text"}`}>
+                                        {active && v ? <span className="w-1.5 h-1.5 rounded-full bg-atlas-positive animate-pulse" /> : null}
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -621,59 +663,16 @@ function StrategyDetail({ sKey, schema, metric, isOwner, onBack, onChanged }) {
                 </div>
             )}
 
-            {/* parameters (revealed by Edit Parameters) */}
-            {showParams && (
-                <div ref={paramsRef} data-testid="detail-params">
-                    <SavedConfigsPanel isOwner={isOwner} only={sKey} />
-                </div>
-            )}
-
-            {/* manage (revealed by Manage) */}
-            {showManage && deployed && (
-                <div className="panel border-atlas-cyan/30 bg-atlas-cyan/5 rounded-xl p-4 space-y-2" data-testid="detail-manage">
-                    <div className="label-tag">MANAGE DEPLOYMENT</div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-[11px] text-atlas-textSecondary">Engine state</span>
-                        <Select value={status} onValueChange={(v) => setState({ status: v })} disabled={!isOwner}>
-                            <SelectTrigger data-testid="detail-status-select" className="w-auto bg-atlas-panel border-atlas-border rounded-lg px-2.5 py-2 font-mono text-[10px] text-atlas-text disabled:opacity-50 h-auto gap-1.5">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-atlas-panel border-atlas-border text-atlas-text font-mono text-[10px]">
-                                {Object.keys(STATUS).map((st) => <SelectItem key={st} value={st} className="font-mono text-[10px]">{st}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="font-mono text-[10px] text-atlas-textTertiary">PAPER = simulated · LIVE = real capital · DISABLED = stops taking new entries.</div>
-                </div>
-            )}
-
-            {/* bottom actions */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1" data-testid="detail-actions">
-                <button data-testid="detail-test-strategy" onClick={testStrategy}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-cyan/50 bg-atlas-cyan/10 text-atlas-cyan font-mono text-[12px] font-bold tracking-wide py-3.5 hover:bg-atlas-cyan/20 active:scale-[0.99] transition-all">
-                    <ShieldCheck className="w-4 h-4" /> TEST IN RESEARCH LAB
-                </button>
-                <button data-testid="detail-deploy-manage" onClick={() => (deployed ? setShowManage((v) => !v) : deployToPaper())} disabled={deploying}
-                    className={`flex items-center justify-center gap-2 rounded-xl font-mono text-[12px] font-bold tracking-wide py-3.5 active:scale-[0.99] transition-all disabled:opacity-50 ${
-                        deployed ? "border border-atlas-border text-atlas-text hover:border-atlas-textTertiary" : "bg-atlas-cyan text-atlas-bg hover:brightness-110"}`}>
-                    {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" strokeWidth={2.5} />}
-                    {deployed ? "MANAGE IN PAPER" : "DEPLOY TO PAPER"}
-                </button>
-                <button data-testid="detail-regime-filter" onClick={() => { setConfigFocus("regime"); setConfigOpen(true); }}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
-                    <Filter className="w-4 h-4" /> REGIME FILTER
-                </button>
-                <button data-testid="detail-exit-params" onClick={() => { setConfigFocus("exit"); setConfigOpen(true); }}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
-                    <SlidersHorizontal className="w-4 h-4" /> EXIT PARAMETERS
-                </button>
-                <button data-testid="detail-edit-parameters" onClick={openParams}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-atlas-border text-atlas-textSecondary font-mono text-[12px] font-bold tracking-wide py-3.5 hover:text-atlas-text hover:border-atlas-textTertiary active:scale-[0.99] transition-all">
-                    <Pencil className="w-4 h-4" /> EDIT PARAMETERS
+            {/* single primary action */}
+            <div className="pt-1">
+                <button data-testid="edit-strategy-btn" onClick={() => setConfigOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-atlas-cyan text-atlas-bg font-mono text-[13px] font-bold tracking-wide py-4 hover:brightness-110 active:scale-[0.99] transition-all">
+                    <SlidersHorizontal className="w-4 h-4" /> EDIT STRATEGY
                 </button>
             </div>
             <StrategyConfigModal open={configOpen} onClose={() => setConfigOpen(false)} strategyKey={sKey}
-                strategyName={schema?.name || sKey} focus={configFocus} isOwner={isOwner} onSaved={onChanged} />
+                strategyName={schema?.name || sKey} isOwner={isOwner}
+                onSaved={() => { onChanged?.(); api.strategyProfile(sKey).then((d) => { setProfile(d.profile); setLive(d.profile?.enabled !== false); }).catch(() => {}); }} />
         </div>
     );
 }
