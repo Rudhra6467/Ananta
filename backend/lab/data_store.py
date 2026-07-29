@@ -1,90 +1,119 @@
 """
-lab/data_store.py — local historical OHLCV store (SQLite, WAL) for the Research Lab.
+lab/data_store.py — durable historical OHLCV store (MongoDB) for the Research Lab.
 
-All validations run OFFLINE and FREE against this DB, which is backfilled once via
-CCXT and auto-appended on daily candle closes. One writer (the backfill/append job),
-many readers (backtests) — WAL mode makes that safe.
+Backed by MongoDB so the candle history SURVIVES production redeploys (the previous
+SQLite file under /app/backend/data was ephemeral and wiped on every deploy). All
+validations run OFFLINE and FREE against this store, which is backfilled once via CCXT
+and auto-appended on daily candle closes.
 
-Schema:  candles(symbol, timeframe, ts INTEGER ms, open, high, low, close, volume)
-         UNIQUE(symbol, timeframe, ts)  -> INSERT OR IGNORE = idempotent appends.
+Storage model:  collection `historical_candles`, ONE document per candle:
+    { _id: "<symbol>|<timeframe>|<ts>", symbol, timeframe, ts(ms int), o, h, l, c, v }
+The deterministic _id makes appends idempotent (upsert = the old INSERT OR IGNORE) and
+dedupes for free. Index (symbol, timeframe, ts) powers range reads + ascending sort.
+
+Public API is unchanged (init_db / upsert_candles / load_candles / coverage / backfill /
+append_latest / TF_MS) so backtest / runner / server call sites need no changes.
 """
 from __future__ import annotations
 
 import logging
 import os
-import sqlite3
 import time
-from contextlib import contextmanager
+
+from pymongo import ASCENDING, MongoClient, UpdateOne
 
 logger = logging.getLogger("ananta.lab.data")
 
-DB_PATH = os.environ.get("HISTORICAL_DB_PATH", "/app/backend/data/historical_candles.db")
+COLLECTION = "historical_candles"
 
 TF_MS = {"15m": 900_000, "30m": 1_800_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
 
+# Lazy, fork-safe Mongo client: ProcessPoolExecutor workers (the Lab runs backtests in a
+# separate process) inherit the parent's client across fork, which pymongo forbids. We key
+# the client by the creating PID and transparently recreate it after a fork/spawn.
+_client: MongoClient | None = None
+_client_pid: int | None = None
+_indexed = False
 
-@contextmanager
-def _conn():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    con = sqlite3.connect(DB_PATH, timeout=30)
+
+def _load_env() -> None:
+    if os.environ.get("MONGO_URL") and os.environ.get("DB_NAME"):
+        return
+    # Fallback for standalone worker processes / scripts that didn't inherit the server env.
     try:
-        con.execute("PRAGMA journal_mode=WAL;")
-        con.execute("PRAGMA synchronous=NORMAL;")
-        yield con
-        con.commit()
-    finally:
-        con.close()
+        from dotenv import load_dotenv  # noqa: PLC0415
+        load_dotenv("/app/backend/.env")
+    except Exception:
+        pass
+
+
+def _coll():
+    global _client, _client_pid, _indexed
+    pid = os.getpid()
+    if _client is None or _client_pid != pid:
+        _load_env()
+        _client = MongoClient(os.environ["MONGO_URL"], tz_aware=False)
+        _client_pid = pid
+        _indexed = False
+    coll = _client[os.environ["DB_NAME"]][COLLECTION]
+    if not _indexed:
+        coll.create_index([("symbol", ASCENDING), ("timeframe", ASCENDING), ("ts", ASCENDING)],
+                           name="sym_tf_ts")
+        _indexed = True
+    return coll
 
 
 def init_db() -> None:
-    with _conn() as con:
-        con.execute(
-            """CREATE TABLE IF NOT EXISTS candles (
-                symbol TEXT NOT NULL, timeframe TEXT NOT NULL, ts INTEGER NOT NULL,
-                open REAL, high REAL, low REAL, close REAL, volume REAL,
-                UNIQUE(symbol, timeframe, ts)
-            )"""
-        )
-        con.execute("CREATE INDEX IF NOT EXISTS idx_candles_key ON candles(symbol, timeframe, ts)")
+    """Ensure the collection + index exist (idempotent)."""
+    _coll()
 
 
 def upsert_candles(symbol: str, timeframe: str, bars: list[list[float]]) -> int:
-    """Idempotent insert of [ts, o, h, l, c, v] rows. Returns rows newly inserted."""
+    """Idempotent insert of [ts, o, h, l, c, v] rows. Returns rows NEWLY inserted."""
     if not bars:
         return 0
-    with _conn() as con:
-        before = con.total_changes
-        con.executemany(
-            "INSERT OR IGNORE INTO candles(symbol,timeframe,ts,open,high,low,close,volume) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            [(symbol, timeframe, int(b[0]), float(b[1]), float(b[2]), float(b[3]),
-              float(b[4]), float(b[5])) for b in bars],
-        )
-        return con.total_changes - before
+    ops = []
+    for b in bars:
+        ts = int(b[0])
+        ops.append(UpdateOne(
+            {"_id": f"{symbol}|{timeframe}|{ts}"},
+            {"$setOnInsert": {
+                "symbol": symbol, "timeframe": timeframe, "ts": ts,
+                "o": float(b[1]), "h": float(b[2]), "l": float(b[3]),
+                "c": float(b[4]), "v": float(b[5]),
+            }},
+            upsert=True,
+        ))
+    res = _coll().bulk_write(ops, ordered=False)
+    return int(res.upserted_count or 0)
 
 
 def load_candles(symbol: str, timeframe: str,
                  start_ms: int | None = None, end_ms: int | None = None) -> list[list[float]]:
     """Return [ts, o, h, l, c, v] rows ascending by ts within [start_ms, end_ms]."""
-    q = "SELECT ts,open,high,low,close,volume FROM candles WHERE symbol=? AND timeframe=?"
-    args: list = [symbol, timeframe]
+    q: dict = {"symbol": symbol, "timeframe": timeframe}
+    ts_filter: dict = {}
     if start_ms is not None:
-        q += " AND ts>=?"; args.append(int(start_ms))
+        ts_filter["$gte"] = int(start_ms)
     if end_ms is not None:
-        q += " AND ts<=?"; args.append(int(end_ms))
-    q += " ORDER BY ts ASC"
-    with _conn() as con:
-        return [list(r) for r in con.execute(q, args).fetchall()]
+        ts_filter["$lte"] = int(end_ms)
+    if ts_filter:
+        q["ts"] = ts_filter
+    cur = _coll().find(q, {"_id": 0, "ts": 1, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}).sort("ts", ASCENDING)
+    return [[d["ts"], d["o"], d["h"], d["l"], d["c"], d["v"]] for d in cur]
 
 
 def coverage(symbol: str, timeframe: str) -> dict:
-    with _conn() as con:
-        row = con.execute(
-            "SELECT COUNT(*), MIN(ts), MAX(ts) FROM candles WHERE symbol=? AND timeframe=?",
-            (symbol, timeframe),
-        ).fetchone()
-    return {"symbol": symbol, "timeframe": timeframe,
-            "count": row[0] or 0, "min_ts": row[1], "max_ts": row[2]}
+    coll = _coll()
+    q = {"symbol": symbol, "timeframe": timeframe}
+    count = coll.count_documents(q)
+    min_ts = max_ts = None
+    if count:
+        first = coll.find(q, {"_id": 0, "ts": 1}).sort("ts", ASCENDING).limit(1)
+        last = coll.find(q, {"_id": 0, "ts": 1}).sort("ts", -1).limit(1)
+        min_ts = next(iter(first), {}).get("ts")
+        max_ts = next(iter(last), {}).get("ts")
+    return {"symbol": symbol, "timeframe": timeframe, "count": count, "min_ts": min_ts, "max_ts": max_ts}
 
 
 def _paginate(symbol: str, timeframe: str, since_ms: int, until_ms: int) -> list[list[float]]:
@@ -124,7 +153,7 @@ def _paginate(symbol: str, timeframe: str, since_ms: int, until_ms: int) -> list
 
 
 def backfill(symbol: str, timeframe: str, days: int) -> dict:
-    """Fetch `days` of history for (symbol, timeframe) from CCXT into the DB (idempotent)."""
+    """Fetch `days` of history for (symbol, timeframe) from CCXT into the store (idempotent)."""
     init_db()
     now_ms = int(time.time() * 1000)
     since = now_ms - days * 86_400_000
@@ -136,6 +165,6 @@ def backfill(symbol: str, timeframe: str, days: int) -> dict:
 
 
 def append_latest(symbol: str, timeframe: str) -> dict:
-    """Idempotent tail append — fetch the most recent ~5 days and INSERT OR IGNORE.
+    """Idempotent tail append — fetch the most recent ~5 days and upsert.
     Safe to run on every daily candle close."""
     return backfill(symbol, timeframe, days=5)
