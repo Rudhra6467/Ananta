@@ -56,8 +56,10 @@ this is regime DISCIPLINE / damage-control, not a profit switch (Tier-1 still ma
 Script: `scripts/regime_validation.py` → `scripts/regime_validation_result.json`. `tests/test_strategy_profiles.py`
 updated to the new semantics (empty regimes = disabled; ema-cross rec = COMPRESSION+RANGE, fixed 5/3.5).
 
-**LOGO UNIFIED — canonical = mobile GOLD TRIDENT.** Web `components/AnantaLogo.jsx` rewritten to render the exact
-mobile trident (mobile/src/components/Logo.tsx) in imperial gold (#E5B84B). One brand across web header/onboarding + mobile.
+**LOGO — canonical = the A-with-TRIDENT (trisul) mark** (ring + trident tines + sharp central "A" + cyan chart
+arrow). Used identically on web (`components/AnantaLogo.jsx`, currentColor + cyan accent) AND mobile
+(`mobile/src/components/Logo.tsx`, react-native-svg, white/`color` A + cyan arrow). [2026-07-29 update: reverted the
+earlier gold-trident unification back to this A-mark per owner preference — same mark everywhere, web + mobile.]
 
 **(C) DONE — Strategy Detail redesign finished + tested (web E2E + mobile code-review, iter88 PASS).** Single Live/Off
 control top-right (`strategy-live-toggle` → toggle-live/off, persists via PUT /api/strategy/{key}/profile PRESERVING
