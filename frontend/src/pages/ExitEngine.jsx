@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import HeaderActionPortal from "@/components/HeaderActionPortal";
 import AnantaPdfs from "@/components/AnantaPdfs";
 import ExitEngineWorkflow from "@/components/ExitEngineWorkflow";
+import LivePreflightCard from "@/components/LivePreflightCard";
 import RiskMonitorPanel from "@/components/RiskMonitorPanel";
 
 export default function ExitEngine() {
@@ -53,6 +54,7 @@ export default function ExitEngine() {
                 </div>
 
                 <TabsContent value="engine" className="m-0">
+                    <div className="mb-4"><LivePreflightCard /></div>
                     <ExitEngineWorkflow />
                 </TabsContent>
 

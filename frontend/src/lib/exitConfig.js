@@ -25,6 +25,18 @@ function firstExitOverride(map) {
     return null;
 }
 
+// Flat, at-a-glance list of what exit each scope is running RIGHT NOW:
+// the global default plus every deployed per-strategy / per-coin override.
+// Returns { global, strategies: [{key,label}], coins: [{key,label}] }.
+export function listExitOverrides(s) {
+    if (!s) return { global: "—", strategies: [], coins: [] };
+    const named = (m) => METHOD_NAMES[m] || "Universal Exit Engine";
+    const pick = (map) => Object.entries(map || {})
+        .filter(([, v]) => v && typeof v === "object" && v.method)
+        .map(([key, v]) => ({ key, label: named(v.method) }));
+    return { global: named(s.exit_method_pref || "native"), strategies: pick(s.profile_overrides), coins: pick(s.asset_exit_overrides) };
+}
+
 // Returns { method, typeLabel, scope, scopeLabel, rows: [{label, value}] }
 export function describeActiveExit(s) {
     if (!s) return { method: "native", typeLabel: "—", scope: "global", scopeLabel: "Global", rows: [] };

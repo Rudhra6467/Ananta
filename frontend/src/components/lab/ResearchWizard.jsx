@@ -121,7 +121,7 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 3 && (
-                        <StepShell title="Choose timeframe(s)" hint="Tick one or more candle sizes. 1H is the live default; add 30m/15m to compare the edge side-by-side across timeframes.">
+                        <StepShell title="Choose timeframe(s)" hint="1H is the live default — add 30m/15m to compare side-by-side.">
                             <div className="grid grid-cols-3 gap-3" data-testid="wizard-timeframes">
                                 {TIMEFRAMES.map((tf) => {
                                     const on = timeframes.includes(tf.k);
@@ -142,16 +142,16 @@ export default function ResearchWizard() {
                         </StepShell>
                     )}
                     {step === 4 && (
-                        <StepShell title="Choose validation" hint="Backtest runs by default. Keep live settings on to mirror paper/live, or override the exit to A/B test. Add Monte Carlo for a robustness stress-test.">
+                        <StepShell title="Choose validation" hint="Backtest always runs. Keep live settings on to mirror paper/live, or override the exit to A/B test.">
                             <div className="space-y-3" data-testid="wizard-validations">
                                 <label data-testid="wizard-use-live-toggle" className="panel border-atlas-cyan/40 bg-atlas-cyan/5 rounded-xl p-4 flex items-start gap-3 cursor-pointer">
                                     <Switch data-testid="wizard-use-live-switch" checked={useLive} onCheckedChange={setUseLive} className="mt-0.5" />
                                     <div className="min-w-0">
-                                        <div className="font-heading text-sm text-atlas-text">Use my live Risk Monitor &amp; Exit Engine settings</div>
+                                        <div className="font-heading text-sm text-atlas-text">Use my live settings</div>
                                         <div className="font-mono text-[10px] text-atlas-textTertiary mt-0.5">
                                             {useLive
-                                                ? "Backtest replays through your DEPLOYED config — Allowed Regimes, Min Confidence AND exit method — so the PDF matches paper / live."
-                                                : "Manual override — pick an exit below to A/B test rules (live regime / confidence filters NOT applied)."}
+                                                ? "Replays through your deployed regimes, confidence & exit — the PDF matches paper/live."
+                                                : "Manual override — pick an exit below to A/B test (live filters not applied)."}
                                         </div>
                                     </div>
                                 </label>

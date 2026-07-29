@@ -1,0 +1,53 @@
+{
+  "summary": "iter89 — Frontend-only verification of V1 crypto polish (A): Live Preflight card, redesigned Active Exit card, and the tightened Research wizard copy on BOTH web and mobile. WEB Exit Engine (bottom-nav-workspace → ENGINE sub-tab): live-preflight-card renders with preflight-mode='PAPER · simulation', preflight-connection='Connected · kraken', preflight-size='$150 / trade' + soft-cap note 'Above ~$75 — keep small (~$50) for first live tests' (correctly triggered because normal_lot_usd=150 > SOFT_CAP_USD=75), preflight-kill='Active' with preflight-kill-action visible for owner. Kill toggle exercised end-to-end: click → 'Trading STOPPED / Resume' → click again → 'Trading Active / Kill-switch' (kill switch left FALSE, verified by GET /api/settings). No BACK-to-PAPER shown because is_live=false (correct). ACTIVE EXIT card header reads 'ACTIVE EXIT · GLOBAL DEFAULT'; active-exit-overrides present and shows the two per-strategy chips 'squeeze · Fixed-% Stop' and 'hunter · ATR Trailing Stop' (matches spec). active-exit-edit button opens the Modify flow with exit-stepbar (Scope → Method → Configure → Deploy) — verified. WEB Research (bottom-nav-research → research-subtab-validate): stepped through the wizard end-to-end with 1 strategy (Hunter) → BTC → 1m/1h → step 4 shows wizard-use-live-toggle+wizard-use-live-switch and toggle text is exactly 'Use my live settings' (tightened copy confirmed). With live OFF the wizard-exit-atr and wizard-exit-fixed cards are selectable (both present). RUN VALIDATION advanced to step 6 and started wizard-running (backtest in flight; UI showed 'Running backtest… hunter · BTC · 1m · 1h · ATR exit'). MOBILE Exit Engine (tab-workspace): ee-live-preflight present with ee-preflight-mode='PAPER · simulation', ee-preflight-connection='Connected · kraken', ee-preflight-size='$150/trade Keep ~$50 for first live', ee-preflight-trading='Active', ee-preflight-trading-action='Kill' (owner action button). ee-preflight-paper NOT rendered because is_live=false (correct — only shown when LIVE). ee-active-exit shows the Universal Exit Engine global default with ee-overrides listing the same 'squeeze · Fixed-% Stop, hunter · ATR Trailing Stop' chips (ee-overrides-empty absent, correctly, because overrides exist). ee-edit-current tap target present. MOBILE Research (tab-research): wizard renders with core strategies visible, wiz-use-live-exit toggle present with 'Use my live settings' copy confirmed, wizard-run present. wiz-exit-atr / wiz-exit-fixed not rendered on the initial view because useLive defaults to ON (segmented only shows when live is OFF, per code /app/mobile/app/(tabs)/research.tsx L204) — this is correct behavior per spec. PARITY: preflight card, per-strategy exit readout, and Research 'Use my live settings' copy all present and consistent across web + mobile. FINAL STATE (verified via GET /api/environment + /api/settings after all tests): trading_mode=PAPER, is_live=false, ready_to_trade=true, exchange=kraken, manual_kill_switch=FALSE — account safe, no lingering LIVE/STOPPED state.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "code_review_findings": {
+    "web_live_preflight": "VERIFIED /app/frontend/src/components/LivePreflightCard.jsx — polls /api/environment every 10s (L27), guards kill/back-to-paper actions with isOwner (L38-43), soft cap $75 (L8), shows warning card when LIVE armed but broker gate closed (L88-93). Solid, read-only for non-owners.",
+    "web_active_exit_overrides": "VERIFIED /app/frontend/src/components/ExitEngineWorkflow.jsx L339-388: header 'ACTIVE EXIT · GLOBAL DEFAULT' L348, data-testid='active-exit-overrides' L366, empty-state fallback 'All strategies & coins use the global default above.' L369, per-strategy/per-coin chips L371-384.",
+    "web_wizard_copy": "VERIFIED /app/frontend/src/components/lab/ResearchWizard.jsx L147-150: data-testid='wizard-use-live-toggle' wraps 'Use my live settings' label + Switch with data-testid='wizard-use-live-switch'. wizard-exit-atr / wizard-exit-fixed cards render only when useLive is OFF (as designed).",
+    "mobile_live_preflight": "VERIFIED /app/mobile/app/(tabs)/workspace.tsx L189-217: testID='ee-live-preflight' wraps mode + PreflightCell grid; ee-preflight-paper renders only when isLive (L200-205); PreflightCell auto-generates testIDs 'ee-preflight-{label.toLowerCase()}' + '-action' variant (L698, L706) — mapping to ee-preflight-connection/size/trading and ee-preflight-trading-action per spec.",
+    "mobile_active_exit_overrides": "VERIFIED /app/mobile/app/(tabs)/workspace.tsx L219-252: 'Active Exit · Global Default' section title, ee-active-exit card, ee-overrides or ee-overrides-empty (mutually exclusive), ee-edit-current button.",
+    "mobile_wizard_copy": "VERIFIED /app/mobile/app/(tabs)/research.tsx L191-210: 'Use my live settings' label L191, testID='wiz-use-live-exit' switch L198, Segmented testIDPrefix='wiz-exit' emits wiz-exit-atr/wiz-exit-fixed L204 (only rendered when useLive OFF), testID='wizard-run' button L210.",
+    "safety_final_state": "GET /api/environment → PAPER, is_live=false; GET /api/settings → manual_kill_switch=FALSE, normal_lot_usd=150 (unchanged from starting state)."
+  },
+  "test_report_links": [
+    "/tmp/w_exit_engine.png (WEB exit engine + preflight)",
+    "/tmp/w_edit_flow.png (WEB modify-exit stepper after clicking active-exit-edit)",
+    "/tmp/w_wiz_step4.png (WEB wizard step 4 with 'Use my live settings' toggle + exit cards)",
+    "/tmp/w_wiz_results.png (WEB validation run started)",
+    "/tmp/m_ws_final.png (MOBILE workspace with ee-live-preflight)",
+    "/tmp/m_wiz_step_final.png (MOBILE research wizard with 'Use my live settings')"
+  ],
+  "action_items": [
+    "None functional — feature ships as spec'd on both surfaces.",
+    "Consider: soft-cap of $75 flags normal_lot_usd=150 as 'above' the recommended tier; if $50 real-money testing is the intent, main agent may want to reduce settings.normal_lot_usd to $50 before flipping to LIVE (or surface a quick 'set to $50' button in the preflight-size cell). Purely a nice-to-have polish."
+  ],
+  "critical_code_review_comments": [
+    "LivePreflightCard polls /api/environment every 10s but never re-fetches /api/settings on that interval, so if manual_kill_switch or normal_lot_usd is changed elsewhere (e.g. another browser tab, mobile client) the web card's Trading/Size cells only refresh after refresh() is triggered by an owner action. Not a shipping blocker but worth noting for cross-surface parity when both web+mobile are open at once.",
+    "PreflightCell testID is derived from the label via `label.toLowerCase()` on mobile (workspace.tsx L698) — matches spec today (Connection/Size/Trading → ee-preflight-connection/size/trading) but is fragile: any future label rename (e.g. 'Broker connection') would silently break the testID. Suggest passing explicit testIDs.",
+    "Web soft-cap threshold ($75, LivePreflightCard.jsx L8) is duplicated on mobile as a hard-coded $75 check (workspace.tsx `overCap` computation). If either surface changes the constant they'll drift — worth centralising into shared config."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only per review request)", "frontend": "Web: 100% of review checkpoints pass (preflight card + cells + kill toggle round-trip + active-exit-overrides + edit flow + wizard step-4 copy + exit cards + wizard-run). Mobile: 100% of review checkpoints pass (ee-live-preflight + ee-preflight-mode/connection/size/trading + ee-preflight-trading-action + ee-active-exit + ee-overrides + ee-edit-current + wiz-use-live-exit + 'Use my live settings' copy + wizard-run). ee-preflight-paper / preflight-back-to-paper not exercised end-to-end because backend is PAPER — code inspection confirms they render only when isLive (correct)."},
+  "test_credentials": "Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH (verified via POST /api/auth/login → owner role JWT).",
+  "seed_data_creation": "Cycled the web kill-switch OFF→ON→OFF during test. Final state manual_kill_switch=FALSE, environment=PAPER — verified via API. No data written.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Live Preflight card ships on both web (LivePreflightCard.jsx) and mobile (workspace.tsx L189-217). The BACK-TO-PAPER button and preflight-warning card are only rendered when is_live=true — to exercise them a testing agent must first flip via POST /api/environment/LIVE, run the assertions, then flip BACK to PAPER (and confirm manual_kill_switch=false). For mobile Expo web preview the login now works via the standard email/password form (2 <input> fields, then click 'Sign in'); after login the agent MUST dismiss the 'Coming Soon to Ananta' welcome sheet by clicking [data-testid='welcome-sheet-continue'] before any tab-workspace / tab-research navigation will render its content. On the mobile research wizard, useLive defaults to ON, so wiz-exit-atr/wiz-exit-fixed only appear after toggling wiz-use-live-exit OFF.",
+  "rca of the issue": ""
+}

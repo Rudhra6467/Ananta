@@ -188,11 +188,11 @@ function Validate({ isOwner }: { isOwner: boolean }) {
 
         <View style={styles.liveToggleRow} testID="wiz-live-exit-row">
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={styles.liveToggleTitle}>Use my live Risk Monitor & Exit Engine settings</Text>
+            <Text style={styles.liveToggleTitle}>Use my live settings</Text>
             <Text style={styles.liveToggleDesc}>
               {useLive
-                ? "Backtest replays through your deployed config — Allowed Regimes, Min Confidence AND exit method — so results match paper/live."
-                : "Manual exit override — pick a method to A/B test different exit rules."}
+                ? "Replays through your deployed regimes, confidence & exit — results match paper/live."
+                : "Manual override — pick an exit below to A/B test."}
             </Text>
           </View>
           <Switch testID="wiz-use-live-exit" value={useLive} onValueChange={setUseLive}

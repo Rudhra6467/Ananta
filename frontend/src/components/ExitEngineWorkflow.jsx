@@ -6,7 +6,7 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { describeActiveExit } from "@/lib/exitConfig";
+import { describeActiveExit, listExitOverrides } from "@/lib/exitConfig";
 
 const SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const CORE = ["hunter", "squeeze", "continuation"];
@@ -338,19 +338,20 @@ function StepDots({ step }) {
 }
 function ActiveExitCard({ settings, onEdit }) {
     const a = describeActiveExit(settings);
+    const ov = listExitOverrides(settings);
     return (
         <div data-testid="active-exit-card" className="panel rounded-xl p-5 border border-atlas-cyan/40 bg-atlas-cyan/5">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2.5">
                     <span className="w-8 h-8 rounded-lg grid place-items-center border border-atlas-cyan/40 bg-atlas-cyan/10"><Target className="w-4 h-4 text-atlas-cyan" /></span>
                     <div>
-                        <div className="font-mono text-[10px] tracking-widest text-atlas-textTertiary">CURRENT ACTIVE EXIT ENGINE</div>
-                        <div className="font-heading text-lg text-atlas-text leading-tight" data-testid="active-exit-type">{a.typeLabel}</div>
+                        <div className="font-mono text-[10px] tracking-widest text-atlas-textTertiary">ACTIVE EXIT · GLOBAL DEFAULT</div>
+                        <div className="font-heading text-lg text-atlas-text leading-tight" data-testid="active-exit-type">{ov.global}</div>
                     </div>
                 </div>
                 <button type="button" data-testid="active-exit-edit" onClick={onEdit}
                     className="flex items-center gap-1.5 rounded-lg border border-atlas-cyan text-atlas-cyan hover:bg-atlas-cyan/10 font-mono text-[11px] font-bold tracking-widest px-3.5 py-2 transition-colors">
-                    <Pencil className="w-3.5 h-3.5" /> EDIT / MODIFY
+                    <Pencil className="w-3.5 h-3.5" /> EDIT
                 </button>
             </div>
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
@@ -361,7 +362,28 @@ function ActiveExitCard({ settings, onEdit }) {
                     </div>
                 ))}
             </div>
-            <div className="font-mono text-[10px] text-atlas-textTertiary mt-3">Scope · <span className="text-atlas-textSecondary">{a.scopeLabel}</span></div>
+            {/* Per-strategy / per-coin overrides — so it's clear what each is running. */}
+            <div className="mt-3 pt-3 border-t border-atlas-border/60" data-testid="active-exit-overrides">
+                <div className="label-tag mb-1.5">EXIT PER STRATEGY / COIN</div>
+                {ov.strategies.length === 0 && ov.coins.length === 0 ? (
+                    <div className="font-mono text-[10px] text-atlas-textTertiary">All strategies &amp; coins use the global default above.</div>
+                ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                        {ov.strategies.map((s) => (
+                            <span key={`s-${s.key}`} data-testid={`active-exit-ov-strat-${s.key}`}
+                                className="font-mono text-[10px] rounded-full border border-atlas-border bg-atlas-panel px-2.5 py-1 text-atlas-textSecondary">
+                                <b className="text-atlas-text">{s.key}</b> · {s.label}
+                            </span>
+                        ))}
+                        {ov.coins.map((c) => (
+                            <span key={`c-${c.key}`} data-testid={`active-exit-ov-coin-${c.key.replace("/", "-")}`}
+                                className="font-mono text-[10px] rounded-full border border-atlas-border bg-atlas-panel px-2.5 py-1 text-atlas-textSecondary">
+                                <b className="text-atlas-text">{c.key.split("/")[0]}</b> · {c.label}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

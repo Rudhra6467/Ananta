@@ -74,6 +74,16 @@ function describeActiveExit(s: any): { method: string; typeLabel: string; scope:
   return { method, typeLabel, scope, scopeLabel, rows };
 }
 
+// At-a-glance list of the global default + every deployed per-strategy / per-coin override.
+function listExitOverrides(s: any): { global: string; strategies: { key: string; label: string }[]; coins: { key: string; label: string }[] } {
+  if (!s) return { global: "-", strategies: [], coins: [] };
+  const named = (m: string) => EXIT_METHOD_NAMES[m] || "Universal Exit Engine";
+  const pick = (map: any) => Object.keys(map || {})
+    .filter((k) => map[k] && typeof map[k] === "object" && map[k].method)
+    .map((key) => ({ key, label: named(map[key].method) }));
+  return { global: named(s.exit_method_pref || "native"), strategies: pick(s.profile_overrides), coins: pick(s.asset_exit_overrides) };
+}
+
 const FIELDS: Record<string, { k: string; label: string }[]> = {
   fixed_pct: [{ k: "target_pct", label: "Take-Profit target (%)" }, { k: "stop_pct", label: "Stop-Loss (%)" }],
   atr_trailing: [{ k: "atr_mult", label: "ATR stop multiple (x)" }, { k: "atr_period", label: "ATR period" }, { k: "trail_arm", label: "Trail arm (%)" }, { k: "trail_dist", label: "Trail distance (xATR)" }],
@@ -123,7 +133,7 @@ export default function ExitEngine() {
         </View>
 
         {view === "home" && (
-          <ExitHome settings={settings}
+          <ExitHome settings={settings} isOwner={isOwner} onRefresh={loadSettings}
             onEdit={() => setView("edit")} onScope={(s) => setView(s)}
             onExplain={() => setView("ai")} onTest={() => router.push("/research")} onRisk={() => setView("risk")} />
         )}
@@ -152,16 +162,63 @@ function BackHeader({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
-  { settings: any; onEdit: () => void; onScope: (s: "strategy" | "coin" | "global") => void; onExplain: () => void; onTest: () => void; onRisk: () => void }) {
+function ExitHome({ settings, isOwner, onRefresh, onEdit, onScope, onExplain, onTest, onRisk }:
+  { settings: any; isOwner: boolean; onRefresh: () => void; onEdit: () => void; onScope: (s: "strategy" | "coin" | "global") => void; onExplain: () => void; onTest: () => void; onRisk: () => void }) {
+  const [env, setEnv] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.getEnvironment().then(setEnv).catch(() => {}); }, [settings]);
   if (!settings) return <ActivityIndicator color={colors.teal} style={{ marginTop: spacing.xl }} />;
   const active = describeActiveExit(settings);
+  const ov = listExitOverrides(settings);
+
+  const isLive = !!env?.is_live;
+  const ready = !!env?.ready_to_trade;
+  const killed = !!settings?.manual_kill_switch;
+  const lot = Number(settings?.normal_lot_usd ?? 0);
+  const overCap = lot > 75;
+  const act = async (fn: () => Promise<any>) => {
+    if (!isOwner) return Alert.alert("Owner login required");
+    setBusy(true);
+    try { await fn(); api.getEnvironment().then(setEnv).catch(() => {}); onRefresh(); }
+    catch (e: any) { Alert.alert("Action failed", e?.message); } finally { setBusy(false); }
+  };
 
   return (
     <View>
-      <Text style={styles.sectionTitle}>Current Active Exit Engine</Text>
+      {/* LIVE PREFLIGHT — one-glance safety readout before trading real capital */}
+      <View testID="ee-live-preflight" style={[styles.preflightCard, isLive ? styles.preflightLive : styles.preflightPaper]}>
+        <View style={styles.preflightHead}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Ionicons name={isLive ? "radio" : "flask"} size={16} color={isLive ? colors.red : colors.teal} />
+            <View>
+              <Text style={styles.preflightKicker}>LIVE PREFLIGHT</Text>
+              <Text style={[styles.preflightMode, { color: isLive ? colors.red : colors.text }]} testID="ee-preflight-mode">
+                {isLive ? "LIVE · real capital" : "PAPER · simulation"}
+              </Text>
+            </View>
+          </View>
+          {isLive && (
+            <Pressable testID="ee-preflight-paper" disabled={busy} onPress={() => act(() => api.setEnvironment("PAPER"))} style={styles.preflightPaperBtn}>
+              <Ionicons name="flask" size={13} color={colors.teal} />
+              <Text style={styles.preflightPaperTxt}>PAPER</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.preflightGrid}>
+          <PreflightCell ok={ready} label="Connection" value={ready ? `Connected · ${env?.exchange || "exch"}` : "Keys not set"} />
+          <PreflightCell ok={!overCap} label="Size" value={lot ? `$${lot.toFixed(0)}/trade` : "-"} note={overCap ? "Keep ~$50 for first live" : undefined} />
+          <PreflightCell ok={!killed} label="Trading" value={killed ? "STOPPED" : "Active"}
+            actionLabel={isOwner ? (killed ? "Resume" : "Kill") : undefined} danger={!killed} busy={busy}
+            onAction={() => act(async () => { await api.updateSettings({ manual_kill_switch: !killed }); })} />
+        </View>
+        {isLive && !ready && (
+          <Text style={styles.preflightWarn} testID="ee-preflight-warn">LIVE armed but broker gate CLOSED — set API keys on the deployed backend or no real orders fire.</Text>
+        )}
+      </View>
+
+      <Text style={styles.sectionTitle}>Active Exit · Global Default</Text>
       <View style={styles.activeCard} testID="ee-active-exit">
-        <Text style={styles.activeName} testID="ee-active-name">{active.typeLabel}</Text>
+        <Text style={styles.activeName} testID="ee-active-name">{ov.global}</Text>
         <View style={styles.paramGrid}>
           {active.rows.map((p) => (
             <View key={p.label} style={styles.paramCell} testID={`ee-param-${p.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}>
@@ -170,7 +227,24 @@ function ExitHome({ settings, onEdit, onScope, onExplain, onTest, onRisk }:
             </View>
           ))}
         </View>
-        <Text style={styles.activeScope} testID="ee-active-scope">Scope · {active.scopeLabel}</Text>
+        {/* Per-strategy / per-coin overrides — so it's clear what each is running. */}
+        <Text style={styles.ovLabel}>EXIT PER STRATEGY / COIN</Text>
+        {ov.strategies.length === 0 && ov.coins.length === 0 ? (
+          <Text style={styles.ovEmpty} testID="ee-overrides-empty">All strategies & coins use the global default.</Text>
+        ) : (
+          <View style={styles.ovWrap} testID="ee-overrides">
+            {ov.strategies.map((s) => (
+              <View key={`s-${s.key}`} style={styles.ovChip} testID={`ee-ov-strat-${s.key}`}>
+                <Text style={styles.ovChipTxt}><Text style={styles.ovChipKey}>{s.key}</Text> · {s.label}</Text>
+              </View>
+            ))}
+            {ov.coins.map((c) => (
+              <View key={`c-${c.key}`} style={styles.ovChip} testID={`ee-ov-coin-${c.key.replace("/", "-")}`}>
+                <Text style={styles.ovChipTxt}><Text style={styles.ovChipKey}>{c.key.split("/")[0]}</Text> · {c.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
         <Pressable testID="ee-edit-current" onPress={onEdit} style={styles.editBtn}>
           <Ionicons name="create-outline" size={16} color={colors.bg} />
           <Text style={styles.editTxt}>Edit / Modify Exit</Text>
@@ -618,6 +692,26 @@ function RiskMonitor({ isOwner, settings, setSettings }: { isOwner: boolean; set
   );
 }
 
+function PreflightCell({ ok, label, value, note, actionLabel, danger, busy, onAction }:
+  { ok: boolean; label: string; value: string; note?: string; actionLabel?: string; danger?: boolean; busy?: boolean; onAction?: () => void }) {
+  return (
+    <View style={styles.pfCell} testID={`ee-preflight-${label.toLowerCase()}`}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Ionicons name={ok ? "checkmark-circle" : "alert-circle"} size={12} color={ok ? colors.green : colors.gold} />
+        <Text style={styles.pfLabel}>{label.toUpperCase()}</Text>
+      </View>
+      <Text style={[styles.pfValue, { color: ok ? colors.text : colors.gold }]} numberOfLines={1}>{value}</Text>
+      {!!note && <Text style={styles.pfNote}>{note}</Text>}
+      {!!actionLabel && (
+        <Pressable testID={`ee-preflight-${label.toLowerCase()}-action`} disabled={busy} onPress={onAction}
+          style={[styles.pfActionBtn, danger ? styles.pfActionDanger : styles.pfActionTeal]}>
+          <Text style={[styles.pfActionTxt, { color: danger ? colors.red : colors.teal }]}>{actionLabel}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.summaryRow}>
@@ -715,6 +809,29 @@ const styles = StyleSheet.create({
   paramLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" },
   paramValue: { color: colors.text, fontSize: 20, fontWeight: "800", marginTop: 4 },
   activeScope: { color: colors.textMuted, fontSize: 11, fontFamily: "monospace", marginTop: spacing.sm },
+  ovLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginTop: spacing.md, marginBottom: 6 },
+  ovEmpty: { color: colors.textMuted, fontSize: 11, fontFamily: "monospace" },
+  ovWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  ovChip: { borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.bgElevated, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10 },
+  ovChipTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "600" },
+  ovChipKey: { color: colors.text, fontWeight: "800" },
+  preflightCard: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.lg },
+  preflightPaper: { borderColor: colors.teal + "40", backgroundColor: colors.tealGlow },
+  preflightLive: { borderColor: colors.red + "60", backgroundColor: colors.redGlow },
+  preflightHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
+  preflightKicker: { color: colors.textFaint, fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
+  preflightMode: { fontSize: 16, fontWeight: "800", marginTop: 1 },
+  preflightPaperBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.teal, borderRadius: radius.sm, paddingVertical: 6, paddingHorizontal: 10 },
+  preflightPaperTxt: { color: colors.teal, fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  preflightGrid: { flexDirection: "row", gap: 6 },
+  pfCell: { flex: 1, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.bgElevated, borderRadius: radius.md, padding: spacing.sm },
+  pfLabel: { color: colors.textFaint, fontSize: 8, fontWeight: "800", letterSpacing: 0.5 },
+  pfValue: { fontSize: 12, fontWeight: "800", marginTop: 3 },
+  pfNote: { color: colors.textFaint, fontSize: 8, marginTop: 2, lineHeight: 11 },
+  pfActionBtn: { marginTop: 6, borderWidth: 1, borderRadius: radius.sm, paddingVertical: 4, alignItems: "center" },
+  pfActionTeal: { borderColor: colors.teal },
+  pfActionDanger: { borderColor: colors.red },
+  pfActionTxt: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
   editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 13, marginTop: spacing.md },
   editTxt: { color: colors.bg, fontWeight: "800", fontSize: 14 },
   modifyCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, backgroundColor: colors.card, marginBottom: spacing.sm },
