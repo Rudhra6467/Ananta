@@ -8,6 +8,25 @@ Not about "guaranteed profits" - about robustness and capital preservation.
 
 
 
+### 2026-07-29 (later) — Account screen redesign + owner self-service (web + mobile) — DONE, iter90 ALL GREEN
+Owner-requested Account overhaul on both surfaces (`frontend/src/components/AccountOverlay.jsx`, `mobile/app/account.tsx`,
+new `mobile/app/settings.tsx`):
+- **Avatar**: initials avatar with a pencil/edit affordance (photo upload deferred per owner — "avatar for now").
+- **Name card**: shows ONLY the editable **display name** (removed "Ananta Owner", "Not signed in", READ-ONLY/AUTHENTICATED pill).
+- **Email + Password**: now EDITABLE via secure endpoints (current-password verified). Removed the "Authentication · Secure token (JWT)" row.
+- **Gear icon** on the Account header → **Settings list** (Account, Security, Notifications, Preferences, Payment methods,
+  Support); web = in-dialog view, mobile = new `/settings` route. Unbuilt rows show "Soon"; Account routes back to profile.
+- **Backend (auth self-service)** — `auth.py` `seed_owner()` now looks the owner up by ROLE and adds a
+  `credentials_customized` flag: env bootstraps a FRESH DB but NEVER overrides once the owner edits creds in-app (so
+  email/password changes survive restarts/redeploys). New owner-only endpoints in `server.py`: `GET/PATCH /api/auth/profile`
+  (display_name + avatar base64), `POST /api/auth/change-email` (verifies current pw, re-issues JWT), `POST /api/auth/change-password`
+  (verifies current pw, min 8). API wrappers added to `frontend/src/lib/api.js` + `mobile/src/api.ts` (added mobile `patch`).
+- Verified: pytest 8/8 (`tests/test_iter90_account_profile.py`), web + mobile E2E (iter90). Owner creds intact
+  (display_name now "Vamsi Madhav"; owner can rename anytime). Minor non-blocking testID divergence: web `settings-payments`
+  vs mobile `settings-payment-methods`.
+- NOTE (deferred, per owner): real profile-photo upload; full Notifications/Preferences/Payment/Support sub-screens.
+
+
 ### 2026-07-29 (later) — V1 (A) Research/Exit polish + LIVE PREFLIGHT guard (both surfaces) — DONE, iter89 PASS
 Applied the clean Strategy-Detail language to Research/Validation + Exit Engine on web AND mobile, and added the
 requested Live preflight safety guard for small-size ($50) real-money testing. No functional/backtest changes.

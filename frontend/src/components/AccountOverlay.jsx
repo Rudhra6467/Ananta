@@ -362,6 +362,7 @@ export default function AccountOverlay({ open, onOpenChange }) {
                     <DialogTitle className="font-heading text-atlas-text">
                         {edit?.mode === "name" ? "Edit display name" : edit?.mode === "email" ? "Change email" : "Change password"}
                     </DialogTitle>
+                    <DialogDescription className="sr-only">Edit your Ananta account details</DialogDescription>
                 </DialogHeader>
                 <div className="px-5 pb-5 pt-2 space-y-3">
                     {edit?.mode === "name" && (
