@@ -8,6 +8,51 @@ Not about "guaranteed profits" - about robustness and capital preservation.
 
 
 
+### 2026-07-29 — V1 CRYPTO CLOSEOUT pass: candles→Mongo, regime validation, logo unify, Strategy Detail redesign (B+C done)
+**Direction locked (owner):** close V1 as a stable, App-Store-ready CRYPTO build (the AI-native trading OS:
+research→build→validate→paper→live→manage). No major new features — polish + stabilize + ship. Keep ONLY the
+3 built-in strategies enabled by default: **EMA Cross, Time Series Momentum, Stochastic Momentum** (Aggressive
+Movement is a custom/import — NOT held for release). India markets = separate next workstream.
+Priority order agreed: **B (candles→Mongo) → C (Strategy Detail redesign finish+test) → A (Research/Exit polish + Live preflight guard)**.
+
+**(B) DONE — Historical candles migrated SQLite → MongoDB (durable across redeploys).** `lab/data_store.py`
+rewritten onto pymongo (fork-safe lazy client keyed by PID; collection `historical_candles`, 1 doc/candle,
+deterministic `_id="<sym>|<tf>|<ts>"` = idempotent upsert; index (symbol,timeframe,ts)). Public API unchanged
+(init_db/upsert_candles/load_candles/coverage/backfill/append_latest/TF_MS) so backtest/runner/server need no
+changes. One-time migration `scripts/migrate_candles_to_mongo.py` copied all **794,559** candles. Verified:
+coverage/counts identical to old SQLite, range slicing OK, full backtest path + `tests/test_strategy_profiles.py`
+(4/4) pass against Mongo, backend healthy. NOTE: the old `/app/backend/data/historical_candles.db` is no longer
+read (leave in place; harmless). On prod, the CCXT backfill now writes to Mongo and persists.
+
+**Regime-enforcement RE-VALIDATION (owner #1 ask) — filters ARE constraining.** Full ~445-day 1h history ×10 symbols,
+$75 lot, fixed 5%TP/3.5%SL. Unconstrained ("trade everywhere") vs seeded Recommended Matrix: total entries
+**41,677 → 4,414 (−89.4%)**, total net P&L **−$21,643 → −$1,304 (−94% loss)**. 12/15 strategies now trade 0
+(Tier-2 configured-OFF + Tier-3 no-edge); the 3 Tier-1 trade ONLY in their configured regimes. Owner book confirmed
+seeded (matrix v2026-07-26.v1); empty-regimes==Disabled verified in live engine + Lab + unit tests. Honest read:
+this is regime DISCIPLINE / damage-control, not a profit switch (Tier-1 still marginally negative in window).
+Script: `scripts/regime_validation.py` → `scripts/regime_validation_result.json`. `tests/test_strategy_profiles.py`
+updated to the new semantics (empty regimes = disabled; ema-cross rec = COMPRESSION+RANGE, fixed 5/3.5).
+
+**LOGO UNIFIED — canonical = mobile GOLD TRIDENT.** Web `components/AnantaLogo.jsx` rewritten to render the exact
+mobile trident (mobile/src/components/Logo.tsx) in imperial gold (#E5B84B). One brand across web header/onboarding + mobile.
+
+**(C) DONE — Strategy Detail redesign finished + tested (web E2E + mobile code-review, iter88 PASS).** Single Live/Off
+control top-right (`strategy-live-toggle` → toggle-live/off, persists via PUT /api/strategy/{key}/profile PRESERVING
+allowed_regimes+exit) + ONE `edit-strategy-btn` opening the config modal/sheet (regimes + ATR/Fixed/Native exit).
+Old action clutter + duplicate status badge removed; metrics + How It Works + Best Used In retained. **Fixed the
+iter87 web routing gap:** built-in engines are `internal=false, wireable=true` in /api/library, so they were opening the
+OLD CatalogDetail — added `routeOpen` in StrategyCenter (route to redesigned StrategyDetail when
+`s.internal || (s.wireable && s.engine_key && registry[s.engine_key])`). Verified 4 built-ins route correctly; Pairs
+Trading (no engine) still uses CatalogDetail (expected). Also hoisted an inline `Section` component → `LibrarySection`
+(fixed the pre-existing react/no-unstable-nested-components lint). Web + mobile lint clean.
+
+**NEXT — (A) Research/Validation + Exit Engine POLISH (both surfaces)** to match the clean Strategy Detail style
+(cleaner language, less clutter, clear "active exit per strategy"), PLUS a **Live preflight guard** for V1 live testing:
+clear "LIVE active" indicator, small-size soft-cap reminder, API-key/connection status readout, quick kill-switch /
+switch-back-to-Paper. Then final stabilization (testing-agent both surfaces) + App Store build path (Emergent Publish →
+owner Apple Developer acct + EAS Build → App Store Connect/TestFlight; "No script URL" = Metro/Release, not backend).
+
+
 ### 2026-07-26 (later) — iOS/GitHub-readiness + login polish
 - **ROOT CAUSE of iOS "Network request failed":** all `.env` files are git-ignored (root .gitignore),
   so a GitHub clone → local Xcode build had NO `EXPO_PUBLIC_BACKEND_URL` → `API="undefined/api"`.
