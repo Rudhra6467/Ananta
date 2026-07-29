@@ -54,6 +54,8 @@ const post = <T,>(p: string, body?: any) =>
   request<T>(p, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 const put = <T,>(p: string, body?: any) =>
   request<T>(p, { method: "PUT", body: body ? JSON.stringify(body) : undefined });
+const patch = <T,>(p: string, body?: any) =>
+  request<T>(p, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
 
 export const api = {
   // auth
@@ -61,6 +63,10 @@ export const api = {
     post<{ token: string; email: string; role: string }>("/auth/login", { email, password }),
   me: () => get<{ email: string; role: string }>("/auth/me"),
   logout: () => post<any>("/auth/logout"),
+  getProfile: () => get<any>("/auth/profile"),
+  updateProfile: (body: any) => patch<any>("/auth/profile", body),
+  changeEmail: (current_password: string, new_email: string) => post<any>("/auth/change-email", { current_password, new_email }),
+  changePassword: (current_password: string, new_password: string) => post<any>("/auth/change-password", { current_password, new_password }),
   googleSession: (session_id: string) =>
     post<{ session_token: string; user: { user_id: string; email: string; role: string; name?: string; picture?: string } }>(
       "/auth/google/session", { session_id }),

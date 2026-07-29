@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Modal } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Modal, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -66,15 +66,65 @@ function HealthRow({ label, ok, okText, badText, neutral }: { label: string; ok?
   );
 }
 
+function EditInput({ label, ...props }: any) {
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={styles.editInputLabel}>{label}</Text>
+      <TextInput
+        {...props}
+        placeholderTextColor={colors.textFaint}
+        autoCapitalize="none"
+        style={styles.editInput}
+      />
+    </View>
+  );
+}
+
+
 export default function AccountOverlay() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { owner, logout, isOwner } = useAuth();
 
   const email = owner?.email || "—";
-  const initials = (email.split("@")[0] || "A").slice(0, 2).toUpperCase();
+  const [profile, setProfile] = useState<any>(null);
+  const displayName = profile?.display_name || owner?.name || (email !== "—" ? email.split("@")[0] : "Guest");
+  const initials = ((profile?.display_name || email).replace(/@.*/, "") || "A").slice(0, 2).toUpperCase();
   const [health, setHealth] = useState<any>(null);
   const [promoOpen, setPromoOpen] = useState(false);
+  const [edit, setEdit] = useState<null | { mode: "name" | "email" | "password" }>(null);
+  const [form, setForm] = useState<any>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOwner) api.getProfile().then(setProfile).catch(() => {});
+  }, [isOwner]);
+
+  const openEdit = (mode: "name" | "email" | "password") => {
+    if (!isOwner) { Alert.alert("Owner login required"); return; }
+    setForm(mode === "name" ? { display_name: profile?.display_name || "" } : {});
+    setEdit({ mode });
+  };
+  const saveEdit = async () => {
+    if (!edit) return;
+    setSaving(true);
+    try {
+      if (edit.mode === "name") {
+        const p = await api.updateProfile({ display_name: form.display_name || "" });
+        setProfile(p);
+      } else if (edit.mode === "email") {
+        await api.changeEmail(form.current_password || "", form.new_email || "");
+        Alert.alert("Email updated", "Please sign in again with your new email.");
+        setEdit(null); setSaving(false); await logout(); router.replace("/login"); return;
+      } else if (edit.mode === "password") {
+        await api.changePassword(form.current_password || "", form.new_password || "");
+        Alert.alert("Password changed");
+      }
+      setEdit(null);
+    } catch (e: any) {
+      Alert.alert("Update failed", e?.response?.data?.detail || e?.message || "Please try again.");
+    } finally { setSaving(false); }
+  };
 
   // Live platform status (moved here from Workspace › Engine & Risk).
   useEffect(() => {
@@ -121,9 +171,16 @@ export default function AccountOverlay() {
       {/* header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Text style={styles.title}>Account</Text>
-        <Pressable testID="account-close-btn" onPress={() => router.back()} hitSlop={12} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color={colors.text} />
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+          {isOwner && (
+            <Pressable testID="account-settings-gear" onPress={() => router.push("/settings")} hitSlop={12} style={styles.closeBtn}>
+              <Ionicons name="settings-outline" size={20} color={colors.text} />
+            </Pressable>
+          )}
+          <Pressable testID="account-close-btn" onPress={() => router.back()} hitSlop={12} style={styles.closeBtn}>
+            <Ionicons name="close" size={22} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -131,33 +188,39 @@ export default function AccountOverlay() {
         showsVerticalScrollIndicator={false}
       >
         {/* profile header */}
-        <Pressable testID="account-profile-header" style={({ pressed }) => [styles.profile, pressed && styles.rowPressed]}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+        <Pressable testID="account-profile-header" onPress={() => openEdit("name")} style={({ pressed }) => [styles.profile, pressed && styles.rowPressed]}>
+          <View>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+            {isOwner && (
+              <View style={styles.avatarEdit}><Ionicons name="pencil" size={11} color={colors.bg} /></View>
+            )}
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName} numberOfLines={1}>Ananta Owner</Text>
+            <Text testID="account-display-name" style={styles.profileName} numberOfLines={1}>{displayName}</Text>
             <Text testID="account-email" style={styles.profileEmail} numberOfLines={1}>{email}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </Pressable>
 
-        {/* credentials (only real data this sprint) */}
-        <Text style={styles.sectionLabel}>Login Credentials</Text>
+        {/* credentials — editable */}
+        <Text style={styles.sectionLabel}>Login & Auth</Text>
         <View style={styles.card}>
           <View style={styles.credRow}>
             <Text style={styles.credKey}>Email</Text>
-            <Text testID="account-cred-email" style={styles.credVal} numberOfLines={1}>{email}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
+              <Text testID="account-cred-email" style={styles.credVal} numberOfLines={1}>{email}</Text>
+              {isOwner && <Pressable testID="account-edit-email" onPress={() => openEdit("email")}><Text style={styles.editLink}>Edit</Text></Pressable>}
+            </View>
           </View>
           <View style={styles.divider} />
           <View style={styles.credRow}>
             <Text style={styles.credKey}>Password</Text>
-            <Text testID="account-cred-password" style={styles.credVal}>{"\u2022".repeat(10)}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.credRow}>
-            <Text style={styles.credKey}>Authentication</Text>
-            <Text style={styles.credVal}>Secure token (JWT)</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text testID="account-cred-password" style={styles.credVal}>{"\u2022".repeat(10)}</Text>
+              {isOwner && <Pressable testID="account-edit-password" onPress={() => openEdit("password")}><Text style={styles.editLink}>Change</Text></Pressable>}
+            </View>
           </View>
         </View>
 
@@ -244,6 +307,36 @@ export default function AccountOverlay() {
         <Text style={styles.footer}>Ananta.AI · Signed in as {email}</Text>
       </ScrollView>
 
+      {/* edit profile / credentials modal */}
+      <Modal visible={!!edit} transparent animationType="slide" onRequestClose={() => setEdit(null)}>
+        <View style={styles.promoOverlay}>
+          <View style={[styles.editSheet, { paddingBottom: insets.bottom + spacing.md }]} testID="account-edit-sheet">
+            <View style={styles.promoHead}>
+              <Text style={styles.promoHeadTitle}>
+                {edit?.mode === "name" ? "Edit display name" : edit?.mode === "email" ? "Change email" : "Change password"}
+              </Text>
+              <Pressable testID="account-edit-close" onPress={() => setEdit(null)} hitSlop={12}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+            {edit?.mode === "name" && (
+              <EditInput label="Display name" testID="edit-display-name" value={form.display_name || ""} placeholder="e.g. Vamsi Madhav" onChangeText={(v) => setForm({ display_name: v })} />
+            )}
+            {edit?.mode === "email" && (<>
+              <EditInput label="New email" testID="edit-new-email" value={form.new_email || ""} placeholder="you@example.com" keyboardType="email-address" onChangeText={(v) => setForm({ ...form, new_email: v })} />
+              <EditInput label="Current password" testID="edit-email-current-pw" value={form.current_password || ""} secureTextEntry onChangeText={(v) => setForm({ ...form, current_password: v })} />
+            </>)}
+            {edit?.mode === "password" && (<>
+              <EditInput label="Current password" testID="edit-current-pw" value={form.current_password || ""} secureTextEntry onChangeText={(v) => setForm({ ...form, current_password: v })} />
+              <EditInput label="New password (min 8)" testID="edit-new-pw" value={form.new_password || ""} secureTextEntry onChangeText={(v) => setForm({ ...form, new_password: v })} />
+            </>)}
+            <Pressable testID="account-edit-save" onPress={saveEdit} disabled={saving} style={styles.saveBtn}>
+              <Text style={styles.saveBtnTxt}>{saving ? "SAVING…" : "SAVE"}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Coming Up — reuses the Coming Soon promo (features + join waitlist) */}
       <Modal visible={promoOpen} transparent animationType="slide" onRequestClose={() => setPromoOpen(false)}>
         <View style={styles.promoOverlay}>
@@ -305,6 +398,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { color: colors.text, fontSize: 18, fontWeight: "800", letterSpacing: 1 },
+  avatarEdit: { position: "absolute", bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.teal, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.bg },
+  editLink: { color: colors.teal, fontSize: 12, fontWeight: "700" },
+  editSheet: { backgroundColor: colors.bgElevated, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, borderTopWidth: 1, borderColor: colors.cardBorder },
+  editInputLabel: { color: colors.textFaint, fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" },
+  editInput: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 12, color: colors.text, fontSize: 15 },
+  saveBtn: { marginTop: spacing.sm, backgroundColor: colors.teal, borderRadius: radius.md, paddingVertical: 14, alignItems: "center" },
+  saveBtnTxt: { color: colors.bg, fontSize: 13, fontWeight: "800", letterSpacing: 1 },
   profileInfo: { flex: 1, marginLeft: spacing.md },
   profileName: { ...type.h3, marginBottom: 2 },
   profileEmail: { ...type.small, color: colors.textMuted },

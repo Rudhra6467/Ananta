@@ -1,0 +1,56 @@
+{
+  "summary": "iter90 — E2E verification of the Account-screen redesign on WEB + MOBILE + shared backend. BACKEND (pytest test_iter90_account_profile.py — 8/8 PASS): POST /api/auth/login owner→token; GET /api/auth/profile returns {email, display_name='Vamsi Madhav', avatar, role='owner'}; PATCH /api/auth/profile display_name persists (verified via follow-up GET) and reverted; POST /api/auth/change-password wrong current→400 ✓, happy path 200 then reverted (login with original 200 confirmed); POST /api/auth/change-email invalid email→400 ✓, wrong password→400 ✓ (owner email NEVER mutated). Final owner login = 200, display_name restored to 'Vamsi Madhav'. WEB (Playwright, EXTERNAL preview): opened Account via [data-testid='ananta-logo-btn']. account-overlay present; account-display-name='Vamsi Madhav' (NOT 'Ananta Owner'), account-email='owner@ananta.ai'; no READ-ONLY / AUTHENTICATED / JWT / Authentication text anywhere in overlay; account-edit-email + account-edit-password + account-avatar-edit + account-edit-name + account-settings-gear all present. Gear opens account-settings-list with settings-account, settings-security, settings-notifications, settings-preferences, settings-payments, settings-support — Notifications/Preferences/Payments show 'Soon' pill. account-settings-back returns to main. account-edit-name → account-edit-dialog → edit-display-name → account-edit-save → name updated (then reverted). account-edit-password dialog shows edit-current-pw + edit-new-pw. account-edit-email dialog shows edit-new-email + edit-email-current-pw. MOBILE (Expo web preview, viewport 390x844, owner login via UI form + full onboarding wizard clicked through): /account renders account-display-name='Vamsi Madhav' (NOT 'Ananta Owner'), account-email='owner@ananta.ai'; no 'Authentication'/'Secure token' text; account-profile-header + account-edit-email + account-edit-password + account-settings-gear + account-cred-email + account-cred-password all present. account-settings-gear pushes /settings, which renders settings-list with settings-account, settings-security, settings-notifications, settings-preferences, settings-payment-methods, settings-support and settings-back. settings-back returns to /account. account-profile-header opens account-edit-sheet with edit-display-name; save flow works end-to-end (name updated, then reverted to 'Vamsi Madhav'). Password sheet shows edit-current-pw + edit-new-pw; email sheet shows edit-new-email + edit-email-current-pw. PARITY: The 4 required editable rows (display name, email, password, avatar affordance) and the gear→Settings drill-down are present on BOTH web and mobile with matching testids (mobile Payment methods uses testID 'settings-payment-methods' per label-slugify vs web uses 'settings-payments' — both are as-spec'd in review request).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Account overlay edit dialogs", "issues": ["A11y warning in console: 'Missing Description or aria-describedby={undefined} for {DialogContent}' emitted from Radix Dialog for account-edit-dialog and account-coming-up-dialog. Purely a11y polish — add DialogDescription or aria-describedby to silence."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "/settings", "issues": ["Security row shows pill 'JWT' whereas web Settings › Security shows no pill (just desc 'Privacy & data policy'). Minor copy divergence — spec did not mandate one over the other, but consider aligning to a single presentation for parity."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Settings › Security row pill", "platform": "mobile", "issue": "Mobile shows 'JWT' pill, web shows no pill", "expected": "Consistent presentation on both surfaces", "actual": "Mobile 'JWT' vs Web (none)"},
+    {"flow": "Settings › Payment methods testID", "platform": "both", "issue": "Web uses data-testid='settings-payments'; mobile uses testID='settings-payment-methods'. Both match this review-request's spec but differ across surfaces.", "expected": "One canonical testID for the same row across web+mobile", "actual": "settings-payments (web) vs settings-payment-methods (mobile) — cosmetic only, not a functional bug."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter90_account_profile.py",
+    "/app/test_reports/pytest/iter90_account.xml",
+    "/tmp/w_account_main.png (WEB Account overlay main)",
+    "/tmp/w_settings_list.png (WEB Settings drill-down)",
+    "/tmp/m_account_ok.png (MOBILE /account)",
+    "/tmp/m_settings_ok.png (MOBILE /settings)"
+  ],
+  "action_items": [
+    "(nice-to-have a11y) Add DialogDescription (or aria-describedby) to /app/frontend/src/components/AccountOverlay.jsx account-edit-dialog + account-coming-up-dialog to silence Radix a11y warning.",
+    "(nice-to-have parity) Align mobile /settings Security row presentation with web (either both show a pill or neither) — mobile currently shows 'JWT', web shows plain desc.",
+    "(nice-to-have parity) Consider harmonising the Payment methods testID to a single value across web + mobile ('settings-payments' vs 'settings-payment-methods'). Not a functional issue — testing agents just need to know both exist per spec."
+  ],
+  "critical_code_review_comments": [
+    "PATCH /api/auth/profile with display_name='' silently persists as null via `body.display_name.strip()[:60] or None` (server.py L1563). UI then falls back to `owner?.email?.split('@')[0]` = 'owner'. Not a bug, but the UX may confuse an owner who tries to clear the field expecting to see their previous name preserved. Consider either (a) preventing empty-string submissions in the client, or (b) leaving prior value untouched when the trimmed value is empty.",
+    "backend/server.py L1583: change-email sets `credentials_customized: true`. Combined with seed_owner's guard (auth.py — skip .env re-sync once customized), a change persists across restarts. The tests here only exercised NEGATIVE change-email paths so the owner email was never mutated, but the same guard means a future testing agent must always revert if they exercise the happy path. Worth documenting in test_credentials.md.",
+    "MOBILE parity — /app/mobile/app/settings.tsx uses `settings-${label.toLowerCase().replace(/\\s+/g,'-')}` so any label rename silently changes the testID. WEB parallels this pattern in some rows but hard-codes 'settings-payments' vs the mobile 'settings-payment-methods'. Suggest passing explicit testids everywhere.",
+    "MOBILE — /app/mobile/app/account.tsx displays both Settings-style rows (account-setting-payments/notifications/security under 'General settings' section at L279-283) AND the gear→/settings screen. This is dead-simple duplication; the whole /settings drill-down list already renders the same rows. Consider removing the inline 'General settings' block from /account since the review-spec now moves them behind the gear."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter90_account_profile.py (new — 8 pytest tests)",
+    "/app/test_reports/pytest/iter90_account.xml (JUnit)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "Web: 100% of review checkpoints pass. Mobile: 100% of review checkpoints pass."},
+  "test_credentials": "Owner: owner@ananta.ai / aZKtwzAqI0SzlwFE6TRqw8aH — VERIFIED still working via POST /api/auth/login after all tests (status 200). Owner display_name RESTORED to 'Vamsi Madhav'. Owner email NEVER mutated (only negative test cases exercised). Password was flipped to a temporary value once and reverted to the original inside test_happy_path_then_revert; final login with original creds = 200.",
+  "seed_data_creation": "Temporarily mutated owner display_name during web + mobile edit-flow tests (TEST_iter90_WebOwner / TEST_iter90_MobileName) and restored to 'Vamsi Madhav' via API. Temporarily changed owner password to 'TEST_iter90_TempPw_9182734' inside backend happy-path test and immediately reverted. No other data written.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Full Account-redesign spec ships on both surfaces. WEB: AccountOverlay.jsx renders main + settings views via `view` state (no separate route). Login via localStorage['ananta_owner_token'] then reload; also localStorage['ananta_onboarded']='1' to skip WebOnboarding; then click [data-testid='ananta-logo-btn']. MOBILE: /account and /settings are separate Expo Router screens. Auth on Expo web preview is done via the UI login form (2 <input> elements, then 'Sign in' text button), followed by clicking through the onboarding wizard ('Start Exploring' → several 'Skip'/'Continue' clicks). testIDs verified: web uses 'settings-payments', mobile uses 'settings-payment-methods' — both are per spec. Backend change-email guard (`credentials_customized=true`) means ANY happy-path change-email or change-password persists across restarts, so revert immediately.",
+  "rca of the issue": ""
+}

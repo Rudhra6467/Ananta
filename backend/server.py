@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # ---- imports that depend on env loaded ----
 from analytics import compute_performance, graduation_readiness, regime_insight, sector_exposure
 import ai_analyst
-from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo, _valid_owner_payload
+from auth import authenticate, is_owner_request, require_owner, seed_owner, seed_demo, _valid_owner_payload, hash_password, verify_password, create_access_token
 import tenancy
 from tenant_ctx import OWNER_TENANT, current_tenant, tenant_trade_filter
 from backtest import run_for_symbols_async, run_sweep_for_symbols_async
@@ -1510,6 +1510,95 @@ async def auth_me(request: Request):
         "user_id": p.get("user_id"), "name": p.get("name"),
         "picture": p.get("picture"), "tenant_id": p.get("tenant_id"),
     }
+
+
+# ---------- owner self-service profile & credentials ----------
+class ProfileUpdate(BaseModel):
+    display_name: str | None = None
+    avatar: str | None = None  # base64 data-URI (optional)
+
+
+class ChangeEmail(BaseModel):
+    current_password: str
+    new_email: str
+
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
+def _owner_profile_payload(doc: dict) -> dict:
+    return {
+        "email": doc.get("email"),
+        "display_name": doc.get("display_name"),
+        "avatar": doc.get("avatar"),
+        "role": doc.get("role", "owner"),
+    }
+
+
+async def _require_owner_doc(p: dict) -> dict:
+    """The single owner user doc. Credential edits are owner-only (not the demo role)."""
+    if p.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can edit account credentials.")
+    doc = await db.users.find_one({"role": "owner"})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Owner account not found.")
+    return doc
+
+
+@api_router.get("/auth/profile")
+async def get_profile(p: dict = Depends(require_owner)):
+    doc = await db.users.find_one({"role": "owner"})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Owner account not found.")
+    return _owner_profile_payload(doc)
+
+
+@api_router.patch("/auth/profile")
+async def update_profile(body: ProfileUpdate, p: dict = Depends(require_owner)):
+    doc = await _require_owner_doc(p)
+    upd = {}
+    if body.display_name is not None:
+        upd["display_name"] = body.display_name.strip()[:60] or None
+    if body.avatar is not None:
+        upd["avatar"] = body.avatar or None
+    if upd:
+        await db.users.update_one({"_id": doc["_id"]}, {"$set": upd})
+        doc = {**doc, **upd}
+    return _owner_profile_payload(doc)
+
+
+@api_router.post("/auth/change-email")
+async def change_email(body: ChangeEmail, p: dict = Depends(require_owner)):
+    doc = await _require_owner_doc(p)
+    if not verify_password(body.current_password, doc.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    new_email = (body.new_email or "").strip().lower()
+    if "@" not in new_email or "." not in new_email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    clash = await db.users.find_one({"email": new_email, "_id": {"$ne": doc["_id"]}})
+    if clash:
+        raise HTTPException(status_code=409, detail="That email is already in use.")
+    await db.users.update_one({"_id": doc["_id"]}, {"$set": {"email": new_email, "credentials_customized": True}})
+    # re-issue token so the JWT sub matches the new email
+    token = create_access_token(new_email, doc.get("role", "owner"))
+    return {"ok": True, "email": new_email, "token": token}
+
+
+@api_router.post("/auth/change-password")
+async def change_password(body: ChangePassword, p: dict = Depends(require_owner)):
+    doc = await _require_owner_doc(p)
+    if not verify_password(body.current_password, doc.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if len(body.new_password or "") < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+    await db.users.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"password_hash": hash_password(body.new_password), "credentials_customized": True}},
+    )
+    return {"ok": True}
+
 
 
 # ---------- mobile push notifications ----------

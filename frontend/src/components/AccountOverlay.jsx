@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, Activity, LifeBuoy, RotateCcw, Sparkles } from "lucide-react";
+import { Link2, UserPlus, Gift, BarChart3, FileText, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, ChevronLeft, Activity, LifeBuoy, RotateCcw, Sparkles, Settings, Pencil, Mail, KeyRound, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import ComingSoonPromo from "@/components/ComingSoonPromo";
 import { useAuth } from "@/context/AuthContext";
-import api from "@/lib/api";
+import api, { TOKEN_KEY } from "@/lib/api";
 import LearningHub from "@/components/LearningHub";
 
 // Account overlay (web) — opened by the Ananta logo button. Mirrors the mobile Account
@@ -50,13 +50,81 @@ function HealthRow({ label, ok, okText, badText, neutral }) {
     );
 }
 
+function SettingsRow({ icon: Icon, label, desc, pill, onClick, testid }) {
+    return (
+        <button type="button" data-testid={testid} onClick={onClick} disabled={!onClick}
+            className="w-full flex items-center justify-between gap-3 px-3 py-3.5 hover:bg-atlas-panelHover transition-colors group disabled:opacity-70 disabled:cursor-default">
+            <span className="flex items-center gap-3 min-w-0">
+                <span className="w-8 h-8 rounded-full bg-atlas-panelHover flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4 text-atlas-textSecondary" />
+                </span>
+                <span className="flex flex-col items-start min-w-0">
+                    <span className="font-body text-sm text-atlas-text truncate">{label}</span>
+                    {desc && <span className="font-mono text-[10px] text-atlas-textTertiary truncate">{desc}</span>}
+                </span>
+            </span>
+            <span className="flex items-center gap-2 shrink-0">
+                {pill && <span className="px-2 py-0.5 rounded-full font-mono text-[10px] bg-atlas-panelHover text-atlas-textTertiary">{pill}</span>}
+                {onClick && <ChevronRight className="w-4 h-4 text-atlas-textTertiary group-hover:text-atlas-textSecondary" />}
+            </span>
+        </button>
+    );
+}
+
+function EditField({ label, value, onChange, type = "text", placeholder, testid }) {
+    return (
+        <label className="block">
+            <span className="label-tag">{label}</span>
+            <input data-testid={testid} type={type} value={value} placeholder={placeholder}
+                onChange={(e) => onChange(e.target.value)}
+                className="mt-1 w-full rounded-lg bg-atlas-bg border border-atlas-border px-3 py-2 text-sm text-atlas-text font-mono focus:border-atlas-cyan outline-none" />
+        </label>
+    );
+}
+
 export default function AccountOverlay({ open, onOpenChange }) {
     const { owner, isOwner, logout } = useAuth();
     const email = owner?.email || "Not signed in";
-    const initials = (owner?.email?.split("@")[0] || "AN").slice(0, 2).toUpperCase();
+    const [profile, setProfile] = useState(null);
+    const displayName = profile?.display_name || owner?.name || (owner?.email?.split("@")[0] || "Guest");
+    const initials = (profile?.display_name || owner?.email?.split("@")[0] || "AN").slice(0, 2).toUpperCase();
     const [health, setHealth] = useState(null);
     const [resetting, setResetting] = useState(false);
     const [promoOpen, setPromoOpen] = useState(false);
+    const [view, setView] = useState("main");           // "main" | "settings"
+    const [edit, setEdit] = useState(null);              // { mode: "name"|"email"|"password" }
+    const [form, setForm] = useState({});
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (open && isOwner) api.getProfile().then(setProfile).catch(() => {});
+        if (!open) { setView("main"); setEdit(null); }
+    }, [open, isOwner]);
+
+    const openEdit = (mode) => {
+        setForm(mode === "name" ? { display_name: profile?.display_name || "" } : {});
+        setEdit({ mode });
+    };
+    const saveEdit = async () => {
+        setSaving(true);
+        try {
+            if (edit.mode === "name") {
+                const p = await api.updateProfile({ display_name: form.display_name || "" });
+                setProfile(p); toast.success("Display name updated");
+            } else if (edit.mode === "email") {
+                const r = await api.changeEmail(form.current_password || "", form.new_email || "");
+                if (r.token) localStorage.setItem(TOKEN_KEY, r.token);
+                toast.success("Email updated", { description: "Signing you back in…" });
+                setEdit(null); setTimeout(() => window.location.reload(), 700); return;
+            } else if (edit.mode === "password") {
+                await api.changePassword(form.current_password || "", form.new_password || "");
+                toast.success("Password changed");
+            }
+            setEdit(null);
+        } catch (e) {
+            toast.error("Update failed", { description: String(e?.response?.data?.detail || e?.message || e) });
+        } finally { setSaving(false); }
+    };
 
     const onResetPaper = async () => {
         if (!isOwner) return;
@@ -92,44 +160,75 @@ export default function AccountOverlay({ open, onOpenChange }) {
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="bg-atlas-panel border-atlas-border max-w-md p-0 gap-0 overflow-hidden" data-testid="account-overlay">
                 <DialogHeader className="px-5 pt-5 pb-3 border-b border-atlas-border">
-                    <DialogTitle className="font-heading tracking-wide text-atlas-text">Account</DialogTitle>
-                    <DialogDescription className="font-mono text-[11px] text-atlas-textTertiary">
-                        Account &amp; privacy · your login details and app info
-                    </DialogDescription>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            {view === "settings" && (
+                                <button type="button" data-testid="account-settings-back" onClick={() => setView("main")}
+                                    className="w-7 h-7 -ml-1 rounded-full grid place-items-center hover:bg-atlas-panelHover text-atlas-textSecondary">
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                            )}
+                            <div className="min-w-0">
+                                <DialogTitle className="font-heading tracking-wide text-atlas-text">{view === "settings" ? "Settings" : "Account"}</DialogTitle>
+                                <DialogDescription className="font-mono text-[11px] text-atlas-textTertiary">
+                                    {view === "settings" ? "Manage your app preferences" : "Your profile and login details"}
+                                </DialogDescription>
+                            </div>
+                        </div>
+                        {view === "main" && isOwner && (
+                            <button type="button" data-testid="account-settings-gear" onClick={() => setView("settings")}
+                                className="w-8 h-8 rounded-full grid place-items-center border border-atlas-border hover:bg-atlas-panelHover text-atlas-textSecondary transition-colors">
+                                <Settings className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </DialogHeader>
 
                 <div className="max-h-[70vh] overflow-y-auto atlas-scroll px-5 py-4 space-y-5">
+                  {view === "main" && (<>
                     {/* profile header */}
                     <div className="flex items-center gap-3 p-3 rounded-lg border border-atlas-border bg-atlas-bg" data-testid="account-profile-header">
-                        <div className="w-12 h-12 rounded-full bg-atlas-panelHover border border-atlas-border flex items-center justify-center shrink-0">
-                            <span className="font-heading font-bold text-atlas-text tracking-wide">{initials}</span>
+                        <div className="relative shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-atlas-panelHover border border-atlas-border flex items-center justify-center overflow-hidden">
+                                {profile?.avatar
+                                    ? <img src={profile.avatar} alt="avatar" className="w-full h-full object-cover" />
+                                    : <span className="font-heading font-bold text-atlas-text tracking-wide">{initials}</span>}
+                            </div>
+                            {isOwner && (
+                                <button type="button" data-testid="account-avatar-edit" onClick={() => openEdit("name")}
+                                    className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-atlas-cyan text-atlas-bg grid place-items-center border-2 border-atlas-panel">
+                                    <Pencil className="w-2.5 h-2.5" />
+                                </button>
+                            )}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <div className="font-heading font-medium text-atlas-text leading-tight">Ananta Owner</div>
+                            <div data-testid="account-display-name" className="font-heading font-medium text-atlas-text leading-tight truncate">{displayName}</div>
                             <div data-testid="account-email" className="font-mono text-xs text-atlas-textSecondary truncate">{email}</div>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] ${isOwner ? "bg-atlas-positive/15 text-atlas-positive" : "bg-atlas-panelHover text-atlas-textTertiary"}`} data-testid="account-auth-status">
-                            {isOwner ? "AUTHENTICATED" : "READ-ONLY"}
-                        </span>
+                        {isOwner && (
+                            <button type="button" data-testid="account-edit-name" onClick={() => openEdit("name")}
+                                className="font-mono text-[11px] text-atlas-cyan hover:underline shrink-0">Edit</button>
+                        )}
                     </div>
 
-                    {/* login / auth (only real data this sprint) */}
+                    {/* login / auth — editable email + password */}
                     <div>
                         <div className="label-tag mb-2">LOGIN &amp; AUTH</div>
                         <div className="rounded-lg border border-atlas-border overflow-hidden">
                             <div className="flex items-center justify-between px-3 py-3">
                                 <span className="font-body text-sm text-atlas-textSecondary">Email</span>
-                                <span data-testid="account-cred-email" className="font-mono text-xs text-atlas-text truncate ml-3">{email}</span>
+                                <span className="flex items-center gap-2 min-w-0">
+                                    <span data-testid="account-cred-email" className="font-mono text-xs text-atlas-text truncate">{email}</span>
+                                    {isOwner && <button type="button" data-testid="account-edit-email" onClick={() => openEdit("email")} className="font-mono text-[11px] text-atlas-cyan hover:underline shrink-0">Edit</button>}
+                                </span>
                             </div>
                             <div className="h-px bg-atlas-border" />
                             <div className="flex items-center justify-between px-3 py-3">
                                 <span className="font-body text-sm text-atlas-textSecondary">Password</span>
-                                <span data-testid="account-cred-password" className="font-mono text-xs text-atlas-text">{"\u2022".repeat(10)}</span>
-                            </div>
-                            <div className="h-px bg-atlas-border" />
-                            <div className="flex items-center justify-between px-3 py-3">
-                                <span className="font-body text-sm text-atlas-textSecondary">Authentication</span>
-                                <span className="font-mono text-xs text-atlas-text">Secure token (JWT)</span>
+                                <span className="flex items-center gap-2">
+                                    <span data-testid="account-cred-password" className="font-mono text-xs text-atlas-text">{"\u2022".repeat(10)}</span>
+                                    {isOwner && <button type="button" data-testid="account-edit-password" onClick={() => openEdit("password")} className="font-mono text-[11px] text-atlas-cyan hover:underline shrink-0">Change</button>}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -240,6 +339,47 @@ export default function AccountOverlay({ open, onOpenChange }) {
                     )}
 
                     <div className="font-mono text-[10px] text-atlas-textTertiary text-center pt-1">Ananta.AI · Account &amp; Privacy</div>
+                  </>)}
+
+                  {view === "settings" && (
+                    <div className="rounded-lg border border-atlas-border overflow-hidden divide-y divide-atlas-border" data-testid="account-settings-list">
+                        <SettingsRow icon={UserPlus} label="Account" desc="Profile · email · password" onClick={() => setView("main")} testid="settings-account" />
+                        <SettingsRow icon={ShieldCheck} label="Security" desc="Privacy & data policy" onClick={() => { window.open("/privacy", "_blank"); }} testid="settings-security" />
+                        <SettingsRow icon={Bell} label="Notifications" pill="Soon" testid="settings-notifications" />
+                        <SettingsRow icon={SlidersHorizontal} label="Preferences" pill="Soon" testid="settings-preferences" />
+                        <SettingsRow icon={CreditCard} label="Payment methods" pill="Soon" testid="settings-payments" />
+                        <SettingsRow icon={LifeBuoy} label="Support" desc="Contact us" onClick={() => { window.open("/support", "_blank"); }} testid="settings-support" />
+                    </div>
+                  )}
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        {/* edit profile / credentials dialog */}
+        <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
+            <DialogContent className="max-w-sm p-0 gap-0" data-testid="account-edit-dialog">
+                <DialogHeader className="px-5 pt-5 pb-2">
+                    <DialogTitle className="font-heading text-atlas-text">
+                        {edit?.mode === "name" ? "Edit display name" : edit?.mode === "email" ? "Change email" : "Change password"}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="px-5 pb-5 pt-2 space-y-3">
+                    {edit?.mode === "name" && (
+                        <EditField label="Display name" testid="edit-display-name" value={form.display_name || ""}
+                            onChange={(v) => setForm({ display_name: v })} placeholder="e.g. Vamsi Madhav" />
+                    )}
+                    {edit?.mode === "email" && (<>
+                        <EditField label="New email" testid="edit-new-email" type="email" value={form.new_email || ""} onChange={(v) => setForm({ ...form, new_email: v })} placeholder="you@example.com" />
+                        <EditField label="Current password" testid="edit-email-current-pw" type="password" value={form.current_password || ""} onChange={(v) => setForm({ ...form, current_password: v })} />
+                    </>)}
+                    {edit?.mode === "password" && (<>
+                        <EditField label="Current password" testid="edit-current-pw" type="password" value={form.current_password || ""} onChange={(v) => setForm({ ...form, current_password: v })} />
+                        <EditField label="New password (min 8)" testid="edit-new-pw" type="password" value={form.new_password || ""} onChange={(v) => setForm({ ...form, new_password: v })} />
+                    </>)}
+                    <button type="button" data-testid="account-edit-save" onClick={saveEdit} disabled={saving}
+                        className="w-full mt-1 py-2.5 rounded-lg bg-atlas-cyan text-atlas-bg font-mono text-xs font-bold tracking-widest hover:bg-atlas-cyan/90 transition-colors disabled:opacity-50">
+                        {saving ? "SAVING…" : "SAVE"}
+                    </button>
                 </div>
             </DialogContent>
         </Dialog>

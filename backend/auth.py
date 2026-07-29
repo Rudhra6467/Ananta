@@ -191,7 +191,13 @@ async def _clear_fails(db, ident: str) -> None:
 
 # ---------- owner account ----------
 async def seed_owner(db) -> None:
-    """Idempotently create/update the single owner from env (bcrypt-hashed).
+    """Idempotently create the single owner from env (bcrypt-hashed).
+
+    Env is the bootstrap source of truth for a FRESH deployment. Once the owner
+    edits their credentials IN-APP (`credentials_customized=True`), env NEVER
+    overrides them again — so in-app email/password changes survive restarts and
+    redeploys. Looks the owner up by ROLE (not env email) so a changed email does
+    not spawn a duplicate owner doc.
 
     No-op (with a warning) when owner credentials are absent, so the public
     read-only app still boots in a misconfigured deployment."""
@@ -203,21 +209,30 @@ async def seed_owner(db) -> None:
         return
     email = os.environ["OWNER_EMAIL"].strip().lower()
     password = os.environ["OWNER_PASSWORD"]
-    existing = await db.users.find_one({"email": email})
+    existing = await db.users.find_one({"role": "owner"})
     if not existing:
         await db.users.insert_one({
             "id": str(uuid.uuid4()),
             "email": email,
             "password_hash": hash_password(password),
             "role": "owner",
+            "display_name": None,
+            "avatar": None,
+            "credentials_customized": False,
             "created_at": datetime.now(UTC).isoformat(),
         })
         logger.info("Seeded owner account: %s", email)
-    elif not verify_password(password, existing["password_hash"]):
-        await db.users.update_one(
-            {"email": email}, {"$set": {"password_hash": hash_password(password)}},
-        )
-        logger.info("Owner password re-synced from env.")
+        return
+    if existing.get("credentials_customized"):
+        return  # owner changed creds in-app — env must not override.
+    upd = {}
+    if existing.get("email") != email:
+        upd["email"] = email
+    if not verify_password(password, existing.get("password_hash", "")):
+        upd["password_hash"] = hash_password(password)
+    if upd:
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": upd})
+        logger.info("Owner credentials re-synced from env.")
 
 
 async def authenticate(db, email: str, password: str, ident: str) -> str | None:
