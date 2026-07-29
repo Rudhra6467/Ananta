@@ -42,6 +42,7 @@ export default function LivePreflightCard() {
         finally { setBusy(false); }
     };
     const backToPaper = guard(async () => { await api.setEnvironment("PAPER"); toast.success("Switched to PAPER — simulated fills only."); });
+    const setSmallSize = guard(async () => { await api.updateSettings({ normal_lot_usd: 50 }); toast.success("Position size set to $50 — safe for first live tests."); });
     const toggleKill = guard(async () => {
         await api.updateSettings({ manual_kill_switch: !killed });
         toast[!killed ? "error" : "success"](!killed ? "ANANTA STOPPED — no new entries" : "ANANTA RESUMED");
@@ -78,7 +79,8 @@ export default function LivePreflightCard() {
                 <PreflightRow icon={Gauge} ok={!overCap} testid="preflight-size"
                     label="Position size"
                     value={lot ? `$${lot.toFixed(0)} / trade` : "—"}
-                    note={overCap ? `Above ~$${SOFT_CAP_USD} — keep small (~$50) for first live tests` : "Good for small-size live testing"} />
+                    note={overCap ? `Above ~$${SOFT_CAP_USD} — keep small (~$50) for first live tests` : "Good for small-size live testing"}
+                    action={isOwner && lot !== 50 ? { label: "Set $50", onClick: setSmallSize } : null} busy={busy} />
                 <PreflightRow icon={ShieldAlert} ok={!killed} testid="preflight-kill"
                     label="Trading"
                     value={killed ? "STOPPED" : "Active"}

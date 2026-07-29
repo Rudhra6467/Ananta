@@ -8,6 +8,29 @@ Not about "guaranteed profits" - about robustness and capital preservation.
 
 
 
+### 2026-07-29 (later) — V1 (A) Research/Exit polish + LIVE PREFLIGHT guard (both surfaces) — DONE, iter89 PASS
+Applied the clean Strategy-Detail language to Research/Validation + Exit Engine on web AND mobile, and added the
+requested Live preflight safety guard for small-size ($50) real-money testing. No functional/backtest changes.
+
+- **Research validation copy tightened** (web `components/lab/ResearchWizard.jsx` + mobile `app/(tabs)/research.tsx`):
+  "Use my live Risk Monitor & Exit Engine settings" → "Use my live settings" with one-line descriptions; shorter
+  step hints (timeframe, validation). Exit Strategy (ATR Trailing / Fixed Target) selection unchanged & functional.
+- **Exit Engine "active exit per strategy" clarity** (web `components/ExitEngineWorkflow.jsx` + `lib/exitConfig.js`
+  new `listExitOverrides()`, mobile `app/(tabs)/workspace.tsx`): the active-exit card now reads "ACTIVE EXIT · GLOBAL
+  DEFAULT" and lists per-strategy / per-coin override chips (e.g. `squeeze · Fixed-% Stop`, `hunter · ATR Trailing`),
+  or "All strategies & coins use the global default" when none.
+- **LIVE PREFLIGHT guard** — new web `components/LivePreflightCard.jsx` (top of Exit Engine ENGINE tab) + mobile inline
+  block in `workspace.tsx` ExitHome. Driven by existing `GET /api/environment` + `/api/live/status`. Shows: mode
+  (PAPER/LIVE, red-pulse when live), broker connection (`Connected · kraken` / keys-not-set), position size with a
+  ~$75 soft-cap reminder, and Active/STOPPED. Owner quick actions: **Set $50** (one-tap `normal_lot_usd=50`),
+  **kill-switch** (manual_kill_switch), and **Back to Paper** (POST /api/environment/PAPER, only when LIVE). Read-only
+  for non-owners. testing_agent iter89 verified full parity on web + mobile; left account safe (PAPER, not stopped).
+
+**V1 status:** B (candles→Mongo) ✅, C (Strategy Detail redesign) ✅, A (Research/Exit polish + Live preflight) ✅,
+logo unified ✅, regime validation ✅. Remaining before App Store: final stabilization sweep (done via iter87-89) and
+the user's App-Store build (Emergent Publish → their Apple Developer acct + EAS → App Store Connect/TestFlight).
+
+
 ### 2026-07-29 — V1 CRYPTO CLOSEOUT pass: candles→Mongo, regime validation, logo unify, Strategy Detail redesign (B+C done)
 **Direction locked (owner):** close V1 as a stable, App-Store-ready CRYPTO build (the AI-native trading OS:
 research→build→validate→paper→live→manage). No major new features — polish + stabilize + ship. Keep ONLY the

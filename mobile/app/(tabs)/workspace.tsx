@@ -206,7 +206,9 @@ function ExitHome({ settings, isOwner, onRefresh, onEdit, onScope, onExplain, on
         </View>
         <View style={styles.preflightGrid}>
           <PreflightCell ok={ready} label="Connection" value={ready ? `Connected · ${env?.exchange || "exch"}` : "Keys not set"} />
-          <PreflightCell ok={!overCap} label="Size" value={lot ? `$${lot.toFixed(0)}/trade` : "-"} note={overCap ? "Keep ~$50 for first live" : undefined} />
+          <PreflightCell ok={!overCap} label="Size" value={lot ? `$${lot.toFixed(0)}/trade` : "-"} note={overCap ? "Keep ~$50 for first live" : undefined}
+            actionLabel={isOwner && lot !== 50 ? "Set $50" : undefined} busy={busy}
+            onAction={() => act(async () => { await api.updateSettings({ normal_lot_usd: 50 }); })} />
           <PreflightCell ok={!killed} label="Trading" value={killed ? "STOPPED" : "Active"}
             actionLabel={isOwner ? (killed ? "Resume" : "Kill") : undefined} danger={!killed} busy={busy}
             onAction={() => act(async () => { await api.updateSettings({ manual_kill_switch: !killed }); })} />
