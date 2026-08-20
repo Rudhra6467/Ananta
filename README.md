@@ -10,6 +10,33 @@ preservation. **PAPER mode by default** (no real money). Stack: **FastAPI + Reac
 
 ---
 
+## Current operating mode (2026-08-20)
+
+Emergent hosting is **expired**. The website is **not** required for Agent Ananta work.
+
+**The backend is independently runnable.** The React UI is just another client of the same contract:
+
+```text
+                   Ananta Backend
+                  /       |       \
+                 /        |        \
+                ▼         ▼         ▼
+             Ananta    Agent     Tests/CLI
+               UI      Ananta
+```
+
+For Wave A + Contract v0 + Phase 4 ledgers, run the backend locally and point Agent Ananta at it. Do **not** redeploy Vercel / the frontend just so the agent has a host.
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/LOCAL_BACKEND.md](docs/LOCAL_BACKEND.md) | Start backend without the UI |
+| [docs/AGENT_CONTRACT_V0.md](docs/AGENT_CONTRACT_V0.md) | Shared truth language with Agent Ananta |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Ananta-side work against the locked agent roadmap |
+
+Agent repo: [Rudhra6467/ananta-decision-agent](https://github.com/Rudhra6467/ananta-decision-agent).
+
+---
+
 ## Repository layout
 
 ```
@@ -32,6 +59,8 @@ You will run **3 pieces**, each on a free/cheap tier:
 > ⚠️ **This is a 24/7 trading bot.** Free backend tiers on Render/Railway *sleep when idle*, which stops the
 > background trading loops. For continuous operation use Railway's usage-based plan or Render's **Starter**
 > (~$7/mo) — still far cheaper than the current setup. The frontend (Vercel) and database (Atlas) stay free.
+
+Hosted deploy is a **later** concern. Right now Agent Ananta needs a local API, not a new production website.
 
 ---
 
@@ -65,6 +94,8 @@ Web Service with Root Directory `backend`, build `pip install -r requirements.tx
 3. Add env var `REACT_APP_BACKEND_URL` = your backend public URL from Step 2 (no trailing slash).
 4. Deploy. You'll get a URL like `https://ananta.vercel.app`.
 
+Skip Step 3 until Agent Ananta can talk to a local (or later hosted) **backend**.
+
 ### Step 4 — Wire them together (env vars)
 **Backend** (set in Railway/Render dashboard — see `backend/.env.example` for the full list):
 - `MONGO_URL` — from Step 1
@@ -86,22 +117,26 @@ Web Service with Root Directory `backend`, build `pip install -r requirements.tx
 2. On the **Cockpit**, confirm the Watchlist shows **10/10 · in sync** (click **VALIDATE** / **SYNC 10** if not).
 3. Go to **DataLogs / Reports** → **FRESH START** to begin a clean $1,200 paper book at $75/trade.
 
+For Agent lab first-run, use [docs/LOCAL_BACKEND.md](docs/LOCAL_BACKEND.md) instead of this UI checklist.
+
 ---
 
 ## Local development
 ```bash
-# Backend
+# Backend (enough for Agent Ananta)
 cd backend
 pip install -r requirements.txt
 cp .env.example .env        # fill in values
 uvicorn server:app --host 0.0.0.0 --port 8001 --workers 1
 
-# Frontend (separate terminal)
+# Frontend (optional — not required for agent / ledger work)
 cd frontend
 yarn install
 cp .env.example .env        # set REACT_APP_BACKEND_URL=http://localhost:8001
 yarn start
 ```
+
+Agent Ananta should set `ANANTA_BASE_URL=http://127.0.0.1:8001`.
 
 ---
 
@@ -113,3 +148,4 @@ yarn start
 - **Secrets:** never commit real `.env` files. Set all secrets in the host dashboards. `.env` is gitignored.
 - **PAPER vs LIVE:** the system ships in PAPER (simulated) mode. Live execution stays disabled unless you set
   `LIVE_TRADING_ENABLED=true` and provide exchange API keys (not recommended until your validation gates pass).
+- **Emergent Google session** (`POST /api/auth/google/session`) is a hosted-UI path. Owner JWT login is sufficient for Agent Ananta.
