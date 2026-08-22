@@ -1575,6 +1575,24 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                 logger.info("DECLARATIVE(%s) entry %s qty=%.8f @ %.6f stop=%.6f reason=%s",
                             _dkey, symbol, qty_d, fill_price, struct_stop, sig.reason)
 
+    # --- Wave A shadow eval: measure setups even when regime/book blocks TAKE ---
+    squeeze_eval = None
+    bollinger_eval = None
+    _reg = getattr(asset_regime, "regime", None)
+    squeeze_reg_ok = strategy_regime_ok(settings, "squeeze", _reg) and squeeze_allowed(_reg)
+    bollinger_reg_ok = strategy_regime_ok(settings, "bollinger-mr", _reg)
+    try:
+        if bars_1h and len(bars_1h) >= 20 and not _hard_killed:
+            squeeze_eval = evaluate_squeeze(
+                bars_1h, vol_expansion_min=squeeze_settings.squeeze_vol_expansion_min,
+            )
+            if not strategy_profile_disabled(settings, "bollinger-mr"):
+                _bb_spec = get_declarative_spec("bollinger-mr")
+                _bb_params = await resolve_full_params(db, "bollinger-mr")
+                bollinger_eval = decl_evaluate(_bb_spec, bars_1h, _bb_params)
+    except Exception as _sh_err:
+        logger.warning("wave-a shadow eval failed: %s", _sh_err)
+
     # --- Agent contract v0.1: per-strategy cycle observations (additive) ---
     try:
         strategy_observations = build_wave_a_observations(
@@ -1591,6 +1609,11 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
             asset_regime=asset_regime,
             market_regime=market_regime,
             strategy_profile_disabled=strategy_profile_disabled,
+            squeeze_eval=squeeze_eval,
+            squeeze_regime_ok=squeeze_reg_ok,
+            bollinger_eval=bollinger_eval,
+            bollinger_regime_ok=bollinger_reg_ok,
+            strategy_regime_ok=strategy_regime_ok,
         )
     except Exception as _obs_err:
         logger.warning("strategy_observations build failed: %s", _obs_err)
