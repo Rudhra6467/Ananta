@@ -1758,10 +1758,19 @@ async def evaluate_all(db: AsyncIOMotorDatabase) -> list[dict]:
     global _SCAN_CYCLE
     _SCAN_CYCLE += 1
     results: list[dict] = []
+    paper = getattr(settings, "trading_mode", "PAPER") in ("PAPER", "DRY_RUN")
     for sym in settings.enabled_symbols:
-        # Staggered scanning (credit control): majors every cycle; DeFi + gold every Nth cycle.
+        # Live: stagger DeFi/gold for LLM credit control.
+        # Paper Wave A: evaluate every enabled symbol every cycle (learning velocity).
         interval = scan_interval(sym)
-        if interval > 1 and (_SCAN_CYCLE % interval) != 0:
+        if (not paper) and interval > 1 and (_SCAN_CYCLE % interval) != 0:
+            results.append({
+                "symbol": sym,
+                "status": "scan_staggered",
+                "macro": {},
+                "regime": {},
+                "strategy_observations": data_gap_observations(reason="scan_staggered"),
+            })
             continue
         try:
             r = await evaluate_symbol(db, sym)
