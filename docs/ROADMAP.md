@@ -1,10 +1,14 @@
 # Ananta — Platform work against the locked Agent roadmap
 
-**Updated:** 2026-08-20  
-**Product roadmap (locked):** Agent Ananta `docs/ROADMAP.md`  
-This file is the **Ananta-side** slice only. Do not invent a parallel product thesis here.
+**Updated:** 2026-08-22
 
-North star stays: Ananta provides truth; Agent Ananta decides; autonomy is earned with evidence.
+Ananta’s current obligation for Agent Ananta:
+
+1. Prove ~1 year of 1h candles in Mongo `historical_candles` (the collection Lab + `/api/lab/data/coverage` read). Laptop scripts must load `backend/.env`, not `/app/backend/.env`.
+2. Expose Wave A Strategy Knowledge Objects at `GET /api/strategy/knowledge` (implementation + router, not DNA-as-policy).
+3. Lab JSON replay of the **same** engines. Tag `source=BACKTEST`. Never auto-KEEP.
+
+Wave A stays hunter / squeeze / bollinger-mr. Do not enable the other 12 from Ananta defaults for this lab.
 
 ---
 

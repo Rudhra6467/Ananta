@@ -2171,12 +2171,34 @@ async def lab_data_coverage():
     syms = watch or default
     out = []
     for s in syms:
-        c1h = data_store.coverage(s, "1h")
+        c1h = data_store.coverage_report(s, "1h")
         c4 = data_store.coverage(s, "4h")
         c1 = data_store.coverage(s, "1d")
-        out.append({"symbol": s, "bars_1h": c1h["count"], "bars_4h": c4["count"], "bars_1d": c1["count"],
-                    "from": c1h["min_ts"] or c4["min_ts"], "to": c1h["max_ts"] or c4["max_ts"]})
-    return {"symbols": out, "periods": list(_PERIOD_MONTHS.keys()) + ["custom"]}
+        out.append({
+            "symbol": s,
+            "timeframe": "1h",
+            "bars_1h": c1h["count"],
+            "bars_4h": c4["count"],
+            "bars_1d": c1["count"],
+            "from": c1h.get("from_iso") or c1h.get("min_ts"),
+            "to": c1h.get("to_iso") or c1h.get("max_ts"),
+            "from_ts": c1h.get("min_ts"),
+            "to_ts": c1h.get("max_ts"),
+            "span_days": c1h.get("span_days"),
+            "expected_bars": c1h.get("expected_bars"),
+            "gap_count": c1h.get("gap_count"),
+            "missing_bars_total": c1h.get("missing_bars_total"),
+            "gaps": c1h.get("gaps") or [],
+            "usable_1y": c1h.get("usable_1y"),
+        })
+    usable = sum(1 for r in out if r.get("usable_1y"))
+    return {
+        "symbols": out,
+        "periods": list(_PERIOD_MONTHS.keys()) + ["custom"],
+        "usable_1y_count": usable,
+        "usable_1y_all": usable == len(out) and len(out) > 0,
+        "acceptance": "usable_1y = ≥6000 1h bars and ≥300 calendar days",
+    }
 
 
 @api_router.get("/lab/presets", dependencies=[Depends(require_owner)])
@@ -2812,6 +2834,25 @@ async def reset_strategy_profile(key: str, _t: dict = Depends(tenant_context)):
 async def strategy_registry():
     """All built-in strategies with their DNA + full parameter schema (latest version each)."""
     return {"strategies": [s.model_dump() for s in list_schemas()]}
+
+
+@api_router.get("/strategy/knowledge", dependencies=[Depends(require_owner)])
+async def strategy_knowledge(keys: str | None = Query(None)):
+    """Wave A Strategy Knowledge Objects. Implementation + router are authoritative, not DNA."""
+    from strategy_knowledge import WAVE_A_KEYS, knowledge_object  # noqa: PLC0415
+    want = [k.strip() for k in (keys or ",".join(WAVE_A_KEYS)).split(",") if k.strip()]
+    settings = await load_settings(db)
+    out = []
+    for k in want:
+        live = _current_profile(settings, k)
+        obj = knowledge_object(k, live_profile=live)
+        if obj:
+            out.append(obj)
+    return {
+        "authoritative": "implementation_and_router",
+        "wave_a": list(WAVE_A_KEYS),
+        "strategies": out,
+    }
 
 
 _AUDIT_POOL = None

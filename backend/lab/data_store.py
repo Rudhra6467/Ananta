@@ -39,9 +39,11 @@ _indexed = False
 def _load_env() -> None:
     if os.environ.get("MONGO_URL") and os.environ.get("DB_NAME"):
         return
-    # Fallback for standalone worker processes / scripts that didn't inherit the server env.
     try:
+        from pathlib import Path
         from dotenv import load_dotenv  # noqa: PLC0415
+        backend = Path(__file__).resolve().parents[1]
+        load_dotenv(backend / ".env")
         load_dotenv("/app/backend/.env")
     except Exception:
         pass
@@ -114,6 +116,57 @@ def coverage(symbol: str, timeframe: str) -> dict:
         min_ts = next(iter(first), {}).get("ts")
         max_ts = next(iter(last), {}).get("ts")
     return {"symbol": symbol, "timeframe": timeframe, "count": count, "min_ts": min_ts, "max_ts": max_ts}
+
+
+def coverage_report(symbol: str, timeframe: str = "1h") -> dict:
+    """Coverage plus ISO dates, span, and gap list. Used to prove ~1y exists."""
+    from datetime import datetime, timezone
+
+    cov = coverage(symbol, timeframe)
+    step = TF_MS.get(timeframe, 3_600_000)
+    min_ts, max_ts = cov.get("min_ts"), cov.get("max_ts")
+    count = cov.get("count") or 0
+    span_days = round((max_ts - min_ts) / 86_400_000, 1) if min_ts and max_ts else 0.0
+    expected = int(span_days * (86_400_000 / step)) + 1 if span_days else 0
+    gaps: list[dict] = []
+    if count >= 2:
+        coll = _coll()
+        ts_list = [
+            d["ts"]
+            for d in coll.find(
+                {"symbol": symbol, "timeframe": timeframe},
+                {"_id": 0, "ts": 1},
+            ).sort("ts", ASCENDING)
+        ]
+        for a, b in zip(ts_list, ts_list[1:]):
+            delta = b - a
+            if delta > step * 1.5:
+                missing = max(0, int(delta / step) - 1)
+                gaps.append({
+                    "from_ts": a,
+                    "to_ts": b,
+                    "from_iso": datetime.fromtimestamp(a / 1000, tz=timezone.utc).isoformat(),
+                    "to_iso": datetime.fromtimestamp(b / 1000, tz=timezone.utc).isoformat(),
+                    "missing_bars": missing,
+                })
+    def _iso(ms):
+        if not ms:
+            return None
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+
+    usable_1y = bool(count >= 6000 and span_days >= 300)
+    return {
+        **cov,
+        "from_iso": _iso(min_ts),
+        "to_iso": _iso(max_ts),
+        "span_days": span_days,
+        "expected_bars": expected,
+        "gap_count": len(gaps),
+        "missing_bars_total": sum(g["missing_bars"] for g in gaps),
+        "gaps": gaps[:20],
+        "usable_1y": usable_1y,
+        "note": "usable_1y requires ≥6000 1h bars and ≥300 calendar days",
+    }
 
 
 def _paginate(symbol: str, timeframe: str, since_ms: int, until_ms: int) -> list[list[float]]:

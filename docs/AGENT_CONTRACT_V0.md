@@ -25,9 +25,11 @@ Agent must never become a second hidden trading engine. Agent must never write M
 | `GET` | `/api/portfolio` | equity, cash, positions, `slots_used`, realized_pnl |
 | `POST` | `/api/orders/manual` | Paper BUY/SELL |
 | `GET` | `/api/trades` | Fills / history |
-| `GET` | `/api/strategy/registry` | Strategy keys + names |
+| `GET` | `/api/strategy/registry` | Strategy keys + names + DNA |
+| `GET` | `/api/strategy/knowledge` | Wave A Knowledge Object (implementation + router authoritative) |
 | `GET`/`PUT` | `/api/strategy/{key}/profile` | Enable/disable + regimes |
 | `POST` | `/api/cycle/run` | Evaluation cycle (`/{symbol}` optional) |
+| `GET` | `/api/lab/data/coverage` | 1h count, ISO from/to, span_days, gaps, usable_1y |
 | `GET` | `/health` | Liveness (no `/api`, no DB) |
 
 There is no `/api/orders/paper`. Paper is the default execution environment; manual orders in paper mode are the agent’s execution path.
