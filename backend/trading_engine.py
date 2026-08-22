@@ -44,7 +44,7 @@ from continuation import evaluate_continuation
 from strategy_runtime import overlay_settings, resolve_active_params, resolve_full_params
 from declarative_engine import evaluate as decl_evaluate
 from strategy.declarative_defs import all_declarative_keys, get_declarative_spec
-from strategy_cycle_obs import build_wave_a_observations
+from strategy_cycle_obs import build_wave_a_observations, data_gap_observations
 from circuit_breaker import evaluate_breaker
 from tenant_ctx import OWNER_TENANT, cooldown_id, current_tenant, tenant_doc_id, tenant_trade_filter
 
@@ -699,7 +699,13 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     snapshot = await fetch_snapshot(symbol)
     if snapshot is None:
         logger.warning("No market snapshot for %s; skipping cycle", symbol)
-        return {"symbol": symbol, "status": "no_market_data"}
+        return {
+            "symbol": symbol,
+            "status": "no_market_data",
+            "macro": {},
+            "regime": {},
+            "strategy_observations": data_gap_observations(reason="no_market_data"),
+        }
 
     # Hard-kill pre-check (manual / spread / daily-loss): skip the costly news +
     # sector + Gemini calls entirely when trading is hard-blocked. Saves LLM credits
@@ -1762,7 +1768,13 @@ async def evaluate_all(db: AsyncIOMotorDatabase) -> list[dict]:
             results.append(r)
         except Exception as e:
             logger.exception("evaluate_symbol failed for %s: %s", sym, e)
-            results.append({"symbol": sym, "error": str(e)})
+            results.append({
+                "symbol": sym,
+                "error": str(e),
+                "macro": {},
+                "regime": {},
+                "strategy_observations": data_gap_observations(reason="evaluate_symbol_failed"),
+            })
     # Fan the house decisions out to every isolated user book (credit-free).
     with contextlib.suppress(Exception):
         await mirror_to_tenants(db, results)

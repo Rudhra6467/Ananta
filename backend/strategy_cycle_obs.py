@@ -2,6 +2,30 @@
 from __future__ import annotations
 
 
+
+WAVE_A_KEYS = ("hunter", "squeeze", "bollinger-mr")
+
+
+def data_gap_observations(*, reason: str, regime=None) -> list[dict]:
+    """When Ananta could not evaluate a symbol, never imply 'no setup'."""
+    return [
+        {
+            "strategy": key,
+            "enabled": None,
+            "ran": False,
+            "regime": regime,
+            "setup_detected": None,
+            "recommendation": None,
+            "confidence": None,
+            "decision": "UNKNOWN",
+            "skip_reason": reason,
+            "execution_state": "DATA_GAP",
+            "rationale": reason,
+        }
+        for key in WAVE_A_KEYS
+    ]
+
+
 def execution_state(*, enabled: bool, ran: bool, setup, took: bool, regime_ok: bool = True) -> str:
     if not enabled:
         return "NOT_ENABLED"
