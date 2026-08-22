@@ -44,6 +44,7 @@ from continuation import evaluate_continuation
 from strategy_runtime import overlay_settings, resolve_active_params, resolve_full_params
 from declarative_engine import evaluate as decl_evaluate
 from strategy.declarative_defs import all_declarative_keys, get_declarative_spec
+from strategy_cycle_obs import build_wave_a_observations
 from circuit_breaker import evaluate_breaker
 from tenant_ctx import OWNER_TENANT, cooldown_id, current_tenant, tenant_doc_id, tenant_trade_filter
 
@@ -1574,6 +1575,39 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
                 logger.info("DECLARATIVE(%s) entry %s qty=%.8f @ %.6f stop=%.6f reason=%s",
                             _dkey, symbol, qty_d, fill_price, struct_stop, sig.reason)
 
+    # --- Agent contract v0.1: per-strategy cycle observations (additive) ---
+    try:
+        strategy_observations = build_wave_a_observations(
+            settings=settings,
+            strategy_signals=strategy_signals,
+            trade_doc=trade_doc,
+            decision=decision,
+            blocked=blocked,
+            macro=macro,
+            primary=primary,
+            hunter_triggered=hunter_triggered,
+            hard_killed=bool(_hard_killed),
+            bars_ok=bool(bars_1h),
+            asset_regime=asset_regime,
+            market_regime=market_regime,
+            strategy_profile_disabled=strategy_profile_disabled,
+        )
+    except Exception as _obs_err:
+        logger.warning("strategy_observations build failed: %s", _obs_err)
+        strategy_observations = []
+    try:
+        _mkt_reg = market_regime
+    except Exception:
+        _mkt_reg = None
+    try:
+        _asset_reg = getattr(asset_regime, "regime", None)
+    except Exception:
+        _asset_reg = None
+    try:
+        _signals = strategy_signals or {}
+    except Exception:
+        _signals = {}
+
     return {
         "symbol": symbol,
         "snapshot": snapshot.model_dump(),
@@ -1584,6 +1618,13 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         "fusion_summary": fusion_summary,
         "trade": trade_doc,
         "reasoning_id": reasoning.id,
+        # Contract v0.1 additive fields for Agent Ananta
+        "regime": {
+            "market": _mkt_reg,
+            "asset": _asset_reg,
+        },
+        "strategy_signals": _signals,
+        "strategy_observations": strategy_observations,
     }
 
 
