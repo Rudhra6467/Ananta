@@ -11,7 +11,7 @@ def execution_state(*, enabled: bool, ran: bool, setup, took: bool, regime_ok: b
         return "TAKE_EXECUTED"
     if setup is None:
         return "RUN_UNKNOWN"
-    if not regime_ok:
+    if setup and not regime_ok:
         return "RUN_REGIME_SKIPPED"
     if setup:
         return "RUN_SETUP_SKIPPED"
