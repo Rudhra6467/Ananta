@@ -1,14 +1,16 @@
 # Ananta — Platform work against the locked Agent roadmap
 
-**Updated:** 2026-08-22
+**Updated:** 2026-08-23
 
 Ananta’s current obligation for Agent Ananta:
 
-1. Prove ~1 year of 1h candles in Mongo `historical_candles` (the collection Lab + `/api/lab/data/coverage` read). Laptop scripts must load `backend/.env`, not `/app/backend/.env`.
-2. Expose Wave A Strategy Knowledge Objects at `GET /api/strategy/knowledge` (implementation + router, not DNA-as-policy).
-3. Lab JSON replay of the **same** engines. Tag `source=BACKTEST`. Never auto-KEEP.
+1. Prove ~1 year of 1h candles in Mongo `historical_candles` (the collection Lab + `/api/lab/data/coverage` read). **Done.**
+2. Expose Wave A Strategy Knowledge Objects at `GET /api/strategy/knowledge` (implementation + router, not DNA-as-policy). **Done.**
+3. Lab JSON replay of the **same** engines. Tag `source=BACKTEST`. Never auto-KEEP. **Done** (context, not promotion).
+4. **Stage 4:** `GET /api/lab/observation-replay` — same `observation_v0` as live `lab watch`, on 1y Lab candles, real `classify_regime` / `evaluate_primary` / `evaluate_squeeze` / declarative bollinger-mr. Historical TAKE-equivalent is not KEEP.
 
 Wave A stays hunter / squeeze / bollinger-mr. Do not enable the other 12 from Ananta defaults for this lab.
+
 
 ---
 

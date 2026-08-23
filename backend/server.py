@@ -2905,6 +2905,41 @@ async def lab_regime_audit_csv(symbol: str = "BTC/USD", timeframe: str = "1h", s
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+async def _run_observation_replay(symbol: str, timeframe: str, stride: int,
+                                  include_observations: bool, max_bars: int | None) -> dict:
+    import functools  # noqa: PLC0415
+    from lab import observation_replay  # noqa: PLC0415
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _audit_pool(),
+        functools.partial(
+            observation_replay.replay, symbol, timeframe, None, None, stride,
+            include_observations, max_bars,
+        ),
+    )
+
+
+@api_router.get("/lab/observation-replay", dependencies=[Depends(require_owner)])
+async def lab_observation_replay(
+    symbol: str = "BTC/USD",
+    timeframe: str = "1h",
+    stride: int = 4,
+    include_observations: bool = True,
+    max_bars: int | None = Query(None),
+):
+    """Stage 4: replay observation_v0 on 1y Lab candles using real classify_regime /
+    evaluate_primary / evaluate_squeeze / declarative bollinger-mr.
+
+    Historical TAKE is TAKE-equivalent (setup AND Wave A gate) — not a paper fill,
+    not KEEP. Runs in a spawn process so it never blocks the API event loop.
+    """
+    res = await _run_observation_replay(
+        symbol, timeframe, max(1, int(stride or 1)),
+        bool(include_observations), max_bars,
+    )
+    return res
+
+
 @api_router.get("/strategy/{key}/schema")
 async def strategy_schema_endpoint(key: str, version: str | None = Query(None)):
     s = get_schema(key, version)

@@ -156,9 +156,13 @@ def knowledge_object(key: str, *, live_profile: dict | None = None,
         return None
     out = dict(base)
     out["historical_evidence"] = historical_evidence or {
-        "source": None,
+        "source": "historical_lab",
         "available": False,
-        "note": "Lab 1y not verified yet",
+        "note": (
+            "1y Lab candles exist. Stage 4 observation replay (source=historical_lab) "
+            "is a second evidence layer on observation_v0 — not KEEP. Fill this object "
+            "from lab replay summary; do not mix with paper_evidence."
+        ),
     }
     out["paper_evidence"] = paper_evidence or {
         "source": "PAPER",
