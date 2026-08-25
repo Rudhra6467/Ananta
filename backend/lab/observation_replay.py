@@ -7,12 +7,15 @@ Same observation_v0 schema as live `lab watch`. Uses the REAL live functions:
   evaluate_primary         primary_layer.py   (Hunter)
   evaluate_squeeze         squeeze.py
   declarative bollinger-mr declarative_engine.py + DECLARATIVE spec
+  evaluate_continuation    continuation.py    (UNIVERSE v1.2 research shadow — NOT Wave A, NOT live watch)
 
 Evaluate-then-filter (live cycle observation contract), NOT backtest's
 "only evaluate if router allows". That is required so we can count
 qualifying setups that were REGIME_FILTERED.
 
-Historical TAKE = TAKE-equivalent (setup AND Wave A regime gate).
+Historical TAKE = TAKE-equivalent (setup AND policy gate).
+Wave A TAKE-eq uses WAVE_A_REGIMES. Continuation TAKE-eq uses RESEARCH_REGIMES (TREND_UP).
+Continuation MUST NOT change Wave A agent_decision, live watch, or KEEP.
 It is NOT a paper fill, NOT KEEP, NOT a production mutation.
 
 Independent Market Truth is computed from the same Lab candles at t0
@@ -24,6 +27,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
+from continuation import evaluate_continuation
 from declarative_engine import evaluate as decl_evaluate
 from lab.data_store import coverage_report, load_candles
 from levels import compute_levels
@@ -38,6 +42,7 @@ from strategy.declarative_defs import DECLARATIVE
 SCHEMA = "observation_v0"
 SOURCE = "historical_lab"
 WAVE_A = ("hunter", "squeeze", "bollinger-mr")
+RESEARCH_SHADOW = ("continuation",)  # Universe v1.2 — hist observation only
 WARMUP_BARS = 200
 ANALYSIS_LOOKBACK = 750
 HORIZONS_MS = {"+15m": 900_000, "+1h": 3_600_000, "+4h": 14_400_000}
@@ -47,6 +52,11 @@ WAVE_A_REGIMES = {
     "hunter": frozenset({"REVERSAL"}),
     "squeeze": frozenset({"COMPRESSION"}),
     "bollinger-mr": frozenset({"RANGE", "COMPRESSION"}),
+}
+
+# Research-shadow policy (not Wave A, not live enable). Mirrors router TREND_UP.
+RESEARCH_REGIMES = {
+    "continuation": frozenset({"TREND_UP"}),
 }
 
 _O, _H, _L, _C, _V = 1, 2, 3, 4, 5
@@ -168,6 +178,10 @@ def _wave_a_ok(key: str, regime: str) -> bool:
     return regime in WAVE_A_REGIMES.get(key, frozenset())
 
 
+def _research_ok(key: str, regime: str) -> bool:
+    return regime in RESEARCH_REGIMES.get(key, frozenset())
+
+
 def _decision(setup, regime_ok: bool) -> tuple[str, str, str]:
     """Return (TAKE|SKIP|WAIT|UNKNOWN, skip_reason, execution_state)."""
     if setup is None:
@@ -240,6 +254,7 @@ def replay(
         "hunter": "primary_layer.evaluate_primary",
         "squeeze": "squeeze.evaluate_squeeze",
         "bollinger_mr": "declarative_engine.evaluate(DECLARATIVE['bollinger-mr'])",
+        "continuation": "continuation.evaluate_continuation (research shadow, not Wave A, not live watch)",
         "market_regime": "trading_engine._market_regime (EMA50/200, duplicated)",
         "independent_flags": "Agent market_truth._ohlc_metrics formulas on Lab candles",
         "note": "Not an Agent-side reimplementation. Not lab.backtest (that only logs TAKEs).",
@@ -272,7 +287,7 @@ def replay(
             zone_cache[day] = compute_levels(d_bars, hwin) if d_bars else []
         return zone_cache[day]
 
-    stats = {k: _empty_strategy_stats() for k in WAVE_A}
+    stats = {k: _empty_strategy_stats() for k in WAVE_A + RESEARCH_SHADOW}
     decision_c = Counter()
     regime_c = Counter()
     market_c = Counter()
@@ -373,7 +388,22 @@ def replay(
         bb_reg = _wave_a_ok("bollinger-mr", asset_reg)
         bb_dec, bb_skip, bb_state = _decision(bb_setup, bb_reg)
 
-        strat_obs = [
+        # --- Continuation: research shadow. Evaluate-then-filter. NOT Wave A. NOT live watch. ---
+        ct_setup = None
+        ct_codes: list[str] = []
+        ct_profile = None
+        try:
+            ct = evaluate_continuation(window, settings, regime=asset_reg_obj)
+            ct_setup = bool(ct.triggered)
+            ct_codes = list(ct.reason_codes or [])[:8]
+            ct_profile = ct.entry_profile
+        except Exception:
+            ct_setup = None
+            ct_codes = ["DATA_GAP"]
+        ct_reg = _research_ok("continuation", asset_reg)
+        ct_dec, ct_skip, ct_state = _decision(ct_setup, ct_reg)
+
+        wave_obs = [
             {
                 "strategy": "hunter",
                 "symbol": symbol,
@@ -425,10 +455,32 @@ def replay(
                 "router_note": "Router RANGE=[] — Wave A re-test, not a core executor",
             },
         ]
+        ct_obs = {
+            "strategy": "continuation",
+            "symbol": symbol,
+            "enabled": False,
+            "live_watch": False,
+            "research_shadow": True,
+            "ran": True,
+            "regime": asset_reg,
+            "setup_detected": ct_setup,
+            "decision": ct_dec,
+            "skip_reason": ct_skip,
+            "execution_state": ct_state,
+            "take_kind": "equivalent" if ct_dec == "TAKE" else None,
+            "router_eligible": _router_eligible("continuation", asset_reg),
+            "wave_a_regime_ok": False,
+            "research_regime_ok": ct_reg,
+            "entry_profile": ct_profile,
+            "reason_codes": ct_codes,
+            "rationale": ",".join(ct_codes) if ct_codes else ("continuation setup" if ct_setup else "no_qualifying_setup"),
+            "note": "Universe v1.2 research shadow. Not Wave A. Not live watch. TAKE-eq ≠ KEEP.",
+        }
+        strat_obs = wave_obs + [ct_obs]
 
-        n_take = sum(1 for o in strat_obs if o["decision"] == "TAKE")
-        n_skip = sum(1 for o in strat_obs if o["decision"] == "SKIP")
-        n_setup = sum(1 for o in strat_obs if o["setup_detected"])
+        n_take = sum(1 for o in wave_obs if o["decision"] == "TAKE")
+        n_skip = sum(1 for o in wave_obs if o["decision"] == "SKIP")
+        n_setup = sum(1 for o in wave_obs if o["setup_detected"])
         if n_take:
             agent_decision = "TAKE"
         elif n_setup and n_skip:
@@ -442,6 +494,7 @@ def replay(
         _bump(stats["hunter"], asset_reg, h_dec, h_setup, h_skip)
         _bump(stats["squeeze"], asset_reg, sq_dec, sq_setup, sq_skip)
         _bump(stats["bollinger-mr"], asset_reg, bb_dec, bb_setup, bb_skip)
+        _bump(stats["continuation"], asset_reg, ct_dec, ct_setup, ct_skip)
 
         flags = _independent_flags(bars, i)
         btc_flags = flags if symbol == "BTC/USD" else _independent_flags(btc_bars, min(i, len(btc_bars) - 1)) if btc_bars else {}
@@ -490,9 +543,11 @@ def replay(
                 "n_symbols": 1,
                 "n_setups": n_setup,
                 "wave_a": list(WAVE_A),
+                "research_shadow": list(RESEARCH_SHADOW),
                 "note": (
-                    "Ananta regime is a hypothesis. Historical TAKE is TAKE-equivalent "
-                    "(setup AND Wave A gate), not a paper fill, not KEEP."
+                    "Ananta regime is a hypothesis. Wave A TAKE-eq uses WAVE_A gates. "
+                    "Continuation is research shadow (TREND_UP), not Wave A, not live watch, not KEEP. "
+                    "agent_decision is Wave A only."
                 ),
             },
             "market_truth": {
@@ -519,6 +574,8 @@ def replay(
                 "ananta_output_not_proof": True,
                 "historical_take_is_not_keep": True,
                 "historical_take_is_not_paper_take": True,
+                "continuation_is_not_wave_a": True,
+                "continuation_is_not_live_watch": True,
                 "strategy_evidence_ne_decision_evidence": True,
                 "no_auto_mutation": True,
             },
@@ -554,17 +611,22 @@ def replay(
             "n_fwd_1h": {k: len(v) for k, v in fwd_by_decision.items()},
         },
         "wave_a_gates": {k: sorted(v) for k, v in WAVE_A_REGIMES.items()},
+        "research_shadow_gates": {k: sorted(v) for k, v in RESEARCH_REGIMES.items()},
         "router_map": {k: list(v) for k, v in _REGIME_MAP.items()},
         "contradictions": [
             "Hunter: AGGRESSIVE_PULLBACK exists for TREND_UP; Wave A + router allow REVERSAL only.",
             "Bollinger-MR: Wave A allow-list RANGE+COMPRESSION; router RANGE=[] (not a core executor).",
+            "Continuation: router TREND_UP; hist research shadow only — not Wave A live watch.",
         ],
         "wave_a_status": {"hunter": "WATCH", "squeeze": "WATCH", "bollinger-mr": "WATCH"},
+        "research_shadow_status": {"continuation": "HIST_ONLY"},
         "laws": {
             "historical_take_is_not_keep": True,
             "historical_take_is_not_paper_take": True,
             "enough_to_evaluate_ne_enough_to_promote": True,
             "no_auto_mutation": True,
+            "continuation_is_not_wave_a": True,
+            "continuation_is_not_live_watch": True,
         },
     }
 
@@ -580,6 +642,6 @@ def replay(
         "observations": observations if include_observations else [],
         "note": (
             "Stage 4 historical replay. Same observation_v0 as live_paper. "
-            "TAKE-equivalent cannot silently become KEEP. Wave A stays WATCH."
+            "Continuation is research shadow only. TAKE-equivalent cannot silently become KEEP. Wave A stays WATCH."
         ),
     }
