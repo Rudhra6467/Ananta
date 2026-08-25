@@ -388,6 +388,7 @@ def replay(
                 "router_eligible": _router_eligible("hunter", asset_reg),
                 "wave_a_regime_ok": h_reg,
                 "entry_profile": h_profile,
+                "reason_codes": h_codes,
                 "rationale": ",".join(h_codes) if h_codes else ("hunter setup" if h_setup else "no_qualifying_setup"),
             },
             {

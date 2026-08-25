@@ -132,6 +132,8 @@ def build_wave_a_observations(
         decision == "BUY" and trade_doc is not None and trade_strategy in (None, "hunter")
     )
     h_reg = _reg_ok("hunter", None)
+    h_codes = list(getattr(primary, "reason_codes", None) or []) if primary is not None else []
+    h_profile = getattr(primary, "entry_profile", None) if primary is not None else None
     if hard_killed:
         h_skip = "hard_kill_switch"
     elif not h_en:
@@ -217,10 +219,16 @@ def build_wave_a_observations(
             "confidence": getattr(macro, "confidence", None) if h_setup else 0.0,
             "decision": _dec(h_took, h_setup),
             "skip_reason": None if h_took else h_skip,
+            "reason_codes": h_codes,
+            "entry_profile": h_profile,
             "execution_state": execution_state(
                 enabled=h_en, ran=h_ran, setup=h_setup, took=h_took, regime_ok=h_reg,
             ),
-            "rationale": (getattr(macro, "reason", None) or "")[:200],
+            "rationale": (
+                ",".join(h_codes)
+                if h_codes
+                else ((getattr(macro, "reason", None) or "")[:200])
+            ),
         },
         {
             "strategy": "squeeze",
