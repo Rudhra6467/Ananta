@@ -7,7 +7,8 @@ Same observation_v0 schema as live `lab watch`. Uses the REAL live functions:
   evaluate_primary         primary_layer.py   (Hunter)
   evaluate_squeeze         squeeze.py
   declarative bollinger-mr declarative_engine.py + DECLARATIVE spec
-  evaluate_continuation    continuation.py    (UNIVERSE v1.2 research shadow — NOT Wave A, NOT live watch)
+  evaluate_continuation    continuation.py    (research shadow — NOT Wave A, NOT live watch)
+  declarative donchian-breakout  (UNIVERSE I2 research shadow — NOT Wave A, NOT live watch)
 
 Evaluate-then-filter (live cycle observation contract), NOT backtest's
 "only evaluate if router allows". That is required so we can count
@@ -42,7 +43,7 @@ from strategy.declarative_defs import DECLARATIVE
 SCHEMA = "observation_v0"
 SOURCE = "historical_lab"
 WAVE_A = ("hunter", "squeeze", "bollinger-mr")
-RESEARCH_SHADOW = ("continuation",)  # Universe v1.2 — hist observation only
+RESEARCH_SHADOW = ("continuation", "donchian-breakout")  # hist observation only — not live watch
 WARMUP_BARS = 200
 ANALYSIS_LOOKBACK = 750
 HORIZONS_MS = {"+15m": 900_000, "+1h": 3_600_000, "+4h": 14_400_000}
@@ -57,6 +58,8 @@ WAVE_A_REGIMES = {
 # Research-shadow policy (not Wave A, not live enable). Mirrors router TREND_UP.
 RESEARCH_REGIMES = {
     "continuation": frozenset({"TREND_UP"}),
+    # Thesis TREND_UP. Router does not list donchian. Profile COMPRESSION ≠ this gate.
+    "donchian-breakout": frozenset({"TREND_UP"}),
 }
 
 _O, _H, _L, _C, _V = 1, 2, 3, 4, 5
@@ -255,6 +258,7 @@ def replay(
         "squeeze": "squeeze.evaluate_squeeze",
         "bollinger_mr": "declarative_engine.evaluate(DECLARATIVE['bollinger-mr'])",
         "continuation": "continuation.evaluate_continuation (research shadow, not Wave A, not live watch)",
+        "donchian_breakout": "declarative_engine.evaluate(DECLARATIVE['donchian-breakout']) (I2 shadow)",
         "market_regime": "trading_engine._market_regime (EMA50/200, duplicated)",
         "independent_flags": "Agent market_truth._ohlc_metrics formulas on Lab candles",
         "note": "Not an Agent-side reimplementation. Not lab.backtest (that only logs TAKEs).",
@@ -276,6 +280,9 @@ def replay(
     bb_pack = DECLARATIVE.get("bollinger-mr") or {}
     bb_spec = bb_pack.get("spec") or {}
     bb_params = {p.id: p.default for p in (bb_pack.get("params") or [])}
+    dc_pack = DECLARATIVE.get("donchian-breakout") or {}
+    dc_spec = dc_pack.get("spec") or {}
+    dc_params = {p.id: p.default for p in (dc_pack.get("params") or [])}
 
     btc_by_ts = {int(b[0]): b for b in btc_bars} if btc_bars is not bars else None
     zone_cache: dict[int, list] = {}
@@ -403,6 +410,23 @@ def replay(
         ct_reg = _research_ok("continuation", asset_reg)
         ct_dec, ct_skip, ct_state = _decision(ct_setup, ct_reg)
 
+        # --- Donchian: I2 research shadow. Evaluate-then-filter. NOT Wave A. NOT live watch. ---
+        dc_setup = None
+        dc_reason = ""
+        try:
+            dsig = decl_evaluate(dc_spec, window, dc_params) if dc_spec else None
+            if dsig is None:
+                dc_setup = None
+                dc_reason = "no_spec"
+            else:
+                dc_setup = bool(dsig.entry)
+                dc_reason = str(dsig.reason or "")[:200]
+        except Exception:
+            dc_setup = None
+            dc_reason = "DATA_GAP"
+        dc_reg = _research_ok("donchian-breakout", asset_reg)
+        dc_dec, dc_skip, dc_state = _decision(dc_setup, dc_reg)
+
         wave_obs = [
             {
                 "strategy": "hunter",
@@ -476,7 +500,27 @@ def replay(
             "rationale": ",".join(ct_codes) if ct_codes else ("continuation setup" if ct_setup else "no_qualifying_setup"),
             "note": "Universe v1.2 research shadow. Not Wave A. Not live watch. TAKE-eq ≠ KEEP.",
         }
-        strat_obs = wave_obs + [ct_obs]
+        dc_obs = {
+            "strategy": "donchian-breakout",
+            "symbol": symbol,
+            "enabled": False,
+            "live_watch": False,
+            "research_shadow": True,
+            "ran": True,
+            "regime": asset_reg,
+            "setup_detected": dc_setup,
+            "decision": dc_dec,
+            "skip_reason": dc_skip,
+            "execution_state": dc_state,
+            "take_kind": "equivalent" if dc_dec == "TAKE" else None,
+            "router_eligible": _router_eligible("donchian-breakout", asset_reg),
+            "wave_a_regime_ok": False,
+            "research_regime_ok": dc_reg,
+            "entry_profile": "declarative",
+            "rationale": dc_reason or ("donchian setup" if dc_setup else "no_qualifying_setup"),
+            "note": "Universe I2 research shadow. Not Wave A. Not live watch. TAKE-eq ≠ KEEP.",
+        }
+        strat_obs = wave_obs + [ct_obs, dc_obs]
 
         n_take = sum(1 for o in wave_obs if o["decision"] == "TAKE")
         n_skip = sum(1 for o in wave_obs if o["decision"] == "SKIP")
@@ -495,6 +539,7 @@ def replay(
         _bump(stats["squeeze"], asset_reg, sq_dec, sq_setup, sq_skip)
         _bump(stats["bollinger-mr"], asset_reg, bb_dec, bb_setup, bb_skip)
         _bump(stats["continuation"], asset_reg, ct_dec, ct_setup, ct_skip)
+        _bump(stats["donchian-breakout"], asset_reg, dc_dec, dc_setup, dc_skip)
 
         flags = _independent_flags(bars, i)
         btc_flags = flags if symbol == "BTC/USD" else _independent_flags(btc_bars, min(i, len(btc_bars) - 1)) if btc_bars else {}
@@ -546,7 +591,7 @@ def replay(
                 "research_shadow": list(RESEARCH_SHADOW),
                 "note": (
                     "Ananta regime is a hypothesis. Wave A TAKE-eq uses WAVE_A gates. "
-                    "Continuation is research shadow (TREND_UP), not Wave A, not live watch, not KEEP. "
+                    "Continuation + Donchian are research shadow (TREND_UP), not Wave A, not live watch, not KEEP. "
                     "agent_decision is Wave A only."
                 ),
             },
@@ -576,6 +621,8 @@ def replay(
                 "historical_take_is_not_paper_take": True,
                 "continuation_is_not_wave_a": True,
                 "continuation_is_not_live_watch": True,
+                "donchian_is_not_wave_a": True,
+                "donchian_is_not_live_watch": True,
                 "strategy_evidence_ne_decision_evidence": True,
                 "no_auto_mutation": True,
             },
@@ -617,9 +664,10 @@ def replay(
             "Hunter: AGGRESSIVE_PULLBACK exists for TREND_UP; Wave A + router allow REVERSAL only.",
             "Bollinger-MR: Wave A allow-list RANGE+COMPRESSION; router RANGE=[] (not a core executor).",
             "Continuation: router TREND_UP; hist research shadow only — not Wave A live watch.",
+            "Donchian-breakout: not on router; I2 hist shadow TREND_UP; profile COMPRESSION is a separate fact.",
         ],
         "wave_a_status": {"hunter": "WATCH", "squeeze": "WATCH", "bollinger-mr": "WATCH"},
-        "research_shadow_status": {"continuation": "HIST_ONLY"},
+        "research_shadow_status": {"continuation": "HIST_ONLY", "donchian-breakout": "HIST_ONLY"},
         "laws": {
             "historical_take_is_not_keep": True,
             "historical_take_is_not_paper_take": True,
@@ -627,6 +675,8 @@ def replay(
             "no_auto_mutation": True,
             "continuation_is_not_wave_a": True,
             "continuation_is_not_live_watch": True,
+            "donchian_is_not_wave_a": True,
+            "donchian_is_not_live_watch": True,
         },
     }
 
@@ -642,6 +692,6 @@ def replay(
         "observations": observations if include_observations else [],
         "note": (
             "Stage 4 historical replay. Same observation_v0 as live_paper. "
-            "Continuation is research shadow only. TAKE-equivalent cannot silently become KEEP. Wave A stays WATCH."
+            "Continuation + Donchian are research shadow only. TAKE-eq ≠ KEEP. Wave A stays WATCH."
         ),
     }
