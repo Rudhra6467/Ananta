@@ -6,6 +6,7 @@ from typing import Any
 
 RESEARCH_COLLECTIONS = (
     "research_assets",
+    "research_asset_membership",
     "research_market_bars",
     "research_market_features",
     "research_market_context",
@@ -38,14 +39,20 @@ def _key(*parts: Any) -> str:
 
 
 async def ensure_research_indexes(db) -> None:
-    """Create v1 indexes; safe to run repeatedly at startup."""
+    """Create research indexes; safe to run repeatedly at startup."""
     await db.research_assets.create_index([('symbol', 1)], unique=True)
+    # Universe membership is point-in-time so historical top-N selection does not
+    # introduce survivorship bias. The same asset can enter/leave the universe.
+    await db.research_asset_membership.create_index(
+        [('as_of', 1), ('symbol', 1)], unique=True)
+    await db.research_asset_membership.create_index(
+        [('symbol', 1), ('valid_from', 1), ('valid_to', 1)])
     await db.research_market_bars.create_index(
         [('symbol', 1), ('timeframe', 1), ('timestamp', 1)], unique=True)
     await db.research_market_bars.create_index(
         [('timestamp', 1), ('symbol', 1), ('timeframe', 1)])
     await db.research_market_features.create_index(
-        [('symbol', 1), ('timeframe', 1), ('timestamp', 1)], unique=True)
+        [('symbol', 1), ('timeframe', 1), ('timestamp', 1), ('feature_version', 1)], unique=True)
     await db.research_market_features.create_index(
         [('feature_version', 1), ('timestamp', 1)])
     await db.research_market_context.create_index(
@@ -58,7 +65,6 @@ async def ensure_research_indexes(db) -> None:
         [('run_id', 1)], unique=True)
     await db.research_backtest_runs.create_index(
         [('strategy_id', 1), ('asset', 1), ('timeframe', 1), ('started_at', -1)])
-    # Every opportunity is recorded, including WAIT/SKIP, so abstention is auditable.
     await db.research_trade_observations.create_index(
         [('run_id', 1), ('decision_id', 1)], unique=True)
     await db.research_trade_observations.create_index(
@@ -97,6 +103,22 @@ def market_bar(*, symbol: str, timeframe: str, timestamp: datetime, o: float,
     }
 
 
+def asset_membership(*, symbol: str, as_of: datetime, rank: int,
+                     market_cap: float | None = None, universe: str = 'top10_crypto',
+                     source: str = 'unknown', methodology_version: str = 'membership-v1') -> dict[str, Any]:
+    """Create a point-in-time universe membership observation.
+
+    ``as_of`` is the ranking timestamp, not the future backtest period. This prevents
+    selecting today's winners and replaying them across history.
+    """
+    return {
+        'key': _key(universe, as_of.isoformat(), symbol.upper()),
+        'symbol': symbol.upper(), 'as_of': as_of, 'rank': int(rank),
+        'market_cap': market_cap, 'universe': universe,
+        'source': source, 'methodology_version': methodology_version,
+    }
+
+
 def decision_observation(*, decision_id: str, run_id: str, symbol: str,
                          timeframe: str, decision_timestamp: datetime,
                          decision: str, signal: str | None,
@@ -108,9 +130,8 @@ def decision_observation(*, decision_id: str, run_id: str, symbol: str,
     return {
         'decision_id': decision_id, 'run_id': run_id, 'symbol': symbol,
         'timeframe': timeframe, 'decision_timestamp': decision_timestamp,
-        'decision': decision,  # ENTER / EXIT / WAIT / SKIP
-        'signal': signal, 'strategy_id': strategy_id, 'config_hash': config_hash,
-        'feature_snapshot_id': feature_snapshot_id,
+        'decision': decision, 'signal': signal, 'strategy_id': strategy_id,
+        'config_hash': config_hash, 'feature_snapshot_id': feature_snapshot_id,
         'market_context_id': market_context_id, 'costs_bps': costs_bps,
         'evidence_score': evidence_score, 'reason_codes': reason_codes or [],
         'outcome_status': 'PENDING',
@@ -140,5 +161,5 @@ def trade_outcome(*, entry_price: float, exit_price: float,
 
 __all__ = [
     'RESEARCH_COLLECTIONS', 'METRIC_DEFINITIONS', 'ensure_research_indexes',
-    'market_bar', 'decision_observation', 'trade_outcome',
+    'market_bar', 'asset_membership', 'decision_observation', 'trade_outcome',
 ]
