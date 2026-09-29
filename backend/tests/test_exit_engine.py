@@ -74,6 +74,37 @@ def test_module_F_no_rearm_when_already_locked():
     assert _module_F_profit_protection(pos, last=105.0, prof=prof, settings=s) is None
 
 
+def test_module_F_does_not_rearm_after_locking_at_awkward_prices():
+    """Regression 2026-09-29: with non-round entries the 8-dp floor could round DOWN, so the
+    stored floor sat below the unrounded target and F re-fired TIGHTEN on every tick, which
+    (P3) blocked B/S/D/C/E. After one TIGHTEN is applied, F must go quiet at any entry price."""
+    s = RiskSettings()
+    prof = get_profile("hunter")
+    rearmed = 0
+    for i in range(2000):
+        entry = 100.0 + i * 0.0137123456789
+        pos = _pos(avg_cost=entry, peak_price=entry * 1.07)  # past +1R and the +5% arm
+        first = _module_F_profit_protection(pos, last=entry * 1.05, prof=prof, settings=s)
+        assert first is not None and first.action == ACT_TIGHTEN
+        pos.locked_profit_floor = first.new_floor
+        if _module_F_profit_protection(pos, last=entry * 1.05, prof=prof, settings=s) is not None:
+            rearmed += 1
+    assert rearmed == 0
+
+
+def test_lower_modules_run_after_floor_locked():
+    """Once the floor is locked, an EMA/trail/time exit must be able to win again."""
+    s = RiskSettings()
+    entry = 100.00000000449  # breakeven floor rounds DOWN at 8 dp (100.0 < entry)
+    pos = _pos(avg_cost=entry, peak_price=entry * 1.03, entry_timestamp=_ago(100))  # +1R, below the +5% arm
+    prof = get_profile("hunter")
+    first = _module_F_profit_protection(pos, last=entry * 1.02, prof=prof, settings=s)
+    pos.locked_profit_floor = first.new_floor
+    d = evaluate_exit_engine(pos, entry * 1.02, None, s)  # gave back from the peak, held past 72h
+    assert d.module != "F", "F must not keep re-tightening and masking the exits below it"
+    assert d.action == "EXIT_FULL" and d.module in ("C", "E")
+
+
 def test_module_F_breakeven_at_1R():
     """With a structural stop 3% below entry, R=3. Peak +3% => +1R => lock breakeven."""
     s = RiskSettings()
