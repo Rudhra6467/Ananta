@@ -189,6 +189,9 @@ def run_cell(db_path: str, coin: str, tf: str, cfg: dict, out_dir: str) -> dict[
             "fires_per_year": {k: round(v["trades"] / years, 2) for k, v in by_strat.items()},
             "by_era": {k: _era_stats([t for t in trades if t.get("strategy") == k]) for k in ("hunter", "squeeze")},
             "exit_modules": _count(t.get("exit_reason") for t in trades),
+            "trades": [{k: t.get(k) for k in ("strategy", "entry_ts", "exit_ts", "hold_hours", "pnl", "return_pct",
+                                               "mfe_pct", "mae_pct", "exit_reason", "exit_module", "regime_at_entry", "partial")}
+                       for t in trades],
             "error": r.get("error"),
         }
     res["seconds"] = round(time.time() - t0, 1)
