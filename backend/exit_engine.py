@@ -251,12 +251,16 @@ def _module_F_profit_protection(pos, last: float, prof: StrategyProfile, setting
     if not candidates:
         return None
     desired_floor, why = max(candidates, key=lambda x: x[0])
+    # Round BEFORE comparing. The stored floor is the rounded value; comparing it with the
+    # unrounded target re-fired TIGHTEN on every tick whenever rounding went down (about half
+    # of all entry prices), and TIGHTEN (P3) outranks B/S/D/C/E, silently disabling them.
+    desired_floor = round(desired_floor, 8)
     cur = getattr(pos, "locked_profit_floor", None)
     if cur is not None and cur >= desired_floor - 1e-12:
         return None  # already locked at/above target -> let lower modules manage
     return ExitSignal(3, "F", ACT_TIGHTEN, "PROFIT_PROTECT",
                       f"MFE {mfe_pct:.2f}% ({mfe_r:.2f}R) — lock {why}",
-                      confidence=1.0, new_floor=round(desired_floor, 8))
+                      confidence=1.0, new_floor=desired_floor)
 
 
 def _module_S_structure(pos, last: float, ind: dict, bars_4h, prof: StrategyProfile, age_h: float) -> ExitSignal | None:
