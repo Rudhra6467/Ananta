@@ -150,7 +150,7 @@ def run_cell(db_path: str, coin: str, tf: str, cfg: dict, out_dir: str) -> dict[
     if backend not in sys.path:
         sys.path.insert(0, backend)
     from lab import backtest, data_store
-    from trading_engine import _safe_settings
+    from models import RiskSettings
 
     b5 = load_5m(db_path, coin)
     series = {tf: resample(b5, tf)[0], "1d": resample(b5, "1d")[0]}
@@ -158,7 +158,8 @@ def run_cell(db_path: str, coin: str, tf: str, cfg: dict, out_dir: str) -> dict[
     data_store.load_candles = lambda symbol, timeframe, *a, **k: series.get(timeframe, [])  # memory only, never Mongo
 
     doc = dict(cfg["settings_doc"])
-    s = _safe_settings(doc)
+    fields = getattr(RiskSettings, "model_fields", {})
+    s = RiskSettings(**{k: v for k, v in doc.items() if k in fields and v is not None})
     exit_method = getattr(s, "exit_method_pref", None) or "native"
     bars = series[tf]
     if len(bars) < backtest.WARMUP_BARS + 5:
