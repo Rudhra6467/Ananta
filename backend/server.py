@@ -1778,14 +1778,17 @@ async def run_cycle():
     """Run one evaluation cycle synchronously and return full results.
     Useful for the 'Run Cycle Now' button on the dashboard."""
     results = await evaluate_all(db)
-    return {"ran_at": datetime.now(UTC).isoformat(), "results": results}
+    ran_at = datetime.now(UTC).isoformat()
+    from strategy_cycle_obs import wrap_cycle_run
+    return wrap_cycle_run(results, ran_at=ran_at)
 
 
 @api_router.post("/cycle/run/{symbol_base}", dependencies=[Depends(require_owner)])
 async def run_cycle_symbol(symbol_base: str):
     symbol = symbol_base if "/" in symbol_base else f"{symbol_base.upper()}/USD"
     r = await evaluate_symbol(db, symbol)
-    return r
+    from strategy_cycle_obs import wrap_cycle_run
+    return wrap_cycle_run([r], ran_at=datetime.now(UTC).isoformat(), symbol=symbol)
 
 
 @api_router.get("/news/current")
