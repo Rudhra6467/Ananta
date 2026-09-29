@@ -196,6 +196,39 @@ def cache_stats() -> dict:
     }
 
 
+# ---------------- Closed-bar discipline (2026-09-29) ----------------
+# Exchanges return the still-forming candle as the last bar. Deciding on it means a
+# setup can appear at :30 and vanish by the close, and `last_bar_open` names a bar
+# that has not finished. Every OHLCV read below returns CLOSED bars only, and a cached
+# list is discarded as soon as a new bar has closed since it was fetched (otherwise a
+# list fetched at 14:58 would serve a "closed" 14:00 bar missing its last 2 minutes).
+# Set CLOSED_BARS_ONLY = False to restore the old behaviour.
+CLOSED_BARS_ONLY = True
+_TF_SECONDS = {"1h": 3600, "4h": 14400, "1d": 86400}
+
+
+def closed_bars(bars: list[list[float]], timeframe: str, now: float | None = None) -> list[list[float]]:
+    """Drop trailing bars whose period has not ended yet. bars[i][0] = open time in ms."""
+    if not CLOSED_BARS_ONLY or not bars:
+        return bars
+    tf_ms = _TF_SECONDS[timeframe] * 1000
+    now_ms = (now if now is not None else time.time()) * 1000.0
+    end = len(bars)
+    while end > 0 and float(bars[end - 1][0]) + tf_ms > now_ms:
+        end -= 1
+    return bars[:end]
+
+
+def _cache_fresh(fetched_at: float, now: float, ttl: float, timeframe: str) -> bool:
+    """Fresh = within TTL AND no bar of this timeframe has closed since the fetch."""
+    if now - fetched_at >= ttl:
+        return False
+    if not CLOSED_BARS_ONLY:
+        return True
+    tf = _TF_SECONDS[timeframe]
+    return int(fetched_at // tf) == int(now // tf)
+
+
 # ---------------- 1h OHLCV fetch (for adaptive sizing classifier) ----------------
 def _fetch_ohlcv_1h_sync(symbol: str, limit: int = 750) -> list[list[float]]:
     """Try Kraken first, then Coinbase. Returns CCXT-format OHLCV
@@ -230,12 +263,12 @@ async def fetch_ohlcv_1h(symbol: str, limit: int = 750) -> list[list[float]]:
     key = f"{symbol}@{limit}"
     cached = _OHLCV_CACHE.get(key)
     now = time.time()
-    if cached and now - cached[0] < _OHLCV_TTL:
-        return cached[1]
+    if cached and _cache_fresh(cached[0], now, _OHLCV_TTL, "1h"):
+        return closed_bars(cached[1], "1h", now)
     bars = await asyncio.to_thread(_fetch_ohlcv_1h_sync, symbol, limit)
     if bars:
         _OHLCV_CACHE[key] = (now, bars)
-    return bars
+    return closed_bars(bars, "1h", now)
 
 
 def _fetch_ohlcv_tf_sync(symbol: str, timeframe: str, limit: int) -> list[list[float]]:
@@ -264,12 +297,12 @@ async def fetch_ohlcv_4h(symbol: str, limit: int = 300) -> list[list[float]]:
     key = f"4h@{symbol}@{limit}"
     cached = _OHLCV_CACHE.get(key)
     now = time.time()
-    if cached and now - cached[0] < _OHLCV_TTL * 2:  # 4h candles change slower; cache longer
-        return cached[1]
+    if cached and _cache_fresh(cached[0], now, _OHLCV_TTL * 2, "4h"):  # 4h candles change slower; cache longer
+        return closed_bars(cached[1], "4h", now)
     bars = await asyncio.to_thread(_fetch_ohlcv_tf_sync, symbol, "4h", limit)
     if bars:
         _OHLCV_CACHE[key] = (now, bars)
-    return bars
+    return closed_bars(bars, "4h", now)
 
 
 async def fetch_ohlcv_1d(symbol: str, limit: int = 540) -> list[list[float]]:
@@ -278,9 +311,9 @@ async def fetch_ohlcv_1d(symbol: str, limit: int = 540) -> list[list[float]]:
     key = f"1d@{symbol}@{limit}"
     cached = _OHLCV_CACHE.get(key)
     now = time.time()
-    if cached and now - cached[0] < _OHLCV_TTL * 12:  # daily structure barely moves intraday
-        return cached[1]
+    if cached and _cache_fresh(cached[0], now, _OHLCV_TTL * 12, "1d"):  # daily structure barely moves intraday
+        return closed_bars(cached[1], "1d", now)
     bars = await asyncio.to_thread(_fetch_ohlcv_tf_sync, symbol, "1d", limit)
     if bars:
         _OHLCV_CACHE[key] = (now, bars)
-    return bars
+    return closed_bars(bars, "1d", now)
