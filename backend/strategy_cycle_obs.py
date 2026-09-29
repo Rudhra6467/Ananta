@@ -1,9 +1,22 @@
 """Agent contract v0.1 — per-strategy cycle observations (additive, pure)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from typing import Any
 
 
 WAVE_A_KEYS = ("hunter", "squeeze", "bollinger-mr")
+CONTRACT = "ananta.shared.v0.1"
+REGIME_MAP = {
+    "UP": "UP",
+    "TREND_UP": "UP",
+    "DOWN": "DOWN",
+    "TREND_DOWN": "DOWN",
+    "NORMAL": "NORMAL",
+    "RANGE": "NORMAL",
+    "COMPRESSION": "NORMAL",
+    "NEUTRAL": "NEUTRAL",
+}
 
 
 def data_gap_observations(*, reason: str, regime=None) -> list[dict]:
@@ -124,7 +137,6 @@ def build_wave_a_observations(
                 return False
         return True
 
-    # --- Hunter (evaluate then filter — already the engine path) ---
     h_en = not strategy_profile_disabled(settings, "hunter")
     h_ran = (not hard_killed) and bars_ok and getattr(settings, "level_entry_enabled", True)
     h_setup = bool(primary.triggered) if primary is not None else bool(hunter_triggered)
@@ -149,7 +161,6 @@ def build_wave_a_observations(
     else:
         h_skip = None
 
-    # --- Squeeze: use evaluate_squeeze, not the shadow VCP classifier ---
     sq_en = not strategy_profile_disabled(settings, "squeeze")
     sq_ran = (not hard_killed) and bars_ok and sq_en
     sq_setup = _squeeze_triggered(squeeze_eval) if sq_ran else None
@@ -174,7 +185,6 @@ def build_wave_a_observations(
     else:
         sq_skip = None
 
-    # --- Bollinger-MR: declarative path (evaluate then filter) ---
     bb_en = not strategy_profile_disabled(settings, "bollinger-mr")
     bb_ran = (not hard_killed) and bars_ok and bb_en
     bb_setup = _bb_entry(bollinger_eval) if bb_ran else None
@@ -261,3 +271,133 @@ def build_wave_a_observations(
             "rationale": _bb_reason(bollinger_eval) or "declarative bollinger-mr",
         },
     ]
+
+
+def map_regime(raw: Any) -> str:
+    if raw is None:
+        return "UNKNOWN"
+    if isinstance(raw, dict):
+        raw = raw.get("asset") or raw.get("market") or raw.get("regime")
+    key = str(raw or "").strip().upper().replace(" ", "_")
+    return REGIME_MAP.get(key, "UNKNOWN")
+
+
+def map_setup(v: Any) -> str:
+    if v is True:
+        return "true"
+    if v is False:
+        return "false"
+    return "unknown"
+
+
+def map_row(obs: dict) -> dict:
+    rec = str(obs.get("decision") or "").upper()
+    if rec not in ("TAKE", "WAIT", "SKIP", "EXIT", "REDUCE", "HOLD", "UNKNOWN"):
+        rec = "UNKNOWN"
+    ran = bool(obs.get("ran"))
+    setup = map_setup(obs.get("setup_detected"))
+    skip = obs.get("skip_reason")
+    if skip is not None:
+        skip = str(skip).strip() or None
+    if rec in ("WAIT", "SKIP") and not skip:
+        skip = "unspecified"
+    if rec in ("TAKE", "EXIT", "REDUCE"):
+        skip = None
+    if not ran:
+        rec = "UNKNOWN"
+        setup = "unknown"
+        skip = skip or "did_not_run"
+    return {
+        "strategy_id": str(obs.get("strategy") or obs.get("strategy_id") or "unknown"),
+        "ran": ran,
+        "setup_detected": setup,
+        "recommendation": rec,
+        "skip_reason": skip,
+        "regime": map_regime(obs.get("regime")),
+    }
+
+
+def _rank_rec(rec: str) -> int:
+    order = {"TAKE": 5, "EXIT": 4, "REDUCE": 4, "SKIP": 3, "HOLD": 2, "WAIT": 1, "UNKNOWN": 0}
+    return order.get(rec, 0)
+
+
+def aggregate_wave_a(results: list[dict]) -> list[dict]:
+    buckets = {k: [] for k in WAVE_A_KEYS}
+    for item in results or []:
+        rows = item.get("strategy_observations") or []
+        for row in rows:
+            sid = str(row.get("strategy") or "")
+            if sid in buckets:
+                buckets[sid].append(map_row(row))
+    out = []
+    for sid in WAVE_A_KEYS:
+        rows = buckets[sid]
+        if not rows:
+            out.append({
+                "strategy_id": sid,
+                "ran": False,
+                "setup_detected": "unknown",
+                "recommendation": "UNKNOWN",
+                "skip_reason": "silent_strategy",
+                "regime": "UNKNOWN",
+            })
+            continue
+        ran = any(r["ran"] for r in rows)
+        setups = {r["setup_detected"] for r in rows}
+        if "true" in setups:
+            setup = "true"
+        elif setups == {"false"}:
+            setup = "false"
+        else:
+            setup = "unknown"
+        rec = max((r["recommendation"] for r in rows), key=_rank_rec)
+        skip = None
+        if rec not in ("TAKE", "EXIT", "REDUCE"):
+            skip = next((r["skip_reason"] for r in rows if r.get("skip_reason")), "unspecified")
+        regimes = {r["regime"] for r in rows}
+        regime = regimes.pop() if len(regimes) == 1 else "UNKNOWN"
+        if not ran:
+            rec, setup, skip, regime = "UNKNOWN", "unknown", skip or "did_not_run", "UNKNOWN"
+        out.append({
+            "strategy_id": sid,
+            "ran": ran,
+            "setup_detected": setup,
+            "recommendation": rec,
+            "skip_reason": skip,
+            "regime": regime,
+        })
+    return out
+
+
+def wrap_cycle_run(results: list[dict], *, ran_at: str, symbol: str | None = None, profile: str = "SAFE") -> dict:
+    """Additive envelope. Existing `results` stay. No KEEP. No paper TAKE."""
+    now = ran_at or datetime.now(timezone.utc).isoformat()
+    cid = "cyc_" + now.replace("-", "").replace(":", "").replace(".", "")[:20]
+    symbols = []
+    for item in results or []:
+        obs = item.get("strategy_observations") or []
+        symbols.append({
+            "symbol": item.get("symbol"),
+            "strategies": [map_row(r) for r in obs] if obs else [
+                map_row({"strategy": k, "ran": False, "setup_detected": None,
+                         "decision": "UNKNOWN", "skip_reason": "missing_observations"})
+                for k in WAVE_A_KEYS
+            ],
+        })
+    return {
+        "contract": CONTRACT,
+        "cycle_id": cid,
+        "as_of_time": now,
+        "event_time": now,
+        "universe": "CRYPTO_LAB_10",
+        "profile": profile if profile in ("SAFE", "MODERATE", "AGGRESSIVE") else "SAFE",
+        "strategies": aggregate_wave_a(results),
+        "symbols": symbols,
+        "ran_at": now,
+        "results": results,
+        "bar_tf": (results or [{}])[0].get("bar_tf") if results else None,
+        "last_bar_open": (results or [{}])[0].get("last_bar_open") if results else None,
+        "keep": False,
+        "paper_take": False,
+    }

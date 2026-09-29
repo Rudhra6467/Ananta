@@ -1637,6 +1637,25 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
     except Exception:
         _signals = {}
 
+
+    def _p1_last_bar_open(bars):
+        if not bars:
+            return None
+        last = bars[-1]
+        ts = None
+        if isinstance(last, dict):
+            ts = last.get('timestamp') or last.get('open_time') or last.get('time') or last.get('openTime')
+        else:
+            ts = getattr(last, 'timestamp', None) or getattr(last, 'open_time', None) or getattr(last, 'time', None)
+            if ts is None and hasattr(last, '__getitem__'):
+                try:
+                    ts = last[0]
+                except Exception:
+                    ts = None
+        if ts is None:
+            return None
+        return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
+
     return {
         "symbol": symbol,
         "snapshot": snapshot.model_dump(),
@@ -1654,6 +1673,8 @@ async def evaluate_symbol(db: AsyncIOMotorDatabase, symbol: str) -> dict:
         },
         "strategy_signals": _signals,
         "strategy_observations": strategy_observations,
+        "bar_tf": "1h" if bars_1h else "unknown",
+        "last_bar_open": _p1_last_bar_open(bars_1h),
     }
 
 
