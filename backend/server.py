@@ -831,13 +831,15 @@ async def market_candles(
     timeframe: str = Query("1h"),
     limit: int = Query(48, le=750),
 ):
-    """OHLCV candles for charting. Supports 1h / 4h / 1d via market_data fetchers."""
-    from market_data import fetch_ohlcv_1d, fetch_ohlcv_1h, fetch_ohlcv_4h
-    tf = timeframe if timeframe in ("1h", "4h", "1d") else "1h"
+    """OHLCV candles, closed bars only. Supports 5m / 15m / 30m / 1h / 4h / 1d via market_data fetchers."""
+    from market_data import INTRADAY_TFS, fetch_ohlcv_1d, fetch_ohlcv_1h, fetch_ohlcv_4h, fetch_ohlcv_intraday
+    tf = timeframe if timeframe in ("1h", "4h", "1d", *INTRADAY_TFS) else "1h"
     if tf == "4h":
         bars = await fetch_ohlcv_4h(symbol, limit=max(limit, 24))
     elif tf == "1d":
         bars = await fetch_ohlcv_1d(symbol, limit=max(limit, 24))
+    elif tf in INTRADAY_TFS:
+        bars = await fetch_ohlcv_intraday(symbol, tf, limit=min(max(limit + 1, 24), 720))
     else:
         bars = await fetch_ohlcv_1h(symbol, limit=max(limit, 24))
     bars = bars[-limit:] if bars else []
