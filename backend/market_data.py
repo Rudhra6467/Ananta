@@ -204,7 +204,7 @@ def cache_stats() -> dict:
 # list fetched at 14:58 would serve a "closed" 14:00 bar missing its last 2 minutes).
 # Set CLOSED_BARS_ONLY = False to restore the old behaviour.
 CLOSED_BARS_ONLY = True
-_TF_SECONDS = {"1h": 3600, "4h": 14400, "1d": 86400}
+_TF_SECONDS = {"5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
 
 
 def closed_bars(bars: list[list[float]], timeframe: str, now: float | None = None) -> list[list[float]]:
@@ -303,6 +303,29 @@ async def fetch_ohlcv_4h(symbol: str, limit: int = 300) -> list[list[float]]:
     if bars:
         _OHLCV_CACHE[key] = (now, bars)
     return closed_bars(bars, "4h", now)
+
+
+INTRADAY_TFS = ("5m", "15m", "30m")
+
+
+async def fetch_ohlcv_intraday(symbol: str, timeframe: str, limit: int = 300) -> list[list[float]]:
+    """5m / 15m / 30m OHLCV, closed bars only (2026-09-30, for the Agent's Explorer rulebook).
+
+    Read-only and credit-free like the other fetchers. The cache is dropped as soon as a
+    new bar of this timeframe closes, so a scan one minute after a close sees that bar.
+    """
+    if timeframe not in INTRADAY_TFS:
+        raise ValueError(f"intraday timeframe must be one of {INTRADAY_TFS}, got {timeframe!r}")
+    key = f"{timeframe}@{symbol}@{limit}"
+    cached = _OHLCV_CACHE.get(key)
+    now = time.time()
+    ttl = min(_OHLCV_TTL, float(_TF_SECONDS[timeframe]))
+    if cached and _cache_fresh(cached[0], now, ttl, timeframe):
+        return closed_bars(cached[1], timeframe, now)
+    bars = await asyncio.to_thread(_fetch_ohlcv_tf_sync, symbol, timeframe, limit)
+    if bars:
+        _OHLCV_CACHE[key] = (now, bars)
+    return closed_bars(bars, timeframe, now)
 
 
 async def fetch_ohlcv_1d(symbol: str, limit: int = 540) -> list[list[float]]:

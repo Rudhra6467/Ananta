@@ -47,6 +47,51 @@ def test_4h_and_1d_use_their_own_period():
     assert len(md.closed_bars(b1d, "1d", T0 + 24 * H + 5 * H)) == 1
 
 
+def test_intraday_timeframes_use_their_own_period():
+    b15 = _bars(4, tf=900)  # 12:00 12:15 12:30 12:45
+    assert len(md.closed_bars(b15, "15m", T0 + 3 * 900 + 60)) == 3  # 12:46 -> 12:45 still forming
+    assert len(md.closed_bars(b15, "15m", T0 + 4 * 900)) == 4
+    b30 = _bars(3, tf=1800)
+    assert len(md.closed_bars(b30, "30m", T0 + 2 * 1800 + 60)) == 2
+    b5 = _bars(3, tf=300)
+    assert len(md.closed_bars(b5, "5m", T0 + 3 * 300 - 1)) == 2
+
+
+def test_fetch_intraday_refetches_after_each_15m_close_and_rejects_other_tfs():
+    calls = []
+    real_time = md.time.time
+    clock = {"now": T0 + 900 - 30}  # 12:14:30
+
+    def fake_fetch(symbol, timeframe, limit):
+        calls.append((timeframe, clock["now"]))
+        n = int((clock["now"] - T0) // 900) + 1  # includes the forming bar
+        return _bars(n, tf=900)
+
+    md._OHLCV_CACHE.clear()
+    orig = md._fetch_ohlcv_tf_sync
+    md._fetch_ohlcv_tf_sync = fake_fetch
+    md.time.time = lambda: clock["now"]
+    try:
+        a = asyncio.run(md.fetch_ohlcv_intraday("BTC/USD", "15m", limit=10))
+        assert a == []  # only the forming 12:00 bar exists yet
+        clock["now"] = T0 + 900 + 60  # 12:16: the 12:00 bar closed since the fetch
+        b = asyncio.run(md.fetch_ohlcv_intraday("BTC/USD", "15m", limit=10))
+        assert len(calls) == 2 and b[-1][0] == T0 * 1000
+        clock["now"] = T0 + 900 + 120  # same bar, inside the TTL: served from cache
+        asyncio.run(md.fetch_ohlcv_intraday("BTC/USD", "15m", limit=10))
+        assert len(calls) == 2
+        try:
+            asyncio.run(md.fetch_ohlcv_intraday("BTC/USD", "2h", limit=10))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unsupported timeframe must be refused")
+    finally:
+        md._fetch_ohlcv_tf_sync = orig
+        md.time.time = real_time
+        md._OHLCV_CACHE.clear()
+
+
 def test_cache_expires_when_a_bar_closes():
     fetched = T0 + 2 * H - 120  # 13:58
     assert md._cache_fresh(fetched, fetched + 60, 300, "1h") is True       # 13:59, same bar
