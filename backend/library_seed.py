@@ -9,6 +9,11 @@ others are catalog entries that get wired to the engine incrementally (Option A)
 
 Seeded results are realistic placeholders so the library UX, filtering and leaderboard
 work immediately; a real Research-Lab backtest can refresh them on demand.
+
+Oct 15, 2026: the seeded results were never backtested, so readers no longer see them as results. They stay in the database
+untouched (Madhav's rule: preserve, never silently overwrite); present() moves them, and the grade, health, confidence,
+rating and summary derived from them, under "placeholder" and shows PLACEHOLDER_LABEL in their place until a real backtest
+sets backtested=True.
 """
 from __future__ import annotations
 
@@ -78,6 +83,35 @@ WIRED_ENGINE_KEYS = {
 REFERENCE_ONLY = {
     "pairs-trading": "Analysis only — requires 2-asset engine",
 }
+
+PLACEHOLDER_LABEL = "Unmeasured — placeholder, never backtested"
+REGRADE_LABEL = "Backtested; the earlier AI assessment was made on placeholder numbers. Re-grade to assess the real results."
+DERIVED = ("historical_results", "ai_summary", "ai_health_score", "ai_grade", "ai_confidence", "rating")
+
+
+def is_placeholder(doc: dict) -> bool:
+    """True until a real Research-Lab backtest has replaced the results (POST /library/{id}/backtest sets backtested)."""
+    return not (doc or {}).get("backtested")
+
+
+def present(doc: dict) -> dict:
+    """A library entry as every reader sees it. Unmeasured: the seeded numbers and everything derived from them move under
+    "placeholder" (kept, labelled) and the label takes their place. Measured: unchanged."""
+    if not doc:
+        return doc
+    if not is_placeholder(doc):
+        if not doc.get("ai_needs_regrade"):
+            return doc
+        d = dict(doc)                                   # measured results, but the AI assessment was made on the placeholders
+        d["placeholder"] = {k: doc.get(k) for k in DERIVED if k != "historical_results"}
+        d.update(ai_summary=REGRADE_LABEL, ai_health_score=None, ai_grade=None, ai_confidence=None, rating=None,
+                 results_status="MEASURED", results_label=None)
+        return d
+    d = dict(doc)
+    d["placeholder"] = {k: doc.get(k) for k in DERIVED}
+    d.update(historical_results=None, ai_summary=PLACEHOLDER_LABEL, ai_health_score=None, ai_grade=None, ai_confidence=None,
+             rating=None, results_status="UNMEASURED", results_label=PLACEHOLDER_LABEL)
+    return d
 
 
 def library() -> list[dict]:

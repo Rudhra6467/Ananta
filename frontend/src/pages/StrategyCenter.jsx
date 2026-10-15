@@ -307,7 +307,7 @@ function SearchScreen({ lib, query, setQuery, activeCount, onOpenFilters, onOpen
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-atlas-panelHover/40 border border-atlas-border hover:border-atlas-cyan/40 transition-colors text-left">
                         <span className="font-heading text-sm text-atlas-text flex-1 truncate">{s.name}</span>
                         <span className="font-mono text-[9px] text-atlas-textTertiary truncate hidden sm:inline">{s.style}</span>
-                        <span className={`font-mono text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>{s.ai_grade}</span>
+                        <span className={`font-mono text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>{s.ai_grade || "unmeasured"}</span>
                     </button>
                 ))}
             </div>
@@ -932,7 +932,7 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>Grade {s.ai_grade}</span>
+                        <span className={`font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${GRADE_CLS[s.ai_grade] || GRADE_CLS.C}`}>{s.ai_grade ? `Grade ${s.ai_grade}` : "Unmeasured"}</span>
                         {s.imported && s.origin !== "clone" && <span data-testid="imported-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Upload className="w-3 h-3" /> Imported</span>}
                         {s.origin === "clone" && <span data-testid="clone-badge" className="font-mono text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border border-atlas-cyan/40 bg-atlas-cyan/10 text-atlas-cyan flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</span>}
                         <button data-testid="catalog-favorite" onClick={() => api.libraryFavorite(id).then(load)} className="text-atlas-textTertiary hover:text-atlas-cyan" title="Favorite">
@@ -1001,15 +1001,20 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                 </div>
                 <p className="font-mono text-xs text-atlas-text leading-relaxed">{s.ai_summary}</p>
                 <div className="flex items-center gap-4 mt-3 font-mono text-[10px] text-atlas-textTertiary">
-                    <span>Health <b className="text-atlas-text">{s.ai_health_score}/100</b></span>
-                    <span>Confidence <b className="text-atlas-text">{s.ai_confidence}%</b></span>
+                    <span>Health <b className="text-atlas-text">{s.ai_health_score != null ? `${s.ai_health_score}/100` : "—"}</b></span>
+                    <span>Confidence <b className="text-atlas-text">{s.ai_confidence != null ? `${s.ai_confidence}%` : "—"}</b></span>
                     <span>Recommended <b className="text-atlas-text">{s.recommended_market}</b></span>
                 </div>
             </div>
 
             {/* performance */}
             <div className="panel p-5">
-                <div className="label-tag mb-3">BACKTEST PERFORMANCE <span className="text-atlas-textTertiary normal-case">(seeded — run a real backtest to validate)</span></div>
+                <div className="label-tag mb-3">BACKTEST PERFORMANCE</div>
+                {s.results_status === "UNMEASURED" ? (
+                    <p data-testid="catalog-unmeasured" className="font-mono text-xs text-atlas-textSecondary">
+                        {s.results_label || "Unmeasured — placeholder, never backtested"}. Run a real backtest to measure it.
+                    </p>
+                ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
                     {[["ROI", `${r.roi}%`], ["Win Rate", `${r.win_rate}%`], ["Profit Factor", r.profit_factor], ["Sharpe", r.sharpe],
                       ["Sortino", r.sortino], ["Max Drawdown", `${r.max_drawdown}%`], ["Avg Trade", `${r.avg_trade}%`], ["Trades", r.trade_count]].map(([k, v]) => (
@@ -1019,6 +1024,7 @@ function CatalogDetail({ id, isOwner, onOpenInternal, onBack }) {
                         </div>
                     ))}
                 </div>
+                )}
             </div>
 
             {/* rules */}

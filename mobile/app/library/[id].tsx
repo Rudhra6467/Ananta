@@ -125,7 +125,7 @@ export default function LibraryDetail() {
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <View style={[styles.grade, { borderColor: GRADE_COLOR[s.ai_grade] || colors.amber }]}>
-              <Text style={[styles.gradeTxt, { color: GRADE_COLOR[s.ai_grade] || colors.amber }]}>Grade {s.ai_grade}</Text>
+              <Text style={[styles.gradeTxt, { color: GRADE_COLOR[s.ai_grade] || colors.amber }]}>{s.ai_grade ? `Grade ${s.ai_grade}` : "Unmeasured"}</Text>
             </View>
             <Pressable testID="catalog-favorite" onPress={() => api.libraryFavorite(id as string).then(load)} hitSlop={8}>
               <Ionicons name={s.favorite ? "heart" : "heart-outline"} size={22} color={s.favorite ? colors.teal : colors.textMuted} />
@@ -199,18 +199,17 @@ export default function LibraryDetail() {
         </View>
         <Text style={[type.body, { marginTop: spacing.sm, lineHeight: 20 }]}>{s.ai_summary}</Text>
         <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm }}>
-          <Text style={type.small}>Health <Text style={{ color: colors.text, fontWeight: "800" }}>{s.ai_health_score}/100</Text></Text>
-          <Text style={type.small}>Confidence <Text style={{ color: colors.text, fontWeight: "800" }}>{s.ai_confidence}%</Text></Text>
+          <Text style={type.small}>Health <Text style={{ color: colors.text, fontWeight: "800" }}>{s.ai_health_score != null ? `${s.ai_health_score}/100` : "—"}</Text></Text>
+          <Text style={type.small}>Confidence <Text style={{ color: colors.text, fontWeight: "800" }}>{s.ai_confidence != null ? `${s.ai_confidence}%` : "—"}</Text></Text>
         </View>
       </Card>
 
       <Card style={{ marginBottom: spacing.md }}>
         <SectionLabel>BACKTEST PERFORMANCE</SectionLabel>
         {(r.roi === undefined || r.roi === null) ? (
-          <Text style={[type.small, { marginTop: spacing.sm }]} testID="no-backtest">Not yet validated. Run a backtest or use Test in Lab to generate performance for this strategy.</Text>
+          <Text style={[type.small, { marginTop: spacing.sm }]} testID="no-backtest">{s.results_label || "Unmeasured — placeholder, never backtested"}. Run a backtest or use Test in Lab to measure it.</Text>
         ) : (
           <>
-            <Text style={[type.small, { marginBottom: spacing.sm }]}>Seeded — run a real backtest to validate.</Text>
             <View style={styles.perfGrid}>
               {[["ROI", `${r.roi}%`], ["Win Rate", `${r.win_rate}%`], ["Profit Factor", r.profit_factor], ["Sharpe", r.sharpe],
                 ["Sortino", r.sortino], ["Max DD", `${r.max_drawdown}%`], ["Avg Trade", `${r.avg_trade}%`], ["Trades", r.trade_count]].map(([k, v]) => (

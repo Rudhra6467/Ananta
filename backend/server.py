@@ -3285,11 +3285,14 @@ async def analytics_leaderboard(sort: str = Query("health"), source: str = Query
     the real live metrics for the internal engine strategies. `sort` picks the metric;
     `source` = all | live | library.
     """
+    from library_seed import present  # noqa: PLC0415
     live = await _compute_strategy_metrics()
-    lib = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+    lib = [present(d) for d in await db.strategy_library.find({}, {"_id": 0}).to_list(500)]
 
     rows: list[dict] = []
     for s in lib:
+        # Oct 15, 2026: a never-backtested entry's seeded numbers are placeholders; present() has replaced them with None and a
+        # label, so nothing invented is ranked or shown as a result (live metrics of the internal strategies are real).
         hist = s.get("historical_results") or {}
         internal = bool(s.get("internal"))
         lm = live.get(s.get("engine_key")) if internal else None
@@ -3297,19 +3300,21 @@ async def analytics_leaderboard(sort: str = Query("health"), source: str = Query
             "key": s["id"], "name": s["name"], "source": s.get("source"),
             "internal": internal, "style": s.get("style"),
             "status": (lm or {}).get("status") if lm else "CATALOG",
-            "roi": (lm or {}).get("roi", hist.get("roi", 0)),
-            "win_rate": (lm or {}).get("win_rate", hist.get("win_rate", 0)),
-            "net_pnl": (lm or {}).get("total_pnl", 0) if lm else hist.get("roi", 0),
-            "trades": (lm or {}).get("trades", hist.get("trade_count", 0)),
-            "health": (lm or {}).get("health", s.get("ai_health_score", 0)),
-            "ai_health_score": s.get("ai_health_score", 0),
+            "roi": (lm or {}).get("roi", hist.get("roi")),
+            "win_rate": (lm or {}).get("win_rate", hist.get("win_rate")),
+            "net_pnl": (lm or {}).get("total_pnl", 0) if lm else hist.get("roi"),
+            "trades": (lm or {}).get("trades", hist.get("trade_count")),
+            "health": (lm or {}).get("health", s.get("ai_health_score")),
+            "ai_health_score": s.get("ai_health_score"),
             "ai_grade": s.get("ai_grade"),
-            "profit_factor": hist.get("profit_factor", 0),
-            "sharpe": hist.get("sharpe", 0),
-            "sortino": hist.get("sortino", 0),
-            "max_drawdown": hist.get("max_drawdown", 0),
-            "avg_trade": hist.get("avg_trade", 0),
-            "rating": s.get("rating", 0),
+            "profit_factor": hist.get("profit_factor"),
+            "sharpe": hist.get("sharpe"),
+            "sortino": hist.get("sortino"),
+            "max_drawdown": hist.get("max_drawdown"),
+            "avg_trade": hist.get("avg_trade"),
+            "rating": s.get("rating"),
+            "results_status": s.get("results_status", "MEASURED"),
+            "results_label": s.get("results_label"),
             "active_config_id": (lm or {}).get("active_config_id") if lm else None,
         }
         rows.append(row)
@@ -3322,7 +3327,10 @@ async def analytics_leaderboard(sort: str = Query("health"), source: str = Query
     ascending = {"max_drawdown"}
     key = sort if sort in {"net_pnl", "roi", "win_rate", "health", "ai_health_score", "sharpe",
                            "sortino", "profit_factor", "max_drawdown", "avg_trade", "trades", "rating"} else "health"
-    rows.sort(key=lambda r: r.get(key, 0) or 0, reverse=key not in ascending)
+    def _rank_key(r):                                   # unmeasured (None) always ranks last, whichever way the metric sorts
+        v = r.get(key)
+        return (v is None, (v or 0) if key in ascending else -(v or 0))
+    rows.sort(key=_rank_key)
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"leaderboard": rows, "count": len(rows), "sort": key, "source": source,
@@ -3401,7 +3409,8 @@ async def library_seed_endpoint(force: bool = Query(False)):
 @api_router.get("/library/facets")
 async def library_facets():
     """Available filter options for the Strategy Center filter drawer."""
-    docs = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+    from library_seed import present  # noqa: PLC0415
+    docs = [present(d) for d in await db.strategy_library.find({}, {"_id": 0}).to_list(500)]   # no grade facet from placeholders
     regimes, styles, mtypes, tfs, risks, grades, sources = (set() for _ in range(7))
     for d in docs:
         regimes.update(d.get("market_regimes") or [])
@@ -3427,8 +3436,13 @@ async def library_list(
     sort: str = Query("health"), q: str | None = Query(None),
 ):
     """List library strategies with multi-select filters + quick chips + sort.
-    Comma-separated values are OR'd within a field; fields are AND'd together."""
-    docs = await db.strategy_library.find({}, {"_id": 0}).to_list(500)
+    Comma-separated values are OR'd within a field; fields are AND'd together.
+    Oct 15, 2026: never-backtested entries come out labelled (library_seed.present) and sort after every measured one."""
+    from library_seed import present  # noqa: PLC0415
+    docs = [present(d) for d in await db.strategy_library.find({}, {"_id": 0}).to_list(500)]
+
+    def _n(x):                                          # an unmeasured value sorts below every measured one
+        return x if isinstance(x, (int, float)) else float("-inf")
 
     def _multi(val, field, list_field=False):
         nonlocal docs
@@ -3457,19 +3471,19 @@ async def library_list(
 
     # quick chips
     if chip == "top_rated":
-        docs.sort(key=lambda d: (d.get("rating", 0), d.get("ai_health_score", 0)), reverse=True)
+        docs.sort(key=lambda d: (_n(d.get("rating")), _n(d.get("ai_health_score"))), reverse=True)
     elif chip == "top_internal":
         docs = [d for d in docs if d.get("internal")]
-        docs.sort(key=lambda d: d.get("ai_health_score", 0), reverse=True)
+        docs.sort(key=lambda d: _n(d.get("ai_health_score")), reverse=True)
     elif chip == "healthiest":
-        docs.sort(key=lambda d: d.get("ai_health_score", 0), reverse=True)
+        docs.sort(key=lambda d: _n(d.get("ai_health_score")), reverse=True)
     elif chip == "trending":
-        docs.sort(key=lambda d: (d.get("historical_results") or {}).get("roi", 0), reverse=True)
+        docs.sort(key=lambda d: _n((d.get("historical_results") or {}).get("roi")), reverse=True)
     else:
-        skey = {"health": lambda d: d.get("ai_health_score", 0),
-                "rating": lambda d: d.get("rating", 0),
-                "roi": lambda d: (d.get("historical_results") or {}).get("roi", 0),
-                "win_rate": lambda d: (d.get("historical_results") or {}).get("win_rate", 0)}.get(sort)
+        skey = {"health": lambda d: _n(d.get("ai_health_score")),
+                "rating": lambda d: _n(d.get("rating")),
+                "roi": lambda d: _n((d.get("historical_results") or {}).get("roi")),
+                "win_rate": lambda d: _n((d.get("historical_results") or {}).get("win_rate"))}.get(sort)
         if skey:
             docs.sort(key=skey, reverse=True)
 
@@ -3801,6 +3815,7 @@ async def library_backtest(lib_id: str, symbol: str = "BTC/USD", days: int = 30,
                                     "max_drawdown", "avg_trade", "trade_count")}
     await db.strategy_library.update_one({"id": lib_id}, {"$set": {
         "historical_results": hist, "backtested": True,
+        "ai_needs_regrade": True,       # Oct 15, 2026: the stored AI assessment was made on the placeholder numbers
         "backtest_meta": {"symbol": symbol, "days": days, "exchange": exchange, "bars": metrics["bars"],
                           "at": _strat_now_iso()},
         "updated_at": _strat_now_iso()}})
@@ -3810,10 +3825,11 @@ async def library_backtest(lib_id: str, symbol: str = "BTC/USD", days: int = 30,
 
 @api_router.get("/library/{strategy_id}")
 async def library_get(strategy_id: str):
+    from library_seed import present  # noqa: PLC0415
     doc = await db.strategy_library.find_one({"id": strategy_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="strategy not found")
-    return doc
+    return present(doc)
 
 
 @api_router.post("/library/{strategy_id}/favorite", dependencies=[Depends(require_owner)])
@@ -3987,6 +4003,7 @@ async def library_ai_grade(strategy_id: str):
     await db.strategy_library.update_one({"id": strategy_id}, {"$set": {
         "ai_summary": grade["ai_summary"], "ai_health_score": grade["ai_health_score"],
         "ai_grade": grade["ai_grade"], "ai_confidence": grade["ai_confidence"],
+        "ai_needs_regrade": False if doc.get("backtested") else None,     # Oct 15, 2026: graded on real results only if backtested
         "updated_at": _strat_now_iso(),
     }})
     return {"id": strategy_id, **grade}
